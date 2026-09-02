@@ -1,0 +1,25 @@
+{
+  "name": "flowit",
+  "version": "0.1.0-dev",
+  "description": "Журнал роботи команди в git-репозиторії з аналітикою спринтів",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "bin": { "flowit": "./dist/cli.js" },
+  "files": ["dist"],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "cac": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.0.0"
+  }
+}
