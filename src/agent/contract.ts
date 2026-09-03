@@ -1,55 +1,60 @@
-/** Документ, який агент читає як звичайний файл — без MCP, мережі й токена. */
-export const AGENT_README = `# FlowIt — для AI-агента
+/** A document the agent reads as a plain file — no MCP, no network, no token. */
+export const AGENT_README = `# FlowIt — for AI agents
 
-Задачі цього проєкту лежать тут як звичайні файли. Читай їх напряму або
-через CLI — сервер не потрібен.
+This project's tasks live here as plain files. Read them directly, or through
+the CLI. No server required.
 
-## Команди
+## Commands
 
-    flowit task list --json      перелік задач
-    flowit task show FLOW-42     одна задача з історією
-    flowit task add "назва"      нова задача
+    flowit board --json                 the whole board
+    flowit task list --json             all tasks
+    flowit task show FLOW-42 --json     one task with its history
+    flowit task add "title" -d "..." --type bug --estimate 3
     flowit task move FLOW-42 in_progress
+    flowit task assign FLOW-42 you@example.com
+    flowit sprint status --json         current sprint progress
 
-## Контракт JSON
+## JSON contract
 
-Кожна відповідь із \`--json\` має поле \`schema: "flowit/v1"\`. У stdout —
-тільки JSON; попередження йдуть у stderr.
+Every \`--json\` response carries \`schema: "flowit/v1"\`. stdout holds JSON and
+nothing else; warnings go to stderr. Exit codes: 0 success, 1 runtime error,
+2 bad arguments.
 
-## Якщо працюєш як агент
+## Working as an agent
 
-Виставляй \`FLOWIT_SOURCE=agent\`, щоб події записувалися з твоїм авторством.
-Без цього подія позначається як людська — ми не вгадуємо.
+Set \`FLOWIT_SOURCE=agent\` so events record your authorship. Without it an
+event is marked as human — we do not guess.
 
-## Що не робити
+## What not to do
 
-Не редагуй файли в \`.flowit/events/\` руками: журнал доповнюється, а не
-змінюється. Щоб виправити стан, додай нову подію через CLI.
+Do not hand-edit files under \`.flowit/events/\`: the journal is appended to,
+never modified. To correct the state, add a new event through the CLI.
 `;
 
 export const AGENTS_BEGIN = '<!-- flowit:begin -->';
 export const AGENTS_END = '<!-- flowit:end -->';
 
-/** Секція для AGENTS.md — коротка, бо подробиці лежать у .flowit/README.md. */
+/** Section for AGENTS.md — short, since the details live in .flowit/README.md. */
 export const AGENTS_SECTION = `${AGENTS_BEGIN}
-## Задачі проєкту — FlowIt
+## Project tasks — FlowIt
 
-Задачі лежать у \`.flowit/\` як звичайні файли. Читай їх напряму або через CLI:
+Tasks live in \`.flowit/\` as plain files. Read them directly or via the CLI:
 
-    flowit task list --json      перелік задач
-    flowit task move FLOW-1 done змінити стан
+    flowit board --json           the whole board
+    flowit task list --json       all tasks
+    flowit task move FLOW-1 done  change state
 
-Відповіді \`--json\` мають поле \`schema: "flowit/v1"\`; у stdout тільки JSON.
-Працюючи як агент, виставляй \`FLOWIT_SOURCE=agent\`.
+\`--json\` responses carry \`schema: "flowit/v1"\`; stdout is JSON only.
+When acting as an agent, set \`FLOWIT_SOURCE=agent\`.
 
-Подробиці: \`.flowit/README.md\`
+Details: \`.flowit/README.md\`
 ${AGENTS_END}`;
 
 /**
- * Вставляє або оновлює секцію FlowIt, лишаючи решту файлу недоторканою.
+ * Inserts or updates the FlowIt section, leaving the rest of the file intact.
  *
- * Межі позначені коментарями, а не заголовком: заголовок людина може
- * перейменувати, і тоді повторний init створив би дублікат.
+ * The boundaries are comments rather than a heading: a human can rename a
+ * heading, and then a repeat init would create a duplicate.
  */
 export function upsertAgentsSection(existing: string | null): string {
   if (existing === null || existing.trim().length === 0) {

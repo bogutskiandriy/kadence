@@ -23,52 +23,52 @@ function addTask(title: string, estimate?: number): string {
 }
 
 describe('runTaskList', () => {
-  it('на порожньому журналі підказує, що робити далі', () => {
+  it('hints at what to do next when the journal is empty', () => {
     const r = runTaskList(dir, env, {});
     expect(r.ok).toBe(true);
     expect(r.message).toMatch(/task add/);
   });
 
-  it('показує створені задачі з наскрізними номерами', () => {
-    addTask('Перша');
-    addTask('Друга');
+  it('shows created tasks with sequential numbers', () => {
+    addTask('First');
+    addTask('Second');
     const r = runTaskList(dir, env, {});
     expect(r.message).toContain('FLOW-1');
     expect(r.message).toContain('FLOW-2');
-    expect(r.message).toContain('Перша');
+    expect(r.message).toContain('First');
   });
 
-  it('фільтрує за статусом', () => {
-    const a = addTask('Перша');
-    addTask('Друга');
+  it('filters by status', () => {
+    const a = addTask('First');
+    addTask('Second');
     runTaskMove(dir, env, a, 'done');
     const r = runTaskList(dir, env, { status: 'done' });
-    expect(r.message).toContain('Перша');
-    expect(r.message).not.toContain('Друга');
+    expect(r.message).toContain('First');
+    expect(r.message).not.toContain('Second');
   });
 
-  it('відхиляє неіснуючий статус у фільтрі', () => {
-    const r = runTaskList(dir, env, { status: 'летить' });
+  it('rejects an unknown status in the filter', () => {
+    const r = runTaskList(dir, env, { status: 'flying' });
     expect(r.ok).toBe(false);
     expect(r.exitCode).toBe(2);
   });
 });
 
 describe('runTaskMove', () => {
-  it('переводить задачу в новий стан', () => {
-    const id = addTask('Задача');
+  it('moves a task to a new state', () => {
+    const id = addTask('Task');
     expect(runTaskMove(dir, env, id, 'in_progress').ok).toBe(true);
     expect(runTaskList(dir, env, {}).message).toContain('in_progress');
   });
 
-  it('приймає людиночитаний номер, а не лише ULID', () => {
-    addTask('Задача');
+  it('accepts a human-readable number, not just a ULID', () => {
+    addTask('Task');
     const r = runTaskMove(dir, env, 'FLOW-1', 'done');
     expect(r.ok).toBe(true);
   });
 
-  it('не пише подію, якщо стан і так той самий', () => {
-    const id = addTask('Задача');
+  it('writes no event when the state is already the same', () => {
+    const id = addTask('Task');
     runTaskMove(dir, env, id, 'done');
     const before = runTaskList(dir, env, {}).data!['tasks'] as Array<{ history: unknown[] }>;
     const r = runTaskMove(dir, env, id, 'done');
@@ -77,25 +77,25 @@ describe('runTaskMove', () => {
     expect(after[0]!.history.length).toBe(before[0]!.history.length);
   });
 
-  it('дозволяє перехід через кілька станів, але попереджає', () => {
-    // Заборона змусила б робити два кроки заради формальності, а журнал
-    // усе одно зафіксує реальний намір.
-    const id = addTask('Задача');
+  it('allows skipping states but warns about it', () => {
+    // Forbidding it would force two steps for form's sake, and the journal
+    // records the real intent regardless.
+    const id = addTask('Task');
     const r = runTaskMove(dir, env, id, 'done');
     expect(r.ok).toBe(true);
-    expect(r.message).toMatch(/минаючи|backlog/i);
+    expect(r.message).toMatch(/skipping|backlog/i);
   });
 
-  it('повідомляє, коли задачі немає', () => {
+  it('reports when the task does not exist', () => {
     const r = runTaskMove(dir, env, 'FLOW-99', 'done');
     expect(r.ok).toBe(false);
     expect(r.exitCode).toBe(1);
     expect(r.message).toMatch(/FLOW-99/);
   });
 
-  it('відхиляє неіснуючий статус', () => {
-    const id = addTask('Задача');
-    const r = runTaskMove(dir, env, id, 'телепортовано');
+  it('rejects an unknown status', () => {
+    const id = addTask('Task');
+    const r = runTaskMove(dir, env, id, 'teleported');
     expect(r.ok).toBe(false);
     expect(r.exitCode).toBe(2);
     expect(r.message).toMatch(/backlog/);

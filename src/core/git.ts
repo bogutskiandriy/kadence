@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process';
 
 /**
- * Тонка обгортка над git CLI.
+ * Thin wrapper around the git CLI.
  *
- * У `.git/` не заглядаємо напряму — тільки через git, як записано в межах
- * SPEC. Це дорожче на кілька мілісекунд, але переживає зміни формату.
+ * We never read `.git/` directly — only through git, as the SPEC boundaries
+ * require. That costs a few milliseconds but survives format changes.
  */
 
 function git(cwd: string, args: string[]): string | null {
@@ -20,11 +20,12 @@ function git(cwd: string, args: string[]): string | null {
 }
 
 /**
- * Корінь ПОТОЧНОГО робочого дерева, не головного репозиторію.
+ * Root of the CURRENT working tree, not of the main repository.
  *
- * `--show-toplevel` навмисно замість `--git-common-dir`: у git worktree
- * друге вказало б на головний репозиторій, і FlowIt писав би журнал не туди.
- * Саме ця помилка живе відкритою issue #558 у Backlog.md.
+ * `--show-toplevel` is deliberate rather than `--git-common-dir`: inside a
+ * git worktree the latter points at the main repository, and FlowIt would
+ * write its journal to the wrong place. That exact mistake is an open issue
+ * (#558) in Backlog.md.
  */
 export function findRepoRoot(cwd: string): string | null {
   const root = git(cwd, ['rev-parse', '--show-toplevel']);

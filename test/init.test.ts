@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findRepoRoot, getActorEmail } from '../src/core/git.js';
 import { runInit } from '../src/cli/commands/init.js';
+import { runTaskAdd } from '../src/cli/commands/task.js';
 
 let dir: string;
 
@@ -20,30 +21,29 @@ afterEach(() => {
 });
 
 describe('findRepoRoot', () => {
-  it('повертає null поза git-репозиторієм', () => {
+  it('returns null outside a git repository', () => {
     expect(findRepoRoot(dir)).toBeNull();
   });
 
-  it('знаходить корінь із вкладеної теки', () => {
+  it('finds the root from a nested folder', () => {
     git(dir, 'init', '-q');
     const nested = join(dir, 'a', 'b');
     mkdirSync(nested, { recursive: true });
-    // realpath: на macOS /var — симлінк на /private/var
+    // realpath: on macOS /var is a symlink to /private/var
     expect(findRepoRoot(nested)).toBe(findRepoRoot(dir));
   });
 });
 
 describe('getActorEmail', () => {
-  it('не падає, коли user.email ніде не налаштований', () => {
-    // Локальний конфіг порожній, але глобальний на машині розробника може
-    // бути виставлений — тому перевіряємо контракт, а не конкретне значення:
-    // або рядок, або null, і в жодному разі не виняток.
+  it('does not throw when user.email is configured nowhere', () => {
+    // The local config is empty, but a developer machine may have a global one —
+    // so check the contract, not a specific value: a string or null, never a throw.
     git(dir, 'init', '-q');
     const email = getActorEmail(dir);
     expect(email === null || typeof email === 'string').toBe(true);
   });
 
-  it('повертає налаштований email', () => {
+  it('returns the configured email', () => {
     git(dir, 'init', '-q');
     git(dir, 'config', 'user.email', 'tester@example.com');
     expect(getActorEmail(dir)).toBe('tester@example.com');
@@ -56,52 +56,64 @@ describe('runInit', () => {
     git(dir, 'config', 'user.email', 'tester@example.com');
   });
 
-  it('відмовляється працювати поза git-репозиторієм', () => {
+  it('refuses to run outside a git repository', () => {
     const outside = mkdtempSync(join(tmpdir(), 'flowit-outside-'));
     const r = runInit(outside);
     expect(r.ok).toBe(false);
-    expect(r.message).toMatch(/репозитор/i);
+    expect(r.message).toMatch(/git repository/i);
     rmSync(outside, { recursive: true, force: true });
   });
 
-  it('створює теку подій', () => {
+  it('creates the events folder', () => {
     expect(runInit(dir).ok).toBe(true);
     expect(existsSync(join(dir, '.flowit', 'events'))).toBe(true);
   });
 
-  it('дописує state.json у .gitignore', () => {
+  it('appends state.json to .gitignore', () => {
     runInit(dir);
     expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('.flowit/state.json');
   });
 
-  it('не дублює запис у .gitignore при повторному запуску', () => {
+  it('does not duplicate the .gitignore entry on a repeat run', () => {
     runInit(dir);
     runInit(dir);
     const gi = readFileSync(join(dir, '.gitignore'), 'utf8');
     expect(gi.split('.flowit/state.json').length - 1).toBe(1);
   });
 
-  it('зберігає наявний вміст .gitignore', () => {
+  it('preserves existing .gitignore content', () => {
     writeFileSync(join(dir, '.gitignore'), 'node_modules/\n');
     runInit(dir);
     expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('node_modules/');
   });
 
-  it('створює README для агента', () => {
+  it('creates the agent README', () => {
     runInit(dir);
     expect(existsSync(join(dir, '.flowit', 'README.md'))).toBe(true);
   });
 
-  it('нічого не руйнує при повторному запуску', () => {
+  it('destroys nothing on a repeat run', () => {
     runInit(dir);
-    writeFileSync(join(dir, '.flowit', 'events', 'marker'), 'дані');
+    writeFileSync(join(dir, '.flowit', 'events', 'marker'), 'data');
     const r = runInit(dir);
     expect(r.ok).toBe(true);
     expect(r.alreadyInitialized).toBe(true);
     expect(existsSync(join(dir, '.flowit', 'events', 'marker'))).toBe(true);
   });
 
-  it('НЕ створює коміт — це рішення людини', () => {
+  it('works when the events folder vanished after checkout — no repeat init needed', () => {
+    // Regression: git does not version empty directories, so .flowit/events/
+    // disappears when switching to a branch without events. The CLI used to
+    // refuse to work on a perfectly functional repository.
+    runInit(dir);
+    rmSync(join(dir, '.flowit', 'events'), { recursive: true, force: true });
+
+    const r = runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'Task after checkout');
+    expect(r.ok).toBe(true);
+    expect(existsSync(join(dir, '.flowit', 'events'))).toBe(true);
+  });
+
+  it('does NOT create a commit — that call belongs to the human', () => {
     runInit(dir);
     const status = execFileSync('git', ['status', '--porcelain'], { cwd: dir, encoding: 'utf8' });
     expect(status.trim().length).toBeGreaterThan(0);

@@ -127,17 +127,54 @@ interface FlowEvent {
 ### M6 · `cli/commands`
 
 ```
-flowit init                      створити .flowit/, дописати .gitignore
-flowit task add "<назва>"        нова задача
-flowit task list [--status=]     список
-flowit task move <id> <статус>   змінити статус
-flowit task show <id>            деталі й історія
-flowit sprint create "<назва>"
-flowit sprint add <id>
-flowit sprint close
-flowit context                   стан із прив'язкою до поточної гілки
-flowit log [--entity=]           журнал подій
+flowit init                       створити .flowit/, дописати .gitignore
+
+flowit task add "<назва>"         нова задача
+    -d, --description <текст>     опис
+    --type task|bug|story         тип
+    --priority low|normal|high|urgent
+    -a, --assignee <хто>          виконавець
+    --label <мітка>               мітка (можна кілька)
+    --estimate <пункти>           оцінка — завжди останньою
+flowit task list [--status=]      список
+flowit task show <id>             деталі, поля й історія
+flowit task move <id> <статус>    змінити статус
+flowit task assign <id> <хто>     призначити; `none` знімає
+
+flowit board                      канбан у терміналі
+    -a, --assignee <хто|me>       лише чиїсь задачі
+    --sprint                      лише активний спринт
+
+flowit sprint create "<назва>"    перший стартує; наступні плануються
+flowit sprint add <id> [--sprint "<назва>"]
+flowit sprint start ["<назва>"]   запустити запланований
+flowit sprint close               закрити активний і порахувати velocity
+flowit sprint status              прогрес активного
+flowit sprint list                усі спринти
 ```
+
+### Поля задачі
+
+Зведення Issue Type з Jira до того, що реально різниться. Усі поля, крім
+назви, необов'язкові — старі події лишаються читаними.
+
+| Поле | Значення | За замовчуванням |
+|---|---|---|
+| `title` | назва | обов'язкове |
+| `description` | повний опис | порожньо |
+| `type` | `task` · `bug` · `story` | `task` |
+| `priority` | `low` · `normal` · `high` · `urgent` | `normal` |
+| `labels` | довільні мітки | порожньо |
+| `assignee` | виконавець | не призначено |
+| `reporter` | автор `task.created` | автоматично |
+| `estimate` | оцінка в пунктах | порожньо |
+
+**Опис живе в події, а не в окремому markdown-файлі.** Файл на задачу — це
+змінюваний стан, і він повернув би нам рівно ті `CONFLICT (content)`, які
+становлять 89% реальних конфліктів за [Probe A](docs/research/probe-a-results.md).
+
+**Порядок полів навмисний:** спершу суть задачі, потім класифікація, і лише
+наприкінці оцінка. Так само в `task show`.
 
 **Критерії приймання**
 - Будь-яка команда поза Git-репозиторієм дає зрозумілу помилку, а не стек викликів.

@@ -17,12 +17,12 @@ function ev(type: EventType, entity: string, data: Record<string, unknown> = {})
   };
 }
 
-function created(title = 'Задача'): FlowEvent {
+function created(title = 'Task'): FlowEvent {
   const id = gen();
   return { ...ev('task.created', id, { title }), id, entity: id };
 }
 
-/** Дає всі перестановки — для перевірки незалежності від порядку. */
+/** Produces permutations — to prove order independence. */
 function shuffle<T>(xs: T[], seed: number): T[] {
   const out = [...xs];
   let s = seed;
@@ -34,10 +34,10 @@ function shuffle<T>(xs: T[], seed: number): T[] {
   return out;
 }
 
-describe('project — інваріанти', () => {
-  it('I1: той самий набір подій дає той самий стан за будь-якого порядку читання', () => {
-    const a = created('Перша');
-    const b = created('Друга');
+describe('project — invariants', () => {
+  it('I1: the same event set yields the same state under any read order', () => {
+    const a = created('First');
+    const b = created('Second');
     const events = [a, b, ev('task.moved', a.entity, { to: 'in_progress' }), ev('task.moved', b.entity, { to: 'done' })];
 
     const reference = JSON.stringify(project(events).tasks);
@@ -46,22 +46,22 @@ describe('project — інваріанти', () => {
     }
   });
 
-  it('I2: порядок визначає id, а не ts', () => {
+  it('I2: id defines the order, not ts', () => {
     const t = created();
-    // Пізніша за ULID подія має ts у минулому — годинник машини відставав.
+    // The event with the higher ULID has a ts in the past — that machine's clock lagged.
     const first = { ...ev('task.moved', t.entity, { to: 'in_progress' }), ts: '2026-09-02T23:00:00.000Z' };
     const second = { ...ev('task.moved', t.entity, { to: 'done' }), ts: '2026-09-02T01:00:00.000Z' };
     expect(project([t, first, second]).tasks[0]!.status).toBe('done');
   });
 
-  it('I3: задача перебуває рівно в одному стані', () => {
+  it('I3: a task is in exactly one state', () => {
     const t = created();
     const s = project([t, ev('task.moved', t.entity, { to: 'in_progress' }), ev('task.moved', t.entity, { to: 'done' })]);
     expect(s.tasks).toHaveLength(1);
     expect(s.tasks[0]!.status).toBe('done');
   });
 
-  it('є чистою функцією — не змінює вхідний масив', () => {
+  it('is a pure function — it does not mutate the input array', () => {
     const t = created();
     const events = [t, ev('task.moved', t.entity, { to: 'done' })];
     const copy = JSON.stringify(events);
@@ -70,8 +70,8 @@ describe('project — інваріанти', () => {
   });
 });
 
-describe('project — конкурентні наміри', () => {
-  it('дві гілки перевели задачу по-різному: перемагає більший ULID', () => {
+describe('project — concurrent intents', () => {
+  it('two branches moved the task differently: the higher ULID wins', () => {
     const t = created();
     const branchA = ev('task.moved', t.entity, { to: 'in_progress' });
     const branchB = ev('task.moved', t.entity, { to: 'done' });
@@ -79,7 +79,7 @@ describe('project — конкурентні наміри', () => {
     expect(s.tasks[0]!.status).toBe('done');
   });
 
-  it('програна подія лишається в історії задачі', () => {
+  it('the losing event stays in the task history', () => {
     const t = created();
     const lost = ev('task.moved', t.entity, { to: 'in_progress' });
     const won = ev('task.moved', t.entity, { to: 'done' });
@@ -87,39 +87,39 @@ describe('project — конкурентні наміри', () => {
     expect(s.tasks[0]!.history.map((h) => h.id)).toContain(lost.id);
   });
 
-  it('подія про ще не змерджену задачу тримається в очікуванні, не втрачається', () => {
+  it('an event for an unmerged task is held pending, never lost', () => {
     const orphan = ev('task.moved', gen(), { to: 'done' });
     const s = project([orphan]);
     expect(s.tasks).toHaveLength(0);
     expect(s.pending).toHaveLength(1);
   });
 
-  it('відкладена подія застосовується, коли задача нарешті прибуває', () => {
+  it('a deferred event applies once the task finally arrives', () => {
     const t = created();
     const move = ev('task.moved', t.entity, { to: 'done' });
-    // Гілку зі створенням змерджили пізніше — але id створення менший.
+    // The creating branch merged later — but the creation id is lower.
     const s = project([move, t]);
     expect(s.pending).toHaveLength(0);
     expect(s.tasks[0]!.status).toBe('done');
   });
 });
 
-describe('project — спринти', () => {
-  it('sprint.closed розв\'язується first-write-wins, на відміну від решти', () => {
-    // Закриття фіксує факт, який міг бути опублікований. Пізніше закриття
-    // з іншої гілки не переписує velocity — інваріант I5.
+describe('project — sprints', () => {
+  it('sprint.closed resolves first-write-wins, unlike everything else', () => {
+    // Closing records a fact that may have been published. A later close from
+    // another branch does not rewrite velocity — invariant I5.
     const sp = gen();
-    const create = { ...ev('sprint.created', sp, { name: 'Спринт 1' }), id: sp, entity: sp };
-    const closeA = ev('sprint.closed', sp, { note: 'перше' });
-    const closeB = ev('sprint.closed', sp, { note: 'друге' });
+    const create = { ...ev('sprint.created', sp, { name: 'Sprint 1' }), id: sp, entity: sp };
+    const closeA = ev('sprint.closed', sp, { note: 'first' });
+    const closeB = ev('sprint.closed', sp, { note: 'second' });
     const s = project([create, closeA, closeB]);
     expect(s.sprints[0]!.status).toBe('closed');
     expect(s.sprints[0]!.closedBy).toBe(closeA.id);
   });
 
-  it('подія в закритий спринт відхиляється, але лишається в журналі', () => {
+  it('an event into a closed sprint is rejected but stays in the journal', () => {
     const sp = gen();
-    const create = { ...ev('sprint.created', sp, { name: 'С1' }), id: sp, entity: sp };
+    const create = { ...ev('sprint.created', sp, { name: 'S1' }), id: sp, entity: sp };
     const close = ev('sprint.closed', sp, {});
     const t = created();
     const late = ev('sprint.task_added', sp, { task: t.entity });
@@ -128,19 +128,19 @@ describe('project — спринти', () => {
     expect(s.rejected.map((r) => r.id)).toContain(late.id);
   });
 
-  it('задача, додана у відкритий спринт, до нього належить', () => {
+  it('a task added to an open sprint belongs to it', () => {
     const sp = gen();
-    const create = { ...ev('sprint.created', sp, { name: 'С1' }), id: sp, entity: sp };
+    const create = { ...ev('sprint.created', sp, { name: 'S1' }), id: sp, entity: sp };
     const t = created();
     const s = project([create, t, ev('sprint.task_added', sp, { task: t.entity })]);
     expect(s.tasks[0]!.sprint).toBe(sp);
   });
 });
 
-describe('project — нумерація FLOW-N', () => {
-  it('присвоює номери за порядком ULID, а не за порядком читання', () => {
-    const a = created('Перша');
-    const b = created('Друга');
+describe('project — FLOW-N numbering', () => {
+  it('assigns numbers in ULID order, not read order', () => {
+    const a = created('First');
+    const b = created('Second');
     const s = project([b, a]);
     const first = s.tasks.find((t) => t.id === a.entity)!;
     const second = s.tasks.find((t) => t.id === b.entity)!;
@@ -148,19 +148,19 @@ describe('project — нумерація FLOW-N', () => {
     expect(second.label).toBe('FLOW-2');
   });
 
-  it('дві гілки, що створили задачі незалежно, отримують РІЗНІ номери', () => {
-    // Саме та колізія, яку Probe A знайшов як CONFLICT (add/add)
-    // у реальних репозиторіях на файлових трекерах.
-    const fromBranchA = created('З гілки A');
-    const fromBranchB = created('З гілки B');
+  it('two branches that created tasks independently get DIFFERENT numbers', () => {
+    // Exactly the collision Probe A found as CONFLICT (add/add) in real
+    // repositories using file-based trackers.
+    const fromBranchA = created('From branch A');
+    const fromBranchB = created('From branch B');
     const labels = project([fromBranchA, fromBranchB]).tasks.map((t) => t.label);
     expect(new Set(labels).size).toBe(2);
   });
 
-  it('номер задачі не змінюється від появи новішої задачі', () => {
-    const a = created('Перша');
+  it('a task number does not shift when a newer task appears', () => {
+    const a = created('First');
     const before = project([a]).tasks[0]!.label;
-    const after = project([a, created('Друга')]).tasks.find((t) => t.id === a.entity)!.label;
+    const after = project([a, created('Second')]).tasks.find((t) => t.id === a.entity)!.label;
     expect(after).toBe(before);
   });
 });

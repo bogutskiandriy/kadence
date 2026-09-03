@@ -1,10 +1,11 @@
 /**
- * Схема події журналу.
+ * Journal event schema.
  *
- * Валідація власна, без бібліотеки: форма події фіксована в типах на етапі
- * компіляції, а перевірка потрібна рівно на межі — коли читаємо файл, який
- * могли зіпсувати людина або merge. Узагальнений рушій коштував би 15%
- * бюджету запуску за те саме (ADR-003).
+ * Validation is hand-rolled rather than taken from a library: the shape of an
+ * event is fixed in the types at compile time, and the check is needed exactly
+ * at the boundary — when reading a file a human or a merge could have
+ * corrupted. A general-purpose engine would cost 15% of the startup budget for
+ * the same thing (ADR-003).
  */
 
 export const EVENT_TYPES = [
@@ -15,8 +16,17 @@ export const EVENT_TYPES = [
   'task.updated',
   'task.cancelled',
   'task.reopened',
+  'task.deleted',
+  'task.parent_set',
+  'task.blocked_by_added',
+  'task.blocked_by_removed',
+  'task.time_logged',
+  'template.saved',
+  'template.deleted',
+  'board.configured',
   'sprint.created',
   'sprint.started',
+  'sprint.updated',
   'sprint.closed',
   'sprint.cancelled',
   'sprint.task_added',
@@ -25,19 +35,19 @@ export const EVENT_TYPES = [
 export type EventType = (typeof EVENT_TYPES)[number];
 
 export interface FlowEvent {
-  /** ULID — він же визначає порядок подій (інваріант I2). */
+  /** ULID — it also defines event ordering (invariant I2). */
   id: string;
   type: EventType;
   /**
-   * ULID сутності, якої стосується подія.
+   * ULID of the entity this event refers to.
    *
-   * Саме ULID, а не `FLOW-42`: людиночитаний номер похідний і присвоюється
-   * при згортанні журналу, тому посилатися на нього означало б посилатися
-   * на значення, яке може змінитися після злиття гілок (інваріант I7).
+   * A ULID, not `FLOW-42`: the human-readable number is derived and assigned
+   * while folding the journal, so referring to it would mean referring to a
+   * value that can change after branches are merged (invariant I7).
    */
   entity: string;
   actor: string;
-  /** ISO 8601. Довідковий: для порядку використовується id, не ts. */
+  /** ISO 8601. Informational: ordering uses id, not ts. */
   ts: string;
   source: 'human' | 'agent';
   data?: Record<string, unknown>;
@@ -46,8 +56,8 @@ export interface FlowEvent {
 const KNOWN = new Set<string>(EVENT_TYPES);
 const ULID_RE = /^[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$/;
 
-// Date.parse надто поблажливий: '02.09.2026' він приймає, хоч це не ISO і
-// читається по-різному в різних локалях. Формат перевіряємо явно.
+// Date.parse is too permissive: it accepts '02.09.2026', which is not ISO
+// and reads differently across locales. Check the format explicitly.
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
 
 export function isKnownType(type: unknown): type is EventType {
@@ -55,8 +65,8 @@ export function isKnownType(type: unknown): type is EventType {
 }
 
 /**
- * Повертає перелік невалідних полів. Ніколи не кидає: пошкоджена подія не
- * має ронити команду — решта журналу лишається придатною для читання.
+ * Returns the list of invalid fields. Never throws: a corrupted event must not
+ * bring down a command — the rest of the journal stays readable.
  */
 export function validate(input: unknown): string[] {
   if (typeof input !== 'object' || input === null) return ['event'];
@@ -77,15 +87,36 @@ export function validate(input: unknown): string[] {
   return bad;
 }
 
-/** Один об'єкт на рядок, без відступів — ADR-002. */
+/**
+ * An event as JSON.
+ *
+ * One line by default (ADR-002): a seven-field event already reads as a whole
+ * in `git diff`.
+ *
+ * Events carrying a description are the exception. The description lives in
+ * the event rather than a separate file, because a file per task would hand us
+ * back our competitors' conflicts. But single-line JSON would make `git diff`
+ * unreadable when one sentence changes. So those events are written indented,
+ * with the description as an array of lines: editing one paragraph shows up as
+ * one changed line instead of a rewritten event.
+ */
 export function serialize(event: FlowEvent): string {
-  return JSON.stringify(event);
+  const description = event.data?.['description'];
+  if (typeof description !== 'string' || !description.includes('\n')) {
+    return JSON.stringify(event);
+  }
+
+  const readable = {
+    ...event,
+    data: { ...event.data, description: description.split('\n') },
+  };
+  return JSON.stringify(readable, null, 2);
 }
 
 export interface ParseResult {
   event: FlowEvent | null;
   error: string | null;
-  /** Подія з новішої версії FlowIt: не помилка, а привід пропустити. */
+  /** Event from a newer FlowIt: not an error, just a reason to skip it. */
   unknownType: boolean;
 }
 
@@ -94,17 +125,44 @@ export function parse(line: string): ParseResult {
   try {
     raw = JSON.parse(line);
   } catch (err) {
-    return { event: null, error: `нечитаний JSON: ${(err as Error).message}`, unknownType: false };
+    return { event: null, error: `unreadable JSON: ${(err as Error).message}`, unknownType: false };
   }
 
+  raw = normalizeDescription(raw);
   const bad = validate(raw);
 
-  // Єдина хиба — невідомий тип: подія структурно ціла, просто з майбутнього.
+  // The only fault is an unknown type: the event is structurally intact,
+  // just from the future.
   if (bad.length === 1 && bad[0] === 'type') {
     return { event: null, error: null, unknownType: true };
   }
   if (bad.length > 0) {
-    return { event: null, error: `невалідні поля: ${bad.join(', ')}`, unknownType: false };
+    return { event: null, error: `invalid fields: ${bad.join(', ')}`, unknownType: false };
   }
   return { event: raw as FlowEvent, error: null, unknownType: false };
+}
+
+/**
+ * A description stored as an array of lines is turned back into a plain string.
+ *
+ * The on-disk shape exists for a readable `git diff`; the rest of the code
+ * works with ordinary text and knows nothing about it.
+ */
+function normalizeDescription(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null) return raw;
+
+  const e = raw as Record<string, unknown>;
+  const data = e['data'];
+  if (typeof data !== 'object' || data === null) return raw;
+
+  const description = (data as Record<string, unknown>)['description'];
+  if (!Array.isArray(description)) return raw;
+
+  return {
+    ...e,
+    data: {
+      ...(data as Record<string, unknown>),
+      description: description.filter((x) => typeof x === 'string').join('\n'),
+    },
+  };
 }

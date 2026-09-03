@@ -30,21 +30,21 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-describe('контракт --json', () => {
-  it('у stdout лише JSON, який розбирається без залишку', () => {
-    run(['task', 'add', 'Задача', '--estimate', '3']);
+describe('the --json contract', () => {
+  it('stdout holds only JSON that parses cleanly', () => {
+    run(['task', 'add', 'Task', '--estimate', '3']);
     const r = run(['task', 'list', '--json']);
     expect(() => JSON.parse(r.stdout)).not.toThrow();
   });
 
-  it('кожна відповідь має версію схеми', () => {
-    const r = run(['task', 'add', 'Задача', '--json']);
+  it('every response carries a schema version', () => {
+    const r = run(['task', 'add', 'Task', '--json']);
     expect(JSON.parse(r.stdout).schema).toBe('flowit/v1');
   });
 
-  it('помилка теж повертається як JSON, а не текстом', () => {
-    // Агент, що отримав текст замість JSON, не зможе відрізнити збій від
-    // порожньої відповіді.
+  it('an error comes back as JSON too, not as text', () => {
+    // An agent handed text instead of JSON cannot tell a failure from an empty
+    // response.
     const r = run(['task', 'move', 'FLOW-99', 'done', '--json']);
     const parsed = JSON.parse(r.stdout);
     expect(parsed.schema).toBe('flowit/v1');
@@ -52,44 +52,49 @@ describe('контракт --json', () => {
     expect(parsed.error.message).toMatch(/FLOW-99/);
   });
 
-  it('попередження йдуть у stderr і не псують JSON у stdout', () => {
-    run(['task', 'add', 'Задача']);
-    // Псуємо одну подію, щоб з'явилося попередження.
+  it('warnings go to stderr and never corrupt the JSON on stdout', () => {
+    run(['task', 'add', 'Task']);
+    // Corrupt one event so a warning appears.
     const events = execFileSync('find', ['.flowit/events', '-name', '*.json'], {
       cwd: dir,
       encoding: 'utf8',
     })
       .trim()
       .split('\n');
-    execFileSync('sh', ['-c', `echo 'зламано' > "${events[0]}"`], { cwd: dir });
+    execFileSync('sh', ['-c', `echo 'broken' > "${events[0]}"`], { cwd: dir });
 
     const r = run(['task', 'list', '--json']);
     expect(() => JSON.parse(r.stdout)).not.toThrow();
-    expect(r.stderr).toMatch(/пошкодж/i);
+    expect(r.stderr).toMatch(/damaged|corrupted/i);
   });
 
-  it('код виходу 0 при успіху', () => {
-    expect(run(['task', 'add', 'Задача', '--json']).code).toBe(0);
+  it('exit code 0 on success', () => {
+    expect(run(['task', 'add', 'Task', '--json']).code).toBe(0);
   });
 
-  it('код виходу 1 при помилці виконання', () => {
+  it('exit code 1 on a runtime error', () => {
     expect(run(['task', 'move', 'FLOW-99', 'done', '--json']).code).toBe(1);
   });
 
-  it('код виходу 2 при помилці в аргументах', () => {
-    expect(run(['task', 'move', 'FLOW-1', 'летить', '--json']).code).toBe(2);
+  it('exit code 2 on bad arguments', () => {
+    expect(run(['task', 'move', 'FLOW-1', 'flying', '--json']).code).toBe(2);
   });
 
-  it('список задач має стабільну форму запису', () => {
-    run(['task', 'add', 'Задача', '--estimate', '5']);
+  it('the task list has a stable record shape', () => {
+    run(['task', 'add', 'Task', '--estimate', '5']);
     const task = JSON.parse(run(['task', 'list', '--json']).stdout).tasks[0];
+    // Fields are only added — existing consumers keep working.
     expect(Object.keys(task).sort()).toEqual(
-      ['estimate', 'history', 'id', 'label', 'sprint', 'status', 'title'].sort(),
+      [
+        'assignee', 'blockedBy', 'comments', 'description', 'due', 'estimate', 'history',
+        'id', 'label', 'labels', 'loggedHours', 'parent', 'priority', 'reporter', 'sprint',
+        'status', 'title', 'type',
+      ].sort(),
     );
   });
 
-  it('FLOWIT_SOURCE=agent позначає авторство події', () => {
-    run(['task', 'add', 'Від агента'], { FLOWIT_SOURCE: 'agent' });
+  it('FLOWIT_SOURCE=agent marks event authorship', () => {
+    run(['task', 'add', 'From agent'], { FLOWIT_SOURCE: 'agent' });
     const raw = execFileSync('sh', ['-c', 'cat .flowit/events/*/*.json'], {
       cwd: dir,
       encoding: 'utf8',
@@ -97,8 +102,8 @@ describe('контракт --json', () => {
     expect(raw).toContain('"source":"agent"');
   });
 
-  it('без FLOWIT_SOURCE подія вважається людською — джерело не вгадуємо', () => {
-    run(['task', 'add', 'Від людини']);
+  it('without FLOWIT_SOURCE an event counts as human — we never guess', () => {
+    run(['task', 'add', 'From human']);
     const raw = execFileSync('sh', ['-c', 'cat .flowit/events/*/*.json'], {
       cwd: dir,
       encoding: 'utf8',
@@ -106,15 +111,15 @@ describe('контракт --json', () => {
     expect(raw).toContain('"source":"human"');
   });
 
-  it('у людському режимі stdout не містить JSON', () => {
-    run(['task', 'add', 'Задача']);
+  it('in human mode stdout contains no JSON', () => {
+    run(['task', 'add', 'Task']);
     const r = run(['task', 'list']);
     expect(r.stdout).toContain('FLOW-1');
     expect(r.stdout).not.toContain('"schema"');
   });
 
-  it('NO_COLOR прибирає керуючі послідовності', () => {
-    run(['task', 'add', 'Задача']);
+  it('NO_COLOR strips escape sequences', () => {
+    run(['task', 'add', 'Task']);
     const r = run(['task', 'list'], { NO_COLOR: '1' });
     expect(r.stdout).not.toContain('[');
   });

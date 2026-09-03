@@ -27,15 +27,15 @@ afterEach(() => {
 });
 
 describe('append', () => {
-  it('створює теку під подію, якої ще немає', () => {
+  it('creates the folder for an event when it is missing', () => {
     append(root, ev());
     expect(readAll(root).events).toHaveLength(1);
   });
 
-  it('створює теку заново, якщо вона зникла після перемикання гілки', () => {
-    // Git не версіонує порожні директорії, тому events/2026-09/ зникає при
-    // checkout на гілку без подій цього місяця. Під час спайку це
-    // відтворилося двічі — тому mkdir -p при КОЖНОМУ записі.
+  it('recreates the folder after it vanished on a branch switch', () => {
+    // Git does not version empty directories, so events/2026-09/ disappears on
+    // checkout to a branch without that month's events. The spike reproduced
+    // this twice — hence mkdir -p on EVERY write.
     const e1 = ev();
     append(root, e1);
     rmSync(eventsDir(root), { recursive: true, force: true });
@@ -45,7 +45,7 @@ describe('append', () => {
     expect(readAll(root).events).toHaveLength(1);
   });
 
-  it('кладе кожну подію в окремий файл — джерело нуля конфліктів', () => {
+  it('writes each event to its own file — the source of zero conflicts', () => {
     append(root, ev());
     append(root, ev());
     append(root, ev());
@@ -53,19 +53,19 @@ describe('append', () => {
     expect(files.filter((f) => f.endsWith('.json'))).toHaveLength(3);
   });
 
-  it('розкладає події по теках за місяцем', () => {
+  it('files events into per-month folders', () => {
     append(root, ev({ ts: '2026-09-02T10:00:00.000Z' }));
     expect(readdirSync(eventsDir(root))).toContain('2026-09');
   });
 
-  it('завершує файл переносом рядка — інакше cat склеює події', () => {
+  it('ends the file with a newline — otherwise cat glues events together', () => {
     const e = ev();
     append(root, e);
     const path = join(eventsDir(root), '2026-09', `${e.id}.json`);
     expect(readFileSync(path, 'utf8').endsWith('\n')).toBe(true);
   });
 
-  it('не лишає тимчасових файлів після запису', () => {
+  it('leaves no temporary files behind', () => {
     append(root, ev());
     const files = readdirSync(eventsDir(root), { recursive: true }) as string[];
     expect(files.some((f) => f.includes('.tmp'))).toBe(false);
@@ -73,8 +73,8 @@ describe('append', () => {
 });
 
 describe('readAll', () => {
-  it('повертає події, впорядковані за id, а не за порядком файлів', () => {
-    // Інваріант I1: результат не залежить від порядку обходу файлової системи.
+  it('returns events ordered by id, not by file order', () => {
+    // Invariant I1: the result does not depend on filesystem traversal order.
     const a = ev({ id: '01AAAAAAAAAAAAAAAAAAAAAAAA' });
     const b = ev({ id: '01BBBBBBBBBBBBBBBBBBBBBBBB' });
     const c = ev({ id: '01CCCCCCCCCCCCCCCCCCCCCCCC' });
@@ -84,11 +84,11 @@ describe('readAll', () => {
     expect(readAll(root).events.map((e) => e.id)).toEqual([a.id, b.id, c.id]);
   });
 
-  it('на порожньому репозиторії повертає порожній список, а не помилку', () => {
+  it('returns an empty list on an empty repository instead of an error', () => {
     expect(readAll(root).events).toEqual([]);
   });
 
-  it('пошкоджена подія не ховає решту журналу', () => {
+  it('a corrupted event does not hide the rest of the journal', () => {
     append(root, ev());
     append(root, ev());
     const dir = join(eventsDir(root), '2026-09');
@@ -101,7 +101,7 @@ describe('readAll', () => {
     expect(r.corrupted[0]).toContain('01ZZZ');
   });
 
-  it('пропускає подію новішого формату, не рахуючи її пошкодженою', () => {
+  it('skips an event from a newer format without calling it corrupted', () => {
     append(root, ev());
     const dir = join(eventsDir(root), '2026-09');
     writeFileSync(
@@ -114,7 +114,7 @@ describe('readAll', () => {
     expect(r.unknownTypes).toBe(1);
   });
 
-  it('дедуплікує подію, що потрапила у дві гілки через cherry-pick', () => {
+  it('deduplicates an event landed on two branches by cherry-pick', () => {
     const e = ev();
     append(root, e);
     const dir = join(eventsDir(root), '2026-09');
@@ -122,16 +122,16 @@ describe('readAll', () => {
     expect(readAll(root).events).toHaveLength(1);
   });
 
-  it('позначає системне пошкодження, коли биті понад 20% подій', () => {
+  it('flags systemic damage when over 20% of events are broken', () => {
     for (let i = 0; i < 4; i++) append(root, ev());
     const dir = join(eventsDir(root), '2026-09');
     for (let i = 0; i < 3; i++) {
-      writeFileSync(join(dir, `01Q${i}ZZZZZZZZZZZZZZZZZZZZZZ.json`), 'зламано');
+      writeFileSync(join(dir, `01Q${i}ZZZZZZZZZZZZZZZZZZZZZZ.json`), 'broken');
     }
     expect(readAll(root).systemicCorruption).toBe(true);
   });
 
-  it('не вважає системним пошкодженням одну биту подію з багатьох', () => {
+  it('does not call a single broken event systemic damage', () => {
     for (let i = 0; i < 20; i++) append(root, ev());
     writeFileSync(join(eventsDir(root), '2026-09', '01WZZZZZZZZZZZZZZZZZZZZZZZ.json'), 'x');
     expect(readAll(root).systemicCorruption).toBe(false);

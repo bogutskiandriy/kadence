@@ -4,23 +4,23 @@ import { flowitDir, eventsDir, readAll } from './store.js';
 import { project, type ProjectState } from './projection.js';
 
 /**
- * Снапшот-кеш поточного стану.
+ * Snapshot cache of the current state.
  *
- * Похідний за визначенням: його видалення нічого не змінює (інваріант I6).
- * Існує тому, що читання 10k подій із диска займає 140 мс із 200 доступних,
- * а той самий стан із кешу — 6 мс (ADR-005).
+ * Derived by definition: deleting it changes nothing (invariant I6). It exists
+ * because reading 10k events from disk takes 140 ms out of the 200 available,
+ * while the same state from cache takes 6 ms (ADR-005).
  *
- * НІКОЛИ не є джерелом істини. Якщо доводиться питати «а що як кеш
- * розійшовся з журналом» — відповідь завжди «перебудувати».
+ * NEVER a source of truth. Whenever the question "what if the cache drifted
+ * from the journal" comes up, the answer is always "rebuild it".
  */
 
 const SNAPSHOT_VERSION = 'flowit-snapshot/1';
 
 interface Snapshot {
   version: string;
-  /** Найбільший ULID серед подій на момент побудови. */
+  /** Highest ULID among the events at build time. */
   lastEventId: string;
-  /** Кількість подій. Разом із lastEventId ловить і видалення з середини. */
+  /** Event count. Together with lastEventId it also catches mid-journal deletions. */
   eventCount: number;
   state: ProjectState;
 }
@@ -32,15 +32,26 @@ export function snapshotPath(root: string): string {
 export interface LoadResult {
   state: ProjectState;
   fromCache: boolean;
+  /**
+   * How many events by other people appeared since the previous read.
+   *
+   * The first attempt counted events "from the past" — with a ULID lower than
+   * the one already seen. That heuristic was wrong: after a merge, events from
+   * other branches carry a HIGHER ULID if they were created later than ours.
+   * The reliable signal is authorship: an event absent at the last read and
+   * written by someone other than the current user came from outside.
+   */
+  incomingEvents: number;
 }
 
 /**
- * Повертає стан із кешу або перебудовує його з журналу.
+ * Returns state from the cache, or rebuilds it from the journal.
  *
- * Дешева частина — обхід імен файлів: він не читає вміст, тому дізнатися
- * «чи щось змінилося» коштує на порядок менше, ніж прочитати журнал.
+ * The cheap part is walking file names: it never reads contents, so answering
+ * "did anything change" costs an order of magnitude less than reading the
+ * journal itself.
  */
-export function loadOrBuild(root: string): LoadResult {
+export function loadOrBuild(root: string, currentActor?: string): LoadResult {
   const fingerprint = scanFingerprint(eventsDir(root));
   const cached = readSnapshot(root);
 
@@ -50,18 +61,24 @@ export function loadOrBuild(root: string): LoadResult {
     cached.lastEventId === fingerprint.lastEventId &&
     cached.eventCount === fingerprint.count
   ) {
-    return { state: cached.state, fromCache: true };
+    return { state: cached.state, fromCache: true, incomingEvents: 0 };
   }
 
   const read = readAll(root);
   const state = project(read.events);
+
+  const incomingEvents =
+    cached === null || currentActor === undefined
+      ? 0
+      : countIncoming(read.events, cached, currentActor);
+
   writeSnapshot(root, {
     version: SNAPSHOT_VERSION,
     lastEventId: fingerprint.lastEventId,
     eventCount: fingerprint.count,
     state,
   });
-  return { state, fromCache: false };
+  return { state, fromCache: false, incomingEvents };
 }
 
 interface Fingerprint {
@@ -70,11 +87,11 @@ interface Fingerprint {
 }
 
 /**
- * Відбиток журналу за іменами файлів.
+ * A fingerprint of the journal taken from file names.
  *
- * Самого лише найбільшого ULID замало: `git revert` може прибрати подію з
- * середини, і тоді максимум лишиться той самий, а стан зміниться. Тому ще
- * й кількість.
+ * The highest ULID alone is not enough: `git revert` can remove an event from
+ * the middle, leaving the maximum unchanged while the state differs. Hence the
+ * count as well.
  */
 function scanFingerprint(dir: string): Fingerprint {
   let lastEventId = '';
@@ -111,7 +128,7 @@ function readSnapshot(root: string): Snapshot | null {
     if (typeof s.eventCount !== 'number' || typeof s.state !== 'object') return null;
     return s;
   } catch {
-    // Пошкоджений або відсутній кеш — не подія, гідна уваги користувача.
+    // A corrupt or missing cache is not worth the user's attention.
     return null;
   }
 }
@@ -124,6 +141,32 @@ function writeSnapshot(root: string, snapshot: Snapshot): void {
     writeFileSync(tmp, JSON.stringify(snapshot), 'utf8');
     renameSync(tmp, target);
   } catch {
-    // Немає прав на запис — CLI має працювати далі, просто повільніше.
+    // No write permission — the CLI must keep working, just slower.
   }
+}
+
+/**
+ * Events by other people that appeared since the previous snapshot.
+ *
+ * New ones are those above the previous boundary, plus the growth below it
+ * (events that arrived with a merge and landed in the middle).
+ */
+function countIncoming(
+  events: readonly { id: string; actor: string }[],
+  cached: { lastEventId: string; eventCount: number },
+  currentActor: string,
+): number {
+  let upToBoundary = 0;
+  let newerForeign = 0;
+
+  for (const e of events) {
+    if (e.id <= cached.lastEventId) {
+      upToBoundary++;
+    } else if (e.actor !== currentActor) {
+      newerForeign++;
+    }
+  }
+
+  const arrivedInMiddle = Math.max(0, upToBoundary - cached.eventCount);
+  return newerForeign + arrivedInMiddle;
 }

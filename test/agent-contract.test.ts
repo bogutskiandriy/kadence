@@ -17,12 +17,12 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 const agentsPath = () => join(dir, 'AGENTS.md');
 
 describe('.flowit/README.md', () => {
-  it('створюється при init', () => {
+  it('is created on init', () => {
     runInit(dir);
     expect(existsSync(join(dir, '.flowit', 'README.md'))).toBe(true);
   });
 
-  it('містить команди й опис контракту', () => {
+  it('contains the commands and the contract description', () => {
     runInit(dir);
     const text = readFileSync(join(dir, '.flowit', 'README.md'), 'utf8');
     expect(text).toContain('flowit task list --json');
@@ -30,30 +30,30 @@ describe('.flowit/README.md', () => {
     expect(text).toContain('FLOWIT_SOURCE');
   });
 
-  it('не перезаписується, якщо користувач його змінив', () => {
+  it('is not overwritten when the user has edited it', () => {
     runInit(dir);
-    writeFileSync(join(dir, '.flowit', 'README.md'), 'мої правила');
+    writeFileSync(join(dir, '.flowit', 'README.md'), 'my own rules');
     runInit(dir);
-    expect(readFileSync(join(dir, '.flowit', 'README.md'), 'utf8')).toBe('мої правила');
+    expect(readFileSync(join(dir, '.flowit', 'README.md'), 'utf8')).toBe('my own rules');
   });
 });
 
 describe('AGENTS.md', () => {
-  it('створюється, якщо його не було', () => {
+  it('is created when absent', () => {
     runInit(dir);
     expect(existsSync(agentsPath())).toBe(true);
     expect(readFileSync(agentsPath(), 'utf8')).toContain('FlowIt');
   });
 
-  it('доповнюється, а написане людиною не чіпається', () => {
-    writeFileSync(agentsPath(), '# Правила проєкту\n\nПиши тести перед кодом.\n');
+  it('is extended while human-written text is untouched', () => {
+    writeFileSync(agentsPath(), '# Project rules\n\nWrite tests before code.\n');
     runInit(dir);
     const text = readFileSync(agentsPath(), 'utf8');
-    expect(text).toContain('Пиши тести перед кодом.');
+    expect(text).toContain('Write tests before code.');
     expect(text).toContain('FlowIt');
   });
 
-  it('секція не дублюється при повторному init', () => {
+  it('the section is not duplicated on a repeat init', () => {
     runInit(dir);
     runInit(dir);
     runInit(dir);
@@ -61,14 +61,14 @@ describe('AGENTS.md', () => {
     expect(text.split('<!-- flowit:begin -->').length - 1).toBe(1);
   });
 
-  it('оновлює вміст секції, не чіпаючи текст навколо', () => {
+  it('updates the section content without touching surrounding text', () => {
     runInit(dir);
     const text = readFileSync(agentsPath(), 'utf8');
-    writeFileSync(agentsPath(), `${text}\n## Мій розділ після\n`);
+    writeFileSync(agentsPath(), `${text}\n## My section below\n`);
     runInit(dir);
 
     const after = readFileSync(agentsPath(), 'utf8');
-    expect(after).toContain('## Мій розділ після');
+    expect(after).toContain('## My section below');
     expect(after.split('<!-- flowit:begin -->').length - 1).toBe(1);
   });
 });

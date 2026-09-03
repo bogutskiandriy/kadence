@@ -41,10 +41,10 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
 describe('loadOrBuild', () => {
-  it('I6: видалення state.json не змінює стан — головна властивість кешу', () => {
-    // Якщо цей тест колись впаде, кеш перестав бути похідним і став
-    // джерелом істини. Це найдорожчий клас багів у системі.
-    const a = created('Перша');
+  it('I6: deleting state.json does not change the state — the core cache property', () => {
+    // If this test ever fails, the cache stopped being derived and became a
+    // source of truth. That is the most expensive class of bug here.
+    const a = created('First');
     append(root, a);
     append(root, moved(a.entity, 'done'));
 
@@ -57,18 +57,18 @@ describe('loadOrBuild', () => {
     expect(JSON.stringify(rebuilt.state)).toBe(JSON.stringify(withCache.state));
   });
 
-  it('на порожньому журналі дає порожній стан', () => {
+  it('yields empty state for an empty journal', () => {
     expect(loadOrBuild(root).state.tasks).toEqual([]);
   });
 
-  it('другий виклик бере стан із кешу', () => {
-    append(root, created('Задача'));
+  it('the second call reads state from the cache', () => {
+    append(root, created('Task'));
     expect(loadOrBuild(root).fromCache).toBe(false);
     expect(loadOrBuild(root).fromCache).toBe(true);
   });
 
-  it('нова подія робить кеш недійсним', () => {
-    const a = created('Перша');
+  it('a new event invalidates the cache', () => {
+    const a = created('First');
     append(root, a);
     loadOrBuild(root);
 
@@ -78,10 +78,10 @@ describe('loadOrBuild', () => {
     expect(r.state.tasks[0]!.status).toBe('done');
   });
 
-  it('видалена подія робить кеш недійсним — навіть якщо остання лишилась', () => {
-    // git revert прибирає подію з середини журналу: максимальний ULID той
-    // самий, тому одного лише "останнього id" для інвалідації замало.
-    const a = created('Перша');
+  it('a deleted event invalidates the cache — even if the last one remains', () => {
+    // git revert removes an event from the middle: the maximum ULID stays the
+    // same, so the "last id" alone is not enough to invalidate.
+    const a = created('First');
     const mid = moved(a.entity, 'in_progress');
     const last = moved(a.entity, 'done');
     append(root, a);
@@ -94,18 +94,18 @@ describe('loadOrBuild', () => {
     expect(r.fromCache).toBe(false);
   });
 
-  it('пошкоджений state.json мовчки перебудовується', () => {
-    append(root, created('Задача'));
+  it('a damaged state.json is rebuilt silently', () => {
+    append(root, created('Task'));
     loadOrBuild(root);
-    writeFileSync(snapshotPath(root), 'не json');
+    writeFileSync(snapshotPath(root), 'not json');
 
     const r = loadOrBuild(root);
     expect(r.fromCache).toBe(false);
     expect(r.state.tasks).toHaveLength(1);
   });
 
-  it('снапшот несумісної версії відкидається', () => {
-    append(root, created('Задача'));
+  it('a snapshot of an incompatible version is discarded', () => {
+    append(root, created('Task'));
     loadOrBuild(root);
     const snap = JSON.parse(readFileSync(snapshotPath(root), 'utf8'));
     snap.version = 'flowit-snapshot/999';
@@ -114,9 +114,9 @@ describe('loadOrBuild', () => {
     expect(loadOrBuild(root).fromCache).toBe(false);
   });
 
-  it('кеш зберігає номери FLOW-N незмінними', () => {
-    append(root, created('Перша'));
-    append(root, created('Друга'));
+  it('the cache keeps FLOW-N numbers stable', () => {
+    append(root, created('First'));
+    append(root, created('Second'));
     const cold = loadOrBuild(root).state.tasks.map((t) => t.label);
     const warm = loadOrBuild(root).state.tasks.map((t) => t.label);
     expect(warm).toEqual(cold);

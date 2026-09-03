@@ -1,19 +1,30 @@
 {
   "name": "flowit",
   "version": "0.1.0-dev",
-  "description": "Журнал роботи команди в git-репозиторії з аналітикою спринтів",
+  "description": "Tasks, sprints and velocity as plain files inside your git repository",
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=20" },
-  "bin": { "flowit": "./dist/cli.js" },
-  "files": ["dist"],
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "flowit": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "node scripts/build.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
+    "@types/blessed": "^0.1.27",
+    "blessed": "^0.1.81",
     "cac": "^7.0.0"
   },
   "devDependencies": {
@@ -21,5 +32,25 @@
     "esbuild": "^0.28.0",
     "typescript": "^5.6.0",
     "vitest": "^4.0.0"
+  },
+  "keywords": [
+    "cli",
+    "git",
+    "task",
+    "sprint",
+    "velocity",
+    "kanban",
+    "project-management",
+    "ai-agents",
+    "event-sourcing",
+    "offline"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bogutski/flowit.git"
+  },
+  "homepage": "https://github.com/bogutski/flowit#readme",
+  "bugs": {
+    "url": "https://github.com/bogutski/flowit/issues"
   }
 }

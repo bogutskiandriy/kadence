@@ -1,15 +1,16 @@
 import { randomFillSync } from 'node:crypto';
 
 /**
- * ULID — 26 символів Crockford base32: 48 біт часу, далі 80 біт випадковості.
+ * ULID — 26 characters of Crockford base32: 48 bits of time, then 80 bits of
+ * randomness.
  *
- * Обраний замість UUIDv4 тому, що лексикографічне сортування збігається з
- * хронологічним: порядок подій стає властивістю самого ідентифікатора і не
- * залежить від того, наскільки розійшлися системні годинники на різних
- * машинах (інваріант I2). Реалізація власна — ADR-003.
+ * Chosen over UUIDv4 because lexicographic sorting matches chronological
+ * order: event ordering becomes a property of the identifier itself and no
+ * longer depends on how far apart the clocks on different machines have
+ * drifted (invariant I2). Hand-rolled on purpose — see ADR-003.
  */
 
-const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // без I, L, O, U
+const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // no I, L, O, U
 const TIME_LEN = 10;
 const RANDOM_LEN = 16;
 const MAX_TIME = 2 ** 48 - 1;
@@ -25,7 +26,7 @@ function encodeTime(time: number): string {
 }
 
 function encodeRandom(bytes: Uint8Array): string {
-  // 80 біт → 16 символів по 5 біт.
+  // 80 bits to 16 characters, 5 bits each.
   let out = '';
   let acc = 0;
   let bits = 0;
@@ -41,7 +42,7 @@ function encodeRandom(bytes: Uint8Array): string {
   return out.slice(0, RANDOM_LEN);
 }
 
-/** Інкрементує 80-бітове число на одиницю, з переносом. */
+/** Increments an 80-bit number by one, carrying between bytes. */
 function bumpRandom(bytes: Uint8Array): void {
   for (let i = bytes.length - 1; i >= 0; i--) {
     const v = bytes[i]!;
@@ -51,19 +52,19 @@ function bumpRandom(bytes: Uint8Array): void {
     }
     bytes[i] = 0;
   }
-  // Переповнення всіх 80 біт за одну мілісекунду недосяжне на практиці,
-  // але лишати мовчазне обнулення не можна — воно дало б колізію.
-  throw new Error('ULID: вичерпано випадковий простір у межах мілісекунди');
+  // Exhausting all 80 bits within one millisecond is unreachable in practice,
+  // but silently wrapping around would produce a collision.
+  throw new Error('ULID: random space exhausted within a single millisecond');
 }
 
 export type UlidGenerator = (time?: number) => string;
 
 /**
- * Створює генератор із власним монотонним станом.
+ * Creates a generator with its own monotonic state.
  *
- * Стан навмисно не глобальний: він мутабельний, і спільний екземпляр робив би
- * поведінку залежною від того, хто викликав генератор раніше — включно з
- * порядком виконання тестів.
+ * The state is deliberately not global: it is mutable, and a shared instance
+ * would make behaviour depend on who called the generator earlier — including
+ * the order in which tests happen to run.
  */
 export function createUlid(): UlidGenerator {
   let lastTime = -1;
@@ -71,15 +72,15 @@ export function createUlid(): UlidGenerator {
 
   return function generate(time: number = Date.now()): string {
     if (!Number.isInteger(time) || time < 0 || time > MAX_TIME) {
-      throw new RangeError(`ULID: час поза діапазоном 0…${MAX_TIME}: ${time}`);
+      throw new RangeError(`ULID: time out of range 0..${MAX_TIME}: ${time}`);
     }
 
     if (time > lastTime) {
       lastTime = time;
       randomFillSync(lastRandom);
     } else {
-      // Той самий час або годинник відкотився назад — тримаємо монотонність,
-      // інкрементуючи випадкову частину замість того, щоб довіряти годиннику.
+      // Same millisecond, or the clock moved backwards: keep monotonicity by
+      // incrementing the random part instead of trusting the clock.
       bumpRandom(lastRandom);
     }
 
@@ -87,14 +88,14 @@ export function createUlid(): UlidGenerator {
   };
 }
 
-/** Спільний генератор для звичайного використання застосунком. */
+/** Shared generator for ordinary application use. */
 export const ulid: UlidGenerator = createUlid();
 
 export function decodeTime(id: string): number {
   let time = 0;
   for (let i = 0; i < TIME_LEN; i++) {
     const idx = ALPHABET.indexOf(id[i]!);
-    if (idx === -1) throw new Error(`ULID: недопустимий символ у позиції ${i}`);
+    if (idx === -1) throw new Error(`ULID: invalid character at position ${i}`);
     time = time * 32 + idx;
   }
   return time;

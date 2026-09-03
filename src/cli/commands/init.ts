@@ -21,8 +21,8 @@ export function runInit(cwd: string): InitResult {
       alreadyInitialized: false,
       root: null,
       message:
-        'FlowIt живе всередині git-репозиторію, а тут його немає.\n' +
-        'Створіть репозиторій і спробуйте знову:\n  git init',
+        'FlowIt lives inside a git repository, and there is none here.\n' +
+        'Create one and try again:\n  git init',
     };
   }
 
@@ -31,7 +31,7 @@ export function runInit(cwd: string): InitResult {
   mkdirSync(eventsDir(root), { recursive: true });
   ensureGitignore(root);
 
-  // README не перезаписуємо: користувач міг дописати туди свої правила.
+  // Never overwrite the README: the user may have added their own rules.
   const readme = join(flowitDir(root), 'README.md');
   if (!existsSync(readme)) writeFileSync(readme, AGENT_README, 'utf8');
 
@@ -42,15 +42,15 @@ export function runInit(cwd: string): InitResult {
     alreadyInitialized: already,
     root,
     message: already
-      ? 'FlowIt уже ініціалізовано.'
-      : 'FlowIt готовий.\n\n' +
-        '  flowit task add "перша задача"\n' +
-        '  flowit task list\n\n' +
-        'Файли створено, але не закомічено — це ваше рішення.',
+      ? 'FlowIt is already initialised.'
+      : 'FlowIt is ready.\n\n' +
+        '  flowit task add "first task"\n' +
+        '  flowit board\n\n' +
+        'Files were created but not committed — that call is yours.',
   };
 }
 
-/** state.json — похідний кеш, він не має потрапляти в git (ADR-005). */
+/** state.json is a derived cache and must never reach git (ADR-005). */
 function ensureGitignore(root: string): void {
   const path = join(root, '.gitignore');
   let content = '';
@@ -62,7 +62,7 @@ function ensureGitignore(root: string): void {
   writeFileSync(path, `${content}${prefix}${GITIGNORE_ENTRY}\n`, 'utf8');
 }
 
-/** Доповнює AGENTS.md, не чіпаючи того, що написала людина. */
+/** Extends AGENTS.md without touching what a human wrote. */
 function ensureAgentsFile(root: string): void {
   const path = join(root, 'AGENTS.md');
   const existing = existsSync(path) ? readFileSync(path, 'utf8') : null;
