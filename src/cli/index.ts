@@ -110,6 +110,7 @@ cli
 
 cli
   .command('task [action] [arg] [value]', 'Tasks: add | list | show | move | assign')
+  .option('--title <text>', 'New title (for edit)')
   .option('-d, --description <text>', 'Full description; use quotes for multiple lines')
   .option('--type <type>', `Type: ${TASK_TYPES.join(' | ')}`)
   .option('--priority <level>', `Priority: ${PRIORITIES.join(' | ')}`)
@@ -152,6 +153,7 @@ cli
       arg: string | undefined,
       value: string | undefined,
       options: {
+        title?: string;
         description?: string;
         type?: string;
         priority?: string;
@@ -297,6 +299,7 @@ cli
 
           // With no field flags at all, editing means editing the description.
           const touchesFields =
+            options.title !== undefined ||
             options.description !== undefined ||
             options.type !== undefined ||
             options.priority !== undefined ||
@@ -322,7 +325,12 @@ cli
 
           emit(
             runTaskEdit(cwd, process.env, arg, {
-              ...(value !== undefined ? { title: value } : {}),
+              // Positional title stays supported; the flag is what the board uses.
+              ...(options.title !== undefined
+                ? { title: options.title }
+                : value !== undefined
+                  ? { title: value }
+                  : {}),
               ...(description !== undefined ? { description } : {}),
               ...(options.type !== undefined ? { type: options.type } : {}),
               ...(options.priority !== undefined ? { priority: options.priority } : {}),
@@ -578,6 +586,7 @@ cli
       action: string | undefined,
       name: string | undefined,
       options: {
+        title?: string;
         description?: string;
         type?: string;
         priority?: string;
@@ -629,6 +638,17 @@ cli
       }
     },
   );
+
+cli
+  .command('ui', 'Interactive kanban board')
+  .alias('board:ui')
+  .example('  flowit ui')
+  .action(async () => {
+    // Imported lazily so the fast commands never load the UI layer.
+    const { runUi } = await import('./commands/ui.js');
+    const r = await runUi(process.cwd(), process.env);
+    if (!r.ok) emit(r, false);
+  });
 
 cli.help();
 cli.version('0.1.0-dev');

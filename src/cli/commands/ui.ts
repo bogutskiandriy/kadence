@@ -4,7 +4,16 @@ import {
   runTaskAssign,
   runTaskAdd,
   runTaskDelete,
+  runTaskComment,
+  runTaskLog,
 } from './task.js';
+import {
+  runSprintStatus,
+  runSprintStart,
+  runSprintClose,
+  runSprintAdd,
+  runSprintBurndown,
+} from './sprint.js';
 import { editText, canUseEditor } from '../editor.js';
 import { runTaskEdit } from './task.js';
 
@@ -66,6 +75,48 @@ export async function runUi(cwd: string, env: NodeJS.ProcessEnv): Promise<Comman
 
       return messageOf(runTaskEdit(cwd, env, taskId, { description: r.text }));
     },
+
+    comment: (taskId, text) => messageOf(runTaskComment(cwd, env, taskId, text)),
+
+    /**
+     * Every editable field goes through the same command the CLI uses.
+     *
+     * Status and assignee have their own commands because they write different
+     * event types; the rest are ordinary field edits.
+     */
+    setField: (taskId, field, value) => {
+      const text = value.trim();
+
+      if (field === 'status') return messageOf(runTaskMove(cwd, env, taskId, text));
+      if (field === 'assignee') {
+        return messageOf(runTaskAssign(cwd, env, taskId, text.length === 0 ? 'none' : text));
+      }
+      if (field === 'estimate') {
+        const points = Number(text);
+        if (!Number.isFinite(points) || points < 0) return 'Estimate must be a positive number.';
+        return messageOf(runTaskEdit(cwd, env, taskId, { estimate: points }));
+      }
+      if (field === 'labels') {
+        const labels = text
+          .split(',')
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0);
+        return messageOf(runTaskEdit(cwd, env, taskId, { labels }));
+      }
+
+      // title, description, type, priority, due — plain string fields.
+      return messageOf(runTaskEdit(cwd, env, taskId, { [field]: text }));
+    },
+    logTime: (taskId, duration) => messageOf(runTaskLog(cwd, env, taskId, duration)),
+    setPriority: (taskId, priority) => messageOf(runTaskEdit(cwd, env, taskId, { priority })),
+    addToSprint: (taskId) => messageOf(runSprintAdd(cwd, env, taskId, {})),
+
+    // Reports return their whole text: a dialog has room for it, unlike the
+    // single status line an action gets.
+    sprintStatus: () => runSprintStatus(cwd, env).message,
+    burndown: () => runSprintBurndown(cwd, env, undefined).message,
+    sprintStart: () => messageOf(runSprintStart(cwd, env, undefined)),
+    sprintClose: () => messageOf(runSprintClose(cwd, env)),
   });
 
   // blessed owns the process from here; it exits on `q`.

@@ -92,13 +92,40 @@ export function renderCard(task: Task, width: number): string {
     .filter((s) => s.length > 0)
     .join(' ');
 
-  // Budget the title by what the visible glyphs actually consume, so cards do
-  // not wrap and break the column grid.
-  const overhead = 6 + stripTags(suffix).length;
-  const room = Math.max(8, width - overhead);
-  const title = [...task.title].length > room ? `${[...task.title].slice(0, room - 1).join('')}…` : task.title;
+  // Budget the title against what the other parts actually occupy on screen.
+  // An estimate here is not good enough: a card one character too wide wraps
+  // and breaks the whole column grid.
+  const prefix = `${stripTags(priority)}${stripTags(type)} ${stripTags(label)} `;
+  const tail = suffix.length > 0 ? ` ${stripTags(suffix)}` : '';
+  const room = Math.max(4, width - prefix.length - tail.length);
 
-  return `${priority}${type} ${label} ${title} ${suffix}`.trimEnd();
+  const chars = [...task.title];
+  const title = chars.length > room ? `${chars.slice(0, room - 1).join('')}…` : task.title;
+
+  return `${priority}${type} ${label} ${title}${suffix.length > 0 ? ` ${suffix}` : ''}`;
+}
+
+/**
+ * Marks the selected card.
+ *
+ * The highlight is drawn into the text rather than delegated to the list
+ * widget: a non-interactive list ignores `select()`, and making it interactive
+ * would put it back in competition for the keyboard.
+ */
+export function decorateCard(card: string, selected: boolean): string {
+  return selected ? `{cyan-bg}{black-fg}${stripTags(card)}{/}` : ` ${card}`;
+}
+
+/**
+ * One row of the task detail form.
+ *
+ * The highlight is drawn into the text for the same reason cards are: a
+ * non-interactive list ignores `select()`, and making it interactive would put
+ * it back in competition for the keyboard.
+ */
+export function renderField(label: string, value: string, selected: boolean, width = 12): string {
+  const row = `${label.padEnd(width)} ${value}`;
+  return selected ? `{cyan-bg}{black-fg}▸ ${row}{/}` : `  ${row}`;
 }
 
 /** Visible length, ignoring blessed markup. */
@@ -108,14 +135,16 @@ export function stripTags(text: string): string {
 
 /** The key hints strip along the bottom. */
 export const KEY_HINTS = [
-  '←→ column',
-  '↑↓ task',
+  '←→↑↓ move',
   'enter details',
-  'm move',
+  '[ ] shift',
+  'm status',
   'a assign',
+  'c comment',
   'e edit',
   'n new',
-  '/ search',
+  's sprint',
+  '/ filter',
   '? help',
-  'q quit',
+  'q quit (Ctrl-C forces)',
 ].join('  ');

@@ -1,13 +1,14 @@
 <!-- flowit:begin -->
-## Задачі проєкту — FlowIt
+## Project tasks — FlowIt
 
-Задачі лежать у `.flowit/` як звичайні файли. Читай їх напряму або через CLI:
+Tasks live in `.flowit/` as plain files. Read them directly or via the CLI:
 
-    flowit task list --json      перелік задач
-    flowit task move FLOW-1 done змінити стан
+    flowit board --json           the whole board
+    flowit task list --json       all tasks
+    flowit task move FLOW-1 done  change state
 
-Відповіді `--json` мають поле `schema: "flowit/v1"`; у stdout тільки JSON.
-Працюючи як агент, виставляй `FLOWIT_SOURCE=agent`.
+`--json` responses carry `schema: "flowit/v1"`; stdout is JSON only.
+When acting as an agent, set `FLOWIT_SOURCE=agent`.
 
-Подробиці: `.flowit/README.md`
+Details: `.flowit/README.md`
 <!-- flowit:end -->

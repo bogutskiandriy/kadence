@@ -8,8 +8,18 @@ await build({
   platform: 'node',
   target: 'node20',
   format: 'esm',
-  outfile: 'dist/cli.js',
+  outdir: 'dist',
+  entryNames: 'cli',
+  // Code splitting keeps the interactive board in its own chunk: a dynamic
+  // import only pays for blessed when someone actually opens the board.
+  splitting: true,
+  chunkNames: 'chunks/[name]-[hash]',
+  // blessed stays external — bundling a library that reads terminfo at runtime
+  // gains nothing and breaks its own file lookups.
+  external: ['blessed'],
   banner: { js: '#!/usr/bin/env node' },
   minify: true,
 });
-console.log('built dist/cli.js');
+
+const { statSync } = await import('node:fs');
+console.log(`built dist/cli.js (${(statSync('dist/cli.js').size / 1024).toFixed(0)} KB)`);
