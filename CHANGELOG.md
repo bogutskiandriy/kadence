@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.5] — 2026-09-03
+
+### Changed
+
+- README rewritten to lead with the number the product exists for — what a
+  story point actually costs — instead of a feature list. Claims now carry
+  their evidence inline: the merge thesis links to the 8,396-commit study and
+  to the integration test that proves it, and the performance table says these
+  are tests that fail the build.
+- Repository URLs follow the rename to `bogutskiandriy/kadence`.
+
 ## [0.1.4] — 2026-09-03
 
 ### Fixed

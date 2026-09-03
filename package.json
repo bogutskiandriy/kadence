@@ -1,6 +1,6 @@
 {
   "name": "kadence",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Tasks, sprints and velocity as plain files inside your git repository",
   "type": "module",
   "license": "MIT",
@@ -49,10 +49,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bogutskiandriy/FlowIt.git"
+    "url": "git+https://github.com/bogutskiandriy/kadence.git"
   },
-  "homepage": "https://github.com/bogutskiandriy/FlowIt#readme",
+  "homepage": "https://github.com/bogutskiandriy/kadence#readme",
   "bugs": {
-    "url": "https://github.com/bogutskiandriy/FlowIt/issues"
+    "url": "https://github.com/bogutskiandriy/kadence/issues"
   }
 }
