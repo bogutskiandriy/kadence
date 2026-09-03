@@ -1,6 +1,6 @@
 {
   "name": "kadence",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Tasks, sprints and velocity as plain files inside your git repository",
   "type": "module",
   "license": "MIT",
@@ -26,7 +26,8 @@
   "dependencies": {
     "@types/blessed": "^0.1.27",
     "blessed": "^0.1.81",
-    "cac": "^7.0.0"
+    "cac": "^7.0.0",
+    "kadence": "^0.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

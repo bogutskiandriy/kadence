@@ -7,9 +7,11 @@ account, no network. Works offline, and works for AI agents because the data is
 just files they can read.
 
 ```bash
-npx kadence init
-npx kadence task add "Fix login" -d "Broken since 2.3" --type bug --estimate 3
-npx kadence ui        # interactive board, or `kadence board` for a plain list
+npm install -g kadence
+
+kadence init
+kadence task add "Fix login" -d "Broken since 2.3" --type bug --estimate 3
+kadence ui        # interactive board, or `kadence board` for a plain list
 ```
 
 > **v0.1.0.** The architecture is measured and covered by 383 tests. The product
@@ -51,13 +53,23 @@ costs your team.
 
 Requires Node 20 or newer, and a git repository.
 
+Install it once, so the command stays available:
+
 ```bash
-npx kadence init
+npm install -g kadence
+kadence init
 ```
 
-No global install needed. `init` creates `.kadence/`, adds the derived cache to
-`.gitignore`, and writes a short guide for AI agents. It does **not** commit
-anything — that call is yours.
+Or run it without installing — but note that `npx` fetches the package for that
+one command and leaves nothing behind, so every later call needs `npx` too:
+
+```bash
+npx kadence init
+npx kadence board
+```
+
+`init` creates `.kadence/`, adds the derived cache to `.gitignore`, and writes a
+short guide for AI agents. It does **not** commit anything — that call is yours.
 
 ## Commands
 

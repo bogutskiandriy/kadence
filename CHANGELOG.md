@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.2] — 2026-09-03
+
+### Documentation
+
+- The README opened with `npx kadence init` and said nothing more, so the
+  obvious next step — `kadence board` — failed with "command not found". `npx`
+  fetches a package for one command and leaves nothing installed. Global
+  install is now the first instruction, with the npx path shown as the
+  alternative it is.
+
 ## [0.1.1] — 2026-09-03
 
 ### Fixed
