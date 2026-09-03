@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.4] — 2026-09-03
+
+### Fixed
+
+- The package depended on itself. `kadence@^0.1.1` sat in `dependencies`, so
+  every install pulled a second, older copy of the tool into `node_modules`
+  and shipped it to users. Removed; the published tarball is now 32.7 kB with
+  eight files in it.
+- `@types/blessed` moved to `devDependencies`. Type definitions are not needed
+  at runtime, and every install was paying for them.
+
+### Repository
+
+- Developer tooling (`.claude/`, `.serena/`) is no longer committed: 381 files
+  and 3.8 MB of it, against 94 files of actual product. What belongs in git and
+  what does not is written down in
+  [ADR-007](docs/decisions/007-what-goes-into-git.md), and `.gitignore` now
+  also covers `.env`, coverage output and editor leftovers.
+
 ## [0.1.3] — 2026-09-03
 
 ### Testing
