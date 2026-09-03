@@ -33,13 +33,13 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A([kadence task add]) --> B[Записати task.created<br/>ULID + FLOW-N]
+    A([kadence task add]) --> B[Записати task.created<br/>ULID + KAD-N]
     B --> C([kadence task list])
     C --> D{Задача моя?}
-    D -- так --> E([kadence task move FLOW-42 in_progress])
+    D -- так --> E([kadence task move KAD-42 in_progress])
     E --> F[Записати task.moved]
     F --> G([робота в коді])
-    G --> H([kadence task move FLOW-42 done])
+    G --> H([kadence task move KAD-42 done])
     H --> I{Задача у відкритому спринті?}
     I -- так --> J[Зарахувати у velocity]
     I -- ні --> K[Просто змінити стан]
@@ -56,7 +56,7 @@ flowchart TD
     A([Агент стартує в репозиторії]) --> B[Читає .kadence/README.md<br/>як звичайний файл]
     B --> C([kadence task list --json])
     C --> D{Є задача в роботі?}
-    D -- так --> E([kadence task show FLOW-42 --json])
+    D -- так --> E([kadence task show KAD-42 --json])
     D -- ні --> F([kadence context --json<br/>стан за поточною гілкою])
     E --> G[Агент виконує роботу]
     F --> G
@@ -82,13 +82,13 @@ flowchart TD
     E -- так --> G[Взяти з кешу]
     F --> H{Були конкурентні події<br/>про ту саму задачу?}
     G --> H
-    H -- так --> I[Показати: змерджено N змін<br/>FLOW-42 з двох гілок, конфліктів немає]
+    H -- так --> I[Показати: змерджено N змін<br/>KAD-42 з двох гілок, конфліктів немає]
     H -- ні --> J[Звичайний вивід]
 ```
 
 **Крок I — це та сама зміна з [пріоритизації](../product/prioritization.md), що зайшла у v0.1.** Без нього головна властивість продукту спрацьовує невидимо: користувач не дізнається, що щойно уникнув ручної роботи, і не оцінить її.
 
-Формулювати треба фактом, а не хвастощами: «FLOW-42: змерджено 3 зміни з 2 гілок» — і все.
+Формулювати треба фактом, а не хвастощами: «KAD-42: змерджено 3 зміни з 2 гілок» — і все.
 
 ## Потік 5 — закриття спринту
 
