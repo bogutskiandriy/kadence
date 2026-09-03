@@ -45,6 +45,9 @@ import { SORT_KEYS } from '../core/query.js';
  * fires. Verified empirically; ADR-004 anticipated a risk with cac, just a
  * different one (the project going stale), so this is an amendment to it.
  */
+/** Injected at build time from package.json — see scripts/build.mjs. */
+declare const __VERSION__: string;
+
 const cli = cac('kadence');
 
 /**
@@ -651,7 +654,7 @@ cli
   });
 
 cli.help();
-cli.version('0.1.0-dev');
+cli.version(__VERSION__);
 
 // cac reads any leading "-" as a flag, so negative values never reach the
 // command. Two cases need intercepting before parsing rather than fighting the

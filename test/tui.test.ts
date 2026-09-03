@@ -294,3 +294,14 @@ describe('renderers that had no test', () => {
     expect(out[0]).toContain('KAD-1 → KAD-2 → KAD-1');
   });
 });
+
+describe('reported version', () => {
+  it('matches package.json rather than a hardcoded string', () => {
+    // The 0.1.0 release shipped reporting "0.1.0-dev" because the CLI carried
+    // its own copy of the version. It is now injected at build time.
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
+    const out = spawnSync('node', [resolve('dist/cli.js'), '--version'], { encoding: 'utf8' });
+    expect(out.stdout).toContain(pkg.version);
+    expect(out.stdout).not.toContain('-dev');
+  });
+});

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.1] — 2026-09-03
+
+### Fixed
+
+- `kadence --version` reported `0.1.0-dev` while the published package was
+  `0.1.0`. The CLI carried its own copy of the version string; it is now
+  injected from package.json at build time, with a test that fails if the two
+  ever diverge again.
+
 ## [0.1.0] — 2026-09-03
 
 First release. Tasks, sprints and velocity as plain files inside a git
