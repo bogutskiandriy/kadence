@@ -60,7 +60,7 @@ function pad(s: string, n: number): string {
 
 export function renderTaskTable(tasks: readonly Task[], colors: boolean): string {
   if (tasks.length === 0) {
-    return 'No tasks yet.\nCreate the first one:\n  sprintit task add "title"';
+    return 'No tasks yet.\nCreate the first one:\n  kadence task add "title"';
   }
 
   const labelW = Math.max(...tasks.map((t) => width(t.label)), 2);
@@ -134,7 +134,7 @@ function boardLine(t: Task, colors: boolean): string {
 export function renderBoard(columns: Record<string, Task[]>, colors: boolean): string {
   const total = Object.values(columns).reduce((n, xs) => n + xs.length, 0);
   if (total === 0) {
-    return 'No tasks yet.\nCreate the first one:\n  sprintit task add "title"';
+    return 'No tasks yet.\nCreate the first one:\n  kadence task add "title"';
   }
 
   const blocks: string[] = [];
@@ -177,7 +177,7 @@ function dueSuffix(due: string, today: Date = new Date()): string {
  */
 export function renderTaskTree(tasks: readonly Task[], colors: boolean): string {
   if (tasks.length === 0) {
-    return 'No tasks yet.\nCreate the first one:\n  sprintit task add "title"';
+    return 'No tasks yet.\nCreate the first one:\n  kadence task add "title"';
   }
 
   const visible = new Set(tasks.map((t) => t.id));

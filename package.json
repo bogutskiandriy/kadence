@@ -1,5 +1,5 @@
 {
-  "name": "sprintit",
+  "name": "kadence",
   "version": "0.1.0",
   "description": "Tasks, sprints and velocity as plain files inside your git repository",
   "type": "module",
@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "bin": {
-    "sprintit": "dist/cli.js"
+    "kadence": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -41,6 +41,7 @@
     "sprint",
     "velocity",
     "kanban",
+    "tui",
     "project-management",
     "ai-agents",
     "event-sourcing",

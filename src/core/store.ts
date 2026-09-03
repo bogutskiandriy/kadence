@@ -13,7 +13,7 @@ import { parse, serialize, type FlowEvent } from './event.js';
 const SYSTEMIC_CORRUPTION_RATIO = 0.2;
 
 export function dataDir(root: string): string {
-  return join(root, '.sprintit');
+  return join(root, '.kadence');
 }
 
 export function eventsDir(root: string): string {
@@ -61,7 +61,7 @@ export interface ReadResult {
   events: FlowEvent[];
   /** Paths of events that could not be read. */
   corrupted: string[];
-  /** How many events were skipped as written by a newer sprintit. */
+  /** How many events were skipped as written by a newer kadence. */
   unknownTypes: number;
   /** Enough corruption that this is no longer a one-off failure. */
   systemicCorruption: boolean;

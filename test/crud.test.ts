@@ -29,12 +29,12 @@ describe('task.deleted', () => {
     expect(events).toHaveLength(2);
   });
 
-  it('frees its FLOW-N so numbering stays contiguous', () => {
+  it('frees its KAD-N so numbering stays contiguous', () => {
     const a = created({ title: 'First' });
     const b = created({ title: 'Second' });
     const c = created({ title: 'Third' });
     const s = project([a, b, c, ev('task.deleted', b.entity)]);
-    expect(s.tasks.map((t) => t.label)).toEqual(['FLOW-1', 'FLOW-2']);
+    expect(s.tasks.map((t) => t.label)).toEqual(['KAD-1', 'KAD-2']);
     expect(s.tasks.map((t) => t.title)).toEqual(['First', 'Third']);
   });
 

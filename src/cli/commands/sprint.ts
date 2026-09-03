@@ -9,7 +9,7 @@ import { resolveContext, isContext, loadState, findTask, type CommandResult, typ
 /**
  * Sprint commands.
  *
- * This is what no file-based competitor offers, and the reason sprintit is
+ * This is what no file-based competitor offers, and the reason kadence is
  * positioned as work analytics rather than yet another tracker.
  */
 
@@ -69,10 +69,10 @@ export function runSprintCreate(cwd: string, env: NodeJS.ProcessEnv, name: strin
     warnings,
     message: hasActive
       ? `Sprint "${trimmed}" planned.\n\n` +
-        `  sprintit sprint add FLOW-1 --sprint "${trimmed}"\n  sprintit sprint start "${trimmed}"`
-      : `Sprint "${trimmed}" started.\n\n  sprintit sprint add FLOW-1\n  sprintit sprint status`,
+        `  kadence sprint add KAD-1 --sprint "${trimmed}"\n  kadence sprint start "${trimmed}"`
+      : `Sprint "${trimmed}" started.\n\n  kadence sprint add KAD-1\n  kadence sprint status`,
     data: {
-      schema: 'sprintit/v1',
+      schema: 'kadence/v1',
       ok: true,
       sprint: { id, name: trimmed, status: hasActive ? 'planned' : 'active' },
     },
@@ -98,9 +98,9 @@ export function runSprintAdd(
       ? {
           ok: false,
           exitCode: 1,
-          message: 'No active sprint.\n  sprintit sprint create "Sprint 1"',
+          message: 'No active sprint.\n  kadence sprint create "Sprint 1"',
         }
-      : { ok: false, exitCode: 1, message: `No sprint named "${options.sprint}".\n  sprintit sprint list` };
+      : { ok: false, exitCode: 1, message: `No sprint named "${options.sprint}".\n  kadence sprint list` };
   }
   if (sprint.status === 'closed') {
     return {
@@ -112,7 +112,7 @@ export function runSprintAdd(
 
   const task = findTask(state, ref);
   if (task === undefined) {
-    return { ok: false, exitCode: 1, message: `No task ${ref}.\n  sprintit task list` };
+    return { ok: false, exitCode: 1, message: `No task ${ref}.\n  kadence task list` };
   }
   if (task.sprint === sprint.id) {
     return { ok: true, exitCode: 0, warnings, message: `${task.label} is already in the sprint.` };
@@ -128,7 +128,7 @@ export function runSprintAdd(
     exitCode: 0,
     warnings,
     message: `${task.label} → "${sprint.name}"${noEstimate}`,
-    data: { schema: 'sprintit/v1', ok: true, task: { id: task.id, label: task.label }, sprint: sprint.id },
+    data: { schema: 'kadence/v1', ok: true, task: { id: task.id, label: task.label }, sprint: sprint.id },
   };
 }
 
@@ -142,7 +142,7 @@ export function runSprintClose(cwd: string, env: NodeJS.ProcessEnv): CommandResu
     return {
       ok: false,
       exitCode: 1,
-      message: 'No active sprint.\n  sprintit sprint create "Sprint 1"',
+      message: 'No active sprint.\n  kadence sprint create "Sprint 1"',
     };
   }
 
@@ -162,7 +162,7 @@ export function runSprintClose(cwd: string, env: NodeJS.ProcessEnv): CommandResu
     exitCode: 0,
     warnings: all,
     message: renderReport(report),
-    data: { schema: 'sprintit/v1', ok: true, report: serializeReport(report) },
+    data: { schema: 'kadence/v1', ok: true, report: serializeReport(report) },
   };
 }
 
@@ -177,8 +177,8 @@ export function runSprintStatus(cwd: string, env: NodeJS.ProcessEnv): CommandRes
       ok: true,
       exitCode: 0,
       warnings,
-      message: 'No active sprint.\n  sprintit sprint create "Sprint 1"',
-      data: { schema: 'sprintit/v1', ok: true, sprint: null },
+      message: 'No active sprint.\n  kadence sprint create "Sprint 1"',
+      data: { schema: 'kadence/v1', ok: true, sprint: null },
     };
   }
 
@@ -195,7 +195,7 @@ export function runSprintStatus(cwd: string, env: NodeJS.ProcessEnv): CommandRes
     exitCode: 0,
     warnings,
     message: lines.join('\n'),
-    data: { schema: 'sprintit/v1', ok: true, report: serializeReport(report) },
+    data: { schema: 'kadence/v1', ok: true, report: serializeReport(report) },
   };
 }
 
@@ -268,7 +268,7 @@ export function runSprintStart(
       exitCode: 1,
       message:
         `Sprint "${open.name}" is still active.\n` +
-        'Close it so velocity can be computed:\n  sprintit sprint close',
+        'Close it so velocity can be computed:\n  kadence sprint close',
     };
   }
 
@@ -283,8 +283,8 @@ export function runSprintStart(
       exitCode: 1,
       message:
         name === undefined
-          ? 'No planned sprints.\n  sprintit sprint create "Sprint 2"'
-          : `No sprint named "${name}".\n  sprintit sprint list`,
+          ? 'No planned sprints.\n  kadence sprint create "Sprint 2"'
+          : `No sprint named "${name}".\n  kadence sprint list`,
     };
   }
   if (target.status !== 'planned') {
@@ -297,8 +297,8 @@ export function runSprintStart(
     ok: true,
     exitCode: 0,
     warnings,
-    message: `Sprint "${target.name}" started.\n\n  sprintit sprint status`,
-    data: { schema: 'sprintit/v1', ok: true, sprint: { id: target.id, name: target.name } },
+    message: `Sprint "${target.name}" started.\n\n  kadence sprint status`,
+    data: { schema: 'kadence/v1', ok: true, sprint: { id: target.id, name: target.name } },
   };
 }
 
@@ -312,8 +312,8 @@ export function runSprintList(cwd: string, env: NodeJS.ProcessEnv): CommandResul
       ok: true,
       exitCode: 0,
       warnings,
-      message: 'No sprints yet.\n  sprintit sprint create "Sprint 1"',
-      data: { schema: 'sprintit/v1', ok: true, sprints: [] },
+      message: 'No sprints yet.\n  kadence sprint create "Sprint 1"',
+      data: { schema: 'kadence/v1', ok: true, sprints: [] },
     };
   }
 
@@ -335,7 +335,7 @@ export function runSprintList(cwd: string, env: NodeJS.ProcessEnv): CommandResul
       })
       .join('\n'),
     data: {
-      schema: 'sprintit/v1',
+      schema: 'kadence/v1',
       ok: true,
       sprints: rows.map(({ sprint, tasks, points }) => ({
         id: sprint.id,
@@ -380,7 +380,7 @@ export function runSprintEdit(
       return {
         ok: false,
         exitCode: 2,
-        message: `${field} must be YYYY-MM-DD, got "${value}".\n  sprintit sprint edit --start 2026-09-01`,
+        message: `${field} must be YYYY-MM-DD, got "${value}".\n  kadence sprint edit --start 2026-09-01`,
       };
     }
   }
@@ -394,8 +394,8 @@ export function runSprintEdit(
       exitCode: 1,
       message:
         name === undefined
-          ? 'No active sprint.\n  sprintit sprint list'
-          : `No sprint named "${name}".\n  sprintit sprint list`,
+          ? 'No active sprint.\n  kadence sprint list'
+          : `No sprint named "${name}".\n  kadence sprint list`,
     };
   }
   if (sprint.status === 'closed') {
@@ -454,7 +454,7 @@ export function runSprintEdit(
     exitCode: 0,
     warnings,
     message: `"${sprint.name}": updated ${changed.join(', ')}.`,
-    data: { schema: 'sprintit/v1', ok: true, sprint: { id: sprint.id, changed } },
+    data: { schema: 'kadence/v1', ok: true, sprint: { id: sprint.id, changed } },
   };
 }
 
@@ -475,8 +475,8 @@ export function runSprintBurndown(
       exitCode: 1,
       message:
         name === undefined
-          ? 'No active sprint.\n  sprintit sprint list'
-          : `No sprint named "${name}".\n  sprintit sprint list`,
+          ? 'No active sprint.\n  kadence sprint list'
+          : `No sprint named "${name}".\n  kadence sprint list`,
     };
   }
 
@@ -488,8 +488,8 @@ export function runSprintBurndown(
       ok: true,
       exitCode: 0,
       warnings,
-      message: `"${sprint.name}" has no tasks yet.\n  sprintit sprint add FLOW-1`,
-      data: { schema: 'sprintit/v1', ok: true, burndown: null },
+      message: `"${sprint.name}" has no tasks yet.\n  kadence sprint add KAD-1`,
+      data: { schema: 'kadence/v1', ok: true, burndown: null },
     };
   }
 
@@ -498,6 +498,6 @@ export function runSprintBurndown(
     exitCode: 0,
     warnings,
     message: renderBurndown(chart),
-    data: { schema: 'sprintit/v1', ok: true, burndown: chart },
+    data: { schema: 'kadence/v1', ok: true, burndown: chart },
   };
 }

@@ -14,7 +14,7 @@ function git(cwd: string, ...args: string[]): void {
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'sprintit-init-'));
+  dir = mkdtempSync(join(tmpdir(), 'kadence-init-'));
 });
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
@@ -57,7 +57,7 @@ describe('runInit', () => {
   });
 
   it('refuses to run outside a git repository', () => {
-    const outside = mkdtempSync(join(tmpdir(), 'sprintit-outside-'));
+    const outside = mkdtempSync(join(tmpdir(), 'kadence-outside-'));
     const r = runInit(outside);
     expect(r.ok).toBe(false);
     expect(r.message).toMatch(/git repository/i);
@@ -66,19 +66,19 @@ describe('runInit', () => {
 
   it('creates the events folder', () => {
     expect(runInit(dir).ok).toBe(true);
-    expect(existsSync(join(dir, '.sprintit', 'events'))).toBe(true);
+    expect(existsSync(join(dir, '.kadence', 'events'))).toBe(true);
   });
 
   it('appends state.json to .gitignore', () => {
     runInit(dir);
-    expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('.sprintit/state.json');
+    expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('.kadence/state.json');
   });
 
   it('does not duplicate the .gitignore entry on a repeat run', () => {
     runInit(dir);
     runInit(dir);
     const gi = readFileSync(join(dir, '.gitignore'), 'utf8');
-    expect(gi.split('.sprintit/state.json').length - 1).toBe(1);
+    expect(gi.split('.kadence/state.json').length - 1).toBe(1);
   });
 
   it('preserves existing .gitignore content', () => {
@@ -89,28 +89,28 @@ describe('runInit', () => {
 
   it('creates the agent README', () => {
     runInit(dir);
-    expect(existsSync(join(dir, '.sprintit', 'README.md'))).toBe(true);
+    expect(existsSync(join(dir, '.kadence', 'README.md'))).toBe(true);
   });
 
   it('destroys nothing on a repeat run', () => {
     runInit(dir);
-    writeFileSync(join(dir, '.sprintit', 'events', 'marker'), 'data');
+    writeFileSync(join(dir, '.kadence', 'events', 'marker'), 'data');
     const r = runInit(dir);
     expect(r.ok).toBe(true);
     expect(r.alreadyInitialized).toBe(true);
-    expect(existsSync(join(dir, '.sprintit', 'events', 'marker'))).toBe(true);
+    expect(existsSync(join(dir, '.kadence', 'events', 'marker'))).toBe(true);
   });
 
   it('works when the events folder vanished after checkout — no repeat init needed', () => {
-    // Regression: git does not version empty directories, so .sprintit/events/
+    // Regression: git does not version empty directories, so .kadence/events/
     // disappears when switching to a branch without events. The CLI used to
     // refuse to work on a perfectly functional repository.
     runInit(dir);
-    rmSync(join(dir, '.sprintit', 'events'), { recursive: true, force: true });
+    rmSync(join(dir, '.kadence', 'events'), { recursive: true, force: true });
 
     const r = runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'Task after checkout');
     expect(r.ok).toBe(true);
-    expect(existsSync(join(dir, '.sprintit', 'events'))).toBe(true);
+    expect(existsSync(join(dir, '.kadence', 'events'))).toBe(true);
   });
 
   it('does NOT create a commit — that call belongs to the human', () => {

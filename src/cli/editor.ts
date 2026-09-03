@@ -36,8 +36,8 @@ export function editText(
   initial: string,
   hint: string,
 ): EditorResult {
-  const dir = mkdtempSync(join(tmpdir(), 'sprintit-edit-'));
-  const file = join(dir, 'SPRINTIT_EDITMSG.md');
+  const dir = mkdtempSync(join(tmpdir(), 'kadence-edit-'));
+  const file = join(dir, 'KADENCE_EDITMSG.md');
 
   const header = [
     '',
@@ -78,6 +78,6 @@ export function editText(
 /** True when there is no terminal to hand over to an editor. */
 export function canUseEditor(env: NodeJS.ProcessEnv, isTty: boolean): boolean {
   // An agent piping --json has no terminal; opening vi there would hang forever.
-  if (env['SPRINTIT_SOURCE'] === 'agent') return false;
+  if (env['KADENCE_SOURCE'] === 'agent') return false;
   return isTty;
 }

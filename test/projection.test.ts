@@ -137,15 +137,15 @@ describe('project — sprints', () => {
   });
 });
 
-describe('project — FLOW-N numbering', () => {
+describe('project — KAD-N numbering', () => {
   it('assigns numbers in ULID order, not read order', () => {
     const a = created('First');
     const b = created('Second');
     const s = project([b, a]);
     const first = s.tasks.find((t) => t.id === a.entity)!;
     const second = s.tasks.find((t) => t.id === b.entity)!;
-    expect(first.label).toBe('FLOW-1');
-    expect(second.label).toBe('FLOW-2');
+    expect(first.label).toBe('KAD-1');
+    expect(second.label).toBe('KAD-2');
   });
 
   it('two branches that created tasks independently get DIFFERENT numbers', () => {

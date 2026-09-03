@@ -11,7 +11,7 @@ let dir: string;
 const env = {} as NodeJS.ProcessEnv;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'sprintit-fields-'));
+  dir = mkdtempSync(join(tmpdir(), 'kadence-fields-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'pm@example.com'], { cwd: dir });
   runInit(dir);
@@ -59,14 +59,14 @@ describe('task add with the full field set', () => {
 describe('task assign', () => {
   it('assigns an assignee', () => {
     runTaskAdd(dir, env, 'Task', {});
-    const r = runTaskAssign(dir, env, 'FLOW-1', 'dev@example.com');
+    const r = runTaskAssign(dir, env, 'KAD-1', 'dev@example.com');
     expect(r.ok).toBe(true);
     expect(r.message).toContain('dev@example.com');
   });
 
   it('clears the assignment with the word none', () => {
     runTaskAdd(dir, env, 'Task', { assignee: 'dev@example.com' });
-    const r = runTaskAssign(dir, env, 'FLOW-1', 'none');
+    const r = runTaskAssign(dir, env, 'KAD-1', 'none');
     expect(r.ok).toBe(true);
     const t = runTaskList(dir, env, {}).data!['tasks'] as Array<Record<string, unknown>>;
     expect(t[0]!['assignee']).toBeNull();
@@ -75,13 +75,13 @@ describe('task assign', () => {
   it('writes no event when the assignee is unchanged', () => {
     runTaskAdd(dir, env, 'Task', { assignee: 'dev@example.com' });
     const before = (runTaskList(dir, env, {}).data!['tasks'] as Array<{ history: unknown[] }>)[0]!.history.length;
-    runTaskAssign(dir, env, 'FLOW-1', 'dev@example.com');
+    runTaskAssign(dir, env, 'KAD-1', 'dev@example.com');
     const after = (runTaskList(dir, env, {}).data!['tasks'] as Array<{ history: unknown[] }>)[0]!.history.length;
     expect(after).toBe(before);
   });
 
   it('reports when the task does not exist', () => {
-    expect(runTaskAssign(dir, env, 'FLOW-99', 'dev@example.com').exitCode).toBe(1);
+    expect(runTaskAssign(dir, env, 'KAD-99', 'dev@example.com').exitCode).toBe(1);
   });
 });
 
@@ -91,7 +91,7 @@ describe('task show', () => {
       description: 'Detailed description of the problem.',
       estimate: 5,
     });
-    const msg = runTaskShow(dir, env, 'FLOW-1').message;
+    const msg = runTaskShow(dir, env, 'KAD-1').message;
     expect(msg.indexOf('Detailed description')).toBeLessThan(msg.indexOf('5'));
   });
 
@@ -104,7 +104,7 @@ describe('task show', () => {
       labels: ['auth'],
       estimate: 3,
     });
-    const msg = runTaskShow(dir, env, 'FLOW-1').message;
+    const msg = runTaskShow(dir, env, 'KAD-1').message;
     for (const part of ['bug', 'high', 'dev@example.com', 'auth', 'Description', 'pm@example.com']) {
       expect(msg).toContain(part);
     }
@@ -112,12 +112,12 @@ describe('task show', () => {
 
   it('shows the change history', () => {
     runTaskAdd(dir, env, 'Task', {});
-    runTaskAssign(dir, env, 'FLOW-1', 'dev@example.com');
-    expect(runTaskShow(dir, env, 'FLOW-1').message).toMatch(/history/i);
+    runTaskAssign(dir, env, 'KAD-1', 'dev@example.com');
+    expect(runTaskShow(dir, env, 'KAD-1').message).toMatch(/history/i);
   });
 
   it('reports when the task does not exist', () => {
-    expect(runTaskShow(dir, env, 'FLOW-99').exitCode).toBe(1);
+    expect(runTaskShow(dir, env, 'KAD-99').exitCode).toBe(1);
   });
 });
 
@@ -145,7 +145,7 @@ describe('board', () => {
   it('returns a structure for agents', () => {
     runTaskAdd(dir, env, 'Task', {});
     const data = runBoard(dir, env, {}).data!;
-    expect(data['schema']).toBe('sprintit/v1');
+    expect(data['schema']).toBe('kadence/v1');
     expect(Object.keys(data['columns'] as object)).toContain('backlog');
   });
 });
@@ -167,7 +167,7 @@ describe('long titles', () => {
 
   it('keeps the full title in show — truncation is a display concern only', () => {
     runTaskAdd(dir, env, long, {});
-    expect(runTaskShow(dir, env, 'FLOW-1').message).toContain(long);
+    expect(runTaskShow(dir, env, 'KAD-1').message).toContain(long);
   });
 
   it('keeps the full title in JSON — agents get the real value', () => {

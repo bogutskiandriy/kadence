@@ -17,7 +17,7 @@ let dir: string;
 const env = {} as NodeJS.ProcessEnv;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'sprintit-plan-'));
+  dir = mkdtempSync(join(tmpdir(), 'kadence-plan-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'pm@example.com'], { cwd: dir });
   runInit(dir);
@@ -46,7 +46,7 @@ describe('planning ahead', () => {
     runSprintCreate(dir, env, 'Sprint 2');
     runTaskAdd(dir, env, 'For later', { estimate: 3 });
 
-    const r = runSprintAdd(dir, env, 'FLOW-1', { sprint: 'Sprint 2' });
+    const r = runSprintAdd(dir, env, 'KAD-1', { sprint: 'Sprint 2' });
     expect(r.ok).toBe(true);
 
     const list = runSprintList(dir, env).data!['sprints'] as Array<Record<string, unknown>>;
@@ -57,7 +57,7 @@ describe('planning ahead', () => {
     runSprintCreate(dir, env, 'Sprint 1');
     runSprintCreate(dir, env, 'Sprint 2');
     runTaskAdd(dir, env, 'Now', { estimate: 2 });
-    runSprintAdd(dir, env, 'FLOW-1', {});
+    runSprintAdd(dir, env, 'KAD-1', {});
 
     const list = runSprintList(dir, env).data!['sprints'] as Array<Record<string, unknown>>;
     expect((list[0]!['taskIds'] as unknown[]).length).toBe(1);
@@ -106,7 +106,7 @@ describe('runSprintList', () => {
   it('lists sprints with task and point counts', () => {
     runSprintCreate(dir, env, 'Sprint 1');
     runTaskAdd(dir, env, 'Task', { estimate: 5 });
-    runSprintAdd(dir, env, 'FLOW-1', {});
+    runSprintAdd(dir, env, 'KAD-1', {});
 
     const msg = runSprintList(dir, env).message;
     expect(msg).toContain('Sprint 1');

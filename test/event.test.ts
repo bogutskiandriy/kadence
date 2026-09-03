@@ -34,9 +34,9 @@ describe('validate', () => {
   });
 
   it('requires entity to be a ULID, not a human-readable number', () => {
-    // FLOW-42 is assigned while folding and can change after a merge, so the
+    // KAD-42 is assigned while folding and can change after a merge, so the
     // event refers to the entity's stable ULID.
-    expect(validate(valid({ entity: 'FLOW-42' }))).toContain('entity');
+    expect(validate(valid({ entity: 'KAD-42' }))).toContain('entity');
     expect(validate(valid({ entity: gen() }))).toEqual([]);
   });
 

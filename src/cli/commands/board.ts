@@ -62,7 +62,7 @@ export function runBoard(
       ? [
           `Statuses not in the board configuration: ${orphaned.join(', ')}.\n` +
             'Tasks there are still shown. Add the column or move them:\n' +
-            '  sprintit board config --statuses "..."',
+            '  kadence board config --statuses "..."',
         ]
       : [];
 
@@ -72,7 +72,7 @@ export function runBoard(
     warnings: [...warnings, ...orphanWarning],
     message: renderBoard(columns, colorsEnabled(env, process.stdout.isTTY === true)),
     data: {
-      schema: 'sprintit/v1',
+      schema: 'kadence/v1',
       ok: true,
       columns: Object.fromEntries(
         Object.entries(columns).map(([k, v]) => [k, v.map(serializeTask)]),
@@ -99,8 +99,8 @@ export function runBoardConfig(
       warnings,
       message:
         `Board columns: ${state.statuses.join(', ')}\n\n` +
-        'Change them with:\n  sprintit board config --statuses "todo,doing,review,done"',
-      data: { schema: 'sprintit/v1', ok: true, statuses: state.statuses },
+        'Change them with:\n  kadence board config --statuses "todo,doing,review,done"',
+      data: { schema: 'kadence/v1', ok: true, statuses: state.statuses },
     };
   }
 
@@ -154,6 +154,6 @@ export function runBoardConfig(
     exitCode: 0,
     warnings,
     message: `Board columns: ${list.join(', ')}${note}`,
-    data: { schema: 'sprintit/v1', ok: true, statuses: list },
+    data: { schema: 'kadence/v1', ok: true, statuses: list },
   };
 }

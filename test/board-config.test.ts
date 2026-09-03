@@ -11,7 +11,7 @@ let dir: string;
 const env = {} as NodeJS.ProcessEnv;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'sprintit-cfg-'));
+  dir = mkdtempSync(join(tmpdir(), 'kadence-cfg-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'pm@example.com'], { cwd: dir });
   runInit(dir);
@@ -54,8 +54,8 @@ describe('board config', () => {
     runTaskAdd(dir, env, 'Task', {});
     runBoardConfig(dir, env, 'todo,doing,done');
 
-    expect(runTaskMove(dir, env, 'FLOW-1', 'doing').ok).toBe(true);
-    const r = runTaskMove(dir, env, 'FLOW-1', 'in_review');
+    expect(runTaskMove(dir, env, 'KAD-1', 'doing').ok).toBe(true);
+    const r = runTaskMove(dir, env, 'KAD-1', 'in_review');
     expect(r.exitCode).toBe(2);
     expect(r.message).toContain('todo, doing, done');
   });
@@ -66,7 +66,7 @@ describe('statuses removed while tasks sit in them', () => {
     // One branch can drop a column while another moves a task into it.
     // Hiding the task would lose work silently.
     runTaskAdd(dir, env, 'Stranded', {});
-    runTaskMove(dir, env, 'FLOW-1', 'in_review');
+    runTaskMove(dir, env, 'KAD-1', 'in_review');
     runBoardConfig(dir, env, 'todo,doing,done');
 
     const board = runBoard(dir, env, {});
@@ -76,7 +76,7 @@ describe('statuses removed while tasks sit in them', () => {
 
   it('warns about columns that are not in the configuration', () => {
     runTaskAdd(dir, env, 'Stranded', {});
-    runTaskMove(dir, env, 'FLOW-1', 'in_review');
+    runTaskMove(dir, env, 'KAD-1', 'in_review');
     runBoardConfig(dir, env, 'todo,doing,done');
 
     expect(runBoard(dir, env, {}).warnings?.join(' ')).toMatch(/not in the board configuration/i);
@@ -84,7 +84,7 @@ describe('statuses removed while tasks sit in them', () => {
 
   it('names the stranded tasks at the moment of reconfiguration', () => {
     runTaskAdd(dir, env, 'Stranded', {});
-    runTaskMove(dir, env, 'FLOW-1', 'in_review');
+    runTaskMove(dir, env, 'KAD-1', 'in_review');
     const r = runBoardConfig(dir, env, 'todo,doing,done');
     expect(r.message).toMatch(/remain in removed columns/i);
     expect(r.message).toContain('in_review');
@@ -92,7 +92,7 @@ describe('statuses removed while tasks sit in them', () => {
 
   it('still lists them through task list', () => {
     runTaskAdd(dir, env, 'Stranded', {});
-    runTaskMove(dir, env, 'FLOW-1', 'in_review');
+    runTaskMove(dir, env, 'KAD-1', 'in_review');
     runBoardConfig(dir, env, 'todo,doing,done');
     expect((runTaskList(dir, env, {}).data!['tasks'] as unknown[])).toHaveLength(1);
   });

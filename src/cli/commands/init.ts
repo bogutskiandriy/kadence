@@ -4,7 +4,7 @@ import { findRepoRoot } from '../../core/git.js';
 import { eventsDir, dataDir } from '../../core/store.js';
 import { AGENT_README, upsertAgentsSection } from '../../agent/contract.js';
 
-const GITIGNORE_ENTRY = '.sprintit/state.json';
+const GITIGNORE_ENTRY = '.kadence/state.json';
 
 export interface InitResult {
   ok: boolean;
@@ -21,7 +21,7 @@ export function runInit(cwd: string): InitResult {
       alreadyInitialized: false,
       root: null,
       message:
-        'sprintit lives inside a git repository, and there is none here.\n' +
+        'kadence lives inside a git repository, and there is none here.\n' +
         'Create one and try again:\n  git init',
     };
   }
@@ -42,10 +42,10 @@ export function runInit(cwd: string): InitResult {
     alreadyInitialized: already,
     root,
     message: already
-      ? 'sprintit is already initialised.'
-      : 'sprintit is ready.\n\n' +
-        '  sprintit task add "first task"\n' +
-        '  sprintit board\n\n' +
+      ? 'kadence is already initialised.'
+      : 'kadence is ready.\n\n' +
+        '  kadence task add "first task"\n' +
+        '  kadence board\n\n' +
         'Files were created but not committed — that call is yours.',
   };
 }

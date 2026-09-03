@@ -16,7 +16,7 @@ let dir: string;
 const env = {} as NodeJS.ProcessEnv;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'sprintit-tpl-'));
+  dir = mkdtempSync(join(tmpdir(), 'kadence-tpl-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'pm@example.com'], { cwd: dir });
   runInit(dir);
@@ -102,14 +102,14 @@ describe('parseDuration', () => {
 describe('time logging', () => {
   it('accumulates and never goes below zero', () => {
     runTaskAdd(dir, env, 'Task', { estimate: 3 });
-    runTaskLog(dir, env, 'FLOW-1', '2h');
-    runTaskLog(dir, env, 'FLOW-1', '-5h');
+    runTaskLog(dir, env, 'KAD-1', '2h');
+    runTaskLog(dir, env, 'KAD-1', '-5h');
     const tasks = runTaskList(dir, env, {}).data!['tasks'] as Array<Record<string, unknown>>;
     expect(tasks[0]!['loggedHours']).toBe(0);
   });
 
   it('says there is nothing to compare against without an estimate', () => {
     runTaskAdd(dir, env, 'Task', {});
-    expect(runTaskLog(dir, env, 'FLOW-1', '1h').message).toMatch(/no estimate/i);
+    expect(runTaskLog(dir, env, 'KAD-1', '1h').message).toMatch(/no estimate/i);
   });
 });

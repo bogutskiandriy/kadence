@@ -45,7 +45,7 @@ import { SORT_KEYS } from '../core/query.js';
  * fires. Verified empirically; ADR-004 anticipated a risk with cac, just a
  * different one (the project going stale), so this is an amendment to it.
  */
-const cli = cac('sprintit');
+const cli = cac('kadence');
 
 /**
  * In --json mode stdout carries ONLY JSON: an agent handed a mixed stream
@@ -56,7 +56,7 @@ function emit(result: CommandResult, json: boolean): never {
 
   if (json) {
     const payload = result.data ?? {
-      schema: 'sprintit/v1',
+      schema: 'kadence/v1',
       ok: result.ok,
       ...(result.ok ? {} : { error: { message: result.message } }),
     };
@@ -101,8 +101,8 @@ function usage(message: string): CommandResult {
 }
 
 cli
-  .command('init', 'Set up sprintit in this repository')
-  .example('  sprintit init')
+  .command('init', 'Set up kadence in this repository')
+  .example('  kadence init')
   .action(() => {
     const r = runInit(process.cwd());
     emit({ ok: r.ok, message: r.message, exitCode: r.ok ? 0 : 1 }, false);
@@ -124,29 +124,29 @@ cli
   .option('--due-before <date>', 'Only tasks due before YYYY-MM-DD')
   .option('--sort <key>', `Sort by: ${SORT_KEYS.join(' | ')}`)
   .option('--tree', 'Show parent/child structure')
-  .option('--parent <task>', 'Parent task, e.g. FLOW-1 (use "none" to detach)')
+  .option('--parent <task>', 'Parent task, e.g. KAD-1 (use "none" to detach)')
   .option('--template <name>', 'Pre-fill fields from a saved template')
   .option('--json', 'Machine-readable output for agents')
-  .example('  sprintit task add "Fix login" -d "Broken since 2.3" --type bug --priority high --estimate 3')
-  .example('  sprintit task list --status in_progress --sort priority')
-  .example('  sprintit task list --search cookie --overdue')
-  .example('  sprintit task list --assignee me --label auth')
-  .example('  sprintit task list --tree')
-  .example('  sprintit task move FLOW-1,FLOW-2,FLOW-3 done     bulk: all or nothing')
-  .example('  sprintit task add "Login form" --parent FLOW-1   FLOW-1 can be an epic')
-  .example('  sprintit task parent FLOW-2 FLOW-1')
-  .example('  sprintit task block FLOW-2 FLOW-1               FLOW-2 waits for FLOW-1')
-  .example('  sprintit task unblock FLOW-2 FLOW-1')
-  .example('  sprintit task log FLOW-1 2h                     also 90m, or -30m to correct')
-  .example('  sprintit task add "Crash on save" --template bug')
-  .example('  sprintit task show FLOW-1')
-  .example('  sprintit task move FLOW-1 done')
-  .example('  sprintit task edit FLOW-1 --priority urgent --due 2026-09-30')
-  .example('  sprintit task edit FLOW-1                      opens $EDITOR for the description')
-  .example('  sprintit task comment FLOW-1 "Needs review"')
-  .example('  sprintit task assign FLOW-1 dev@example.com     (use "none" to unassign)')
-  .example('  sprintit task cancel FLOW-1                    keeps it in history')
-  .example('  sprintit task delete FLOW-1                    drops it from the board')
+  .example('  kadence task add "Fix login" -d "Broken since 2.3" --type bug --priority high --estimate 3')
+  .example('  kadence task list --status in_progress --sort priority')
+  .example('  kadence task list --search cookie --overdue')
+  .example('  kadence task list --assignee me --label auth')
+  .example('  kadence task list --tree')
+  .example('  kadence task move KAD-1,KAD-2,KAD-3 done     bulk: all or nothing')
+  .example('  kadence task add "Login form" --parent KAD-1   KAD-1 can be an epic')
+  .example('  kadence task parent KAD-2 KAD-1')
+  .example('  kadence task block KAD-2 KAD-1               KAD-2 waits for KAD-1')
+  .example('  kadence task unblock KAD-2 KAD-1')
+  .example('  kadence task log KAD-1 2h                     also 90m, or -30m to correct')
+  .example('  kadence task add "Crash on save" --template bug')
+  .example('  kadence task show KAD-1')
+  .example('  kadence task move KAD-1 done')
+  .example('  kadence task edit KAD-1 --priority urgent --due 2026-09-30')
+  .example('  kadence task edit KAD-1                      opens $EDITOR for the description')
+  .example('  kadence task comment KAD-1 "Needs review"')
+  .example('  kadence task assign KAD-1 dev@example.com     (use "none" to unassign)')
+  .example('  kadence task cancel KAD-1                    keeps it in history')
+  .example('  kadence task delete KAD-1                    drops it from the board')
   .action(
     (
       action: string | undefined,
@@ -181,15 +181,15 @@ cli
         emit(
           usage(
             'Which action?\n' +
-              '  sprintit task add "Fix login"\n' +
-              '  sprintit task list\n' +
-              '  sprintit task show FLOW-1\n' +
-              '  sprintit task edit FLOW-1\n' +
-              '  sprintit task move FLOW-1 done\n' +
-              '  sprintit task assign FLOW-1 dev@example.com\n' +
-              '  sprintit task comment FLOW-1 "text"\n' +
-              '  sprintit task cancel FLOW-1\n' +
-              '  sprintit task delete FLOW-1',
+              '  kadence task add "Fix login"\n' +
+              '  kadence task list\n' +
+              '  kadence task show KAD-1\n' +
+              '  kadence task edit KAD-1\n' +
+              '  kadence task move KAD-1 done\n' +
+              '  kadence task assign KAD-1 dev@example.com\n' +
+              '  kadence task comment KAD-1 "text"\n' +
+              '  kadence task cancel KAD-1\n' +
+              '  kadence task delete KAD-1',
           ),
           json,
         );
@@ -198,14 +198,14 @@ cli
       switch (action) {
         case 'add': {
           if (arg === undefined) {
-            emit(usage('A title is required:\n  sprintit task add "Fix login"'), json);
+            emit(usage('A title is required:\n  kadence task add "Fix login"'), json);
           }
           const estimate = options.estimate === undefined ? undefined : Number(options.estimate);
           if (estimate !== undefined && (!Number.isFinite(estimate) || estimate < 0)) {
             emit(
               usage(
                 `Estimate must be a positive number, got "${options.estimate}".\n` +
-                  '  sprintit task add "Fix login" --estimate 3',
+                  '  kadence task add "Fix login" --estimate 3',
               ),
               json,
             );
@@ -247,8 +247,8 @@ cli
             emit(
               usage(
                 'A task and a duration are required:\n' +
-                  '  sprintit task log FLOW-1 2h\n' +
-                  '  sprintit task log FLOW-1 90m',
+                  '  kadence task log KAD-1 2h\n' +
+                  '  kadence task log KAD-1 90m',
               ),
               json,
             );
@@ -260,8 +260,8 @@ cli
             emit(
               usage(
                 'A task and a parent are required:\n' +
-                  '  sprintit task parent FLOW-2 FLOW-1\n' +
-                  '  sprintit task parent FLOW-2 none    to detach',
+                  '  kadence task parent KAD-2 KAD-1\n' +
+                  '  kadence task parent KAD-2 none    to detach',
               ),
               json,
             );
@@ -274,8 +274,8 @@ cli
             emit(
               usage(
                 'A task and a blocker are required:\n' +
-                  '  sprintit task block FLOW-2 FLOW-1     FLOW-2 waits for FLOW-1\n' +
-                  '  sprintit task unblock FLOW-2 FLOW-1',
+                  '  kadence task block KAD-2 KAD-1     KAD-2 waits for KAD-1\n' +
+                  '  kadence task unblock KAD-2 KAD-1',
               ),
               json,
             );
@@ -284,7 +284,7 @@ cli
           break;
         case 'edit': {
           if (arg === undefined) {
-            emit(usage('Which task?\n  sprintit task edit FLOW-1 --priority high'), json);
+            emit(usage('Which task?\n  kadence task edit KAD-1 --priority high'), json);
           }
           const estimate = options.estimate === undefined ? undefined : Number(options.estimate);
           if (estimate !== undefined && (!Number.isFinite(estimate) || estimate < 0)) {
@@ -344,7 +344,7 @@ cli
         }
         case 'comment': {
           if (arg === undefined) {
-            emit(usage('Which task?\n  sprintit task comment FLOW-1 "text"'), json);
+            emit(usage('Which task?\n  kadence task comment KAD-1 "text"'), json);
           }
           const text = textFromFlagOrEditor(value, '', `Comment on ${arg}.`, json);
           emit(runTaskComment(cwd, process.env, arg, text ?? ''), json);
@@ -352,13 +352,13 @@ cli
         }
         case 'cancel':
           if (arg === undefined) {
-            emit(usage('Which task?\n  sprintit task cancel FLOW-1'), json);
+            emit(usage('Which task?\n  kadence task cancel KAD-1'), json);
           }
           emit(runTaskCancel(cwd, process.env, arg), json);
           break;
         case 'delete':
           if (arg === undefined) {
-            emit(usage('Which task?\n  sprintit task delete FLOW-1'), json);
+            emit(usage('Which task?\n  kadence task delete KAD-1'), json);
           }
           emit(runTaskDelete(cwd, process.env, arg), json);
           break;
@@ -385,7 +385,7 @@ cli
           break;
         case 'show':
           if (arg === undefined) {
-            emit(usage('Which task?\n  sprintit task show FLOW-1'), json);
+            emit(usage('Which task?\n  kadence task show KAD-1'), json);
           }
           emit(runTaskShow(cwd, process.env, arg), json);
           break;
@@ -394,7 +394,7 @@ cli
             emit(
               usage(
                 'A task and a target status are required:\n' +
-                  '  sprintit task move FLOW-1 done\n' +
+                  '  kadence task move KAD-1 done\n' +
                   `Statuses: ${TASK_STATUSES.join(', ')}`,
               ),
               json,
@@ -407,8 +407,8 @@ cli
             emit(
               usage(
                 'A task and an assignee are required:\n' +
-                  '  sprintit task assign FLOW-1 dev@example.com\n' +
-                  '  sprintit task assign FLOW-1 none            to unassign',
+                  '  kadence task assign KAD-1 dev@example.com\n' +
+                  '  kadence task assign KAD-1 none            to unassign',
               ),
               json,
             );
@@ -421,7 +421,7 @@ cli
               `Unknown action "${action}".\n` +
                 'Available: add, list, show, edit, move, assign, comment, log,\n' +
                 '           parent, block, unblock, cancel, delete\n' +
-                '  sprintit task --help',
+                '  kadence task --help',
             ),
             json,
           );
@@ -435,16 +435,16 @@ cli
   .option('-a, --assignee <who>', 'Only this person\'s tasks; "me" means you')
   .option('--sprint', 'Only tasks in the active sprint')
   .option('--json', 'Machine-readable output for agents')
-  .example('  sprintit board')
-  .example('  sprintit board --assignee me --sprint')
-  .example('  sprintit board config')
-  .example('  sprintit board config --statuses "todo,doing,review,done"')
+  .example('  kadence board')
+  .example('  kadence board --assignee me --sprint')
+  .example('  kadence board config')
+  .example('  kadence board config --statuses "todo,doing,review,done"')
   .action((action: string | undefined, options: { assignee?: string; sprint?: boolean; statuses?: string; json?: boolean }) => {
     if (action === 'config') {
       emit(runBoardConfig(process.cwd(), process.env, options.statuses), options.json === true);
     }
     if (action !== undefined) {
-      emit(usage(`Unknown action "${action}".\nAvailable: config\n  sprintit board --help`), options.json === true);
+      emit(usage(`Unknown action "${action}".\nAvailable: config\n  kadence board --help`), options.json === true);
     }
     emit(
       runBoard(process.cwd(), process.env, {
@@ -463,14 +463,14 @@ cli
   .option('--start <date>', 'Start date, YYYY-MM-DD')
   .option('--end <date>', 'End date, YYYY-MM-DD')
   .option('--json', 'Machine-readable output for agents')
-  .example('  sprintit sprint create "Sprint 1"    first one starts right away')
-  .example('  sprintit sprint create "Sprint 2"    later ones are planned')
-  .example('  sprintit sprint add FLOW-1 --sprint "Sprint 2"')
-  .example('  sprintit sprint start                starts the next planned sprint')
-  .example('  sprintit sprint edit --start 2026-09-01 --end 2026-09-14')
-  .example('  sprintit sprint edit "Sprint 2" --name "Sprint 2: auth"')
-  .example('  sprintit sprint burndown            chart from the journal, any day')
-  .example('  sprintit sprint close                closes the active one, reports velocity')
+  .example('  kadence sprint create "Sprint 1"    first one starts right away')
+  .example('  kadence sprint create "Sprint 2"    later ones are planned')
+  .example('  kadence sprint add KAD-1 --sprint "Sprint 2"')
+  .example('  kadence sprint start                starts the next planned sprint')
+  .example('  kadence sprint edit --start 2026-09-01 --end 2026-09-14')
+  .example('  kadence sprint edit "Sprint 2" --name "Sprint 2: auth"')
+  .example('  kadence sprint burndown            chart from the journal, any day')
+  .example('  kadence sprint close                closes the active one, reports velocity')
   .action(
     (
       action: string | undefined,
@@ -491,13 +491,13 @@ cli
         emit(
           usage(
             'Which action?\n' +
-              '  sprintit sprint create "Sprint 1"\n' +
-              '  sprintit sprint add FLOW-1\n' +
-              '  sprintit sprint edit --start 2026-09-01\n' +
-              '  sprintit sprint start\n' +
-              '  sprintit sprint close\n' +
-              '  sprintit sprint status\n' +
-              '  sprintit sprint list',
+              '  kadence sprint create "Sprint 1"\n' +
+              '  kadence sprint add KAD-1\n' +
+              '  kadence sprint edit --start 2026-09-01\n' +
+              '  kadence sprint start\n' +
+              '  kadence sprint close\n' +
+              '  kadence sprint status\n' +
+              '  kadence sprint list',
           ),
           json,
         );
@@ -506,7 +506,7 @@ cli
       switch (action) {
         case 'create':
           if (name === undefined) {
-            emit(usage('A sprint name is required:\n  sprintit sprint create "Sprint 1"'), json);
+            emit(usage('A sprint name is required:\n  kadence sprint create "Sprint 1"'), json);
           }
           emit(runSprintCreate(cwd, process.env, name), json);
           break;
@@ -515,8 +515,8 @@ cli
             emit(
               usage(
                 'Which task?\n' +
-                  '  sprintit sprint add FLOW-1\n' +
-                  '  sprintit sprint add FLOW-1 --sprint "Sprint 2"',
+                  '  kadence sprint add KAD-1\n' +
+                  '  kadence sprint add KAD-1 --sprint "Sprint 2"',
               ),
               json,
             );
@@ -562,7 +562,7 @@ cli
             usage(
               `Unknown action "${action}".\n` +
                 'Available: create, add, edit, start, close, status, list, burndown\n' +
-                '  sprintit sprint --help',
+                '  kadence sprint --help',
             ),
             json,
           );
@@ -579,8 +579,8 @@ cli
   .option('--label <name>', 'Default label; repeat for several')
   .option('--estimate <points>', 'Default estimate')
   .option('--json', 'Machine-readable output for agents')
-  .example('  sprintit template save bug --type bug --priority high --label triage')
-  .example('  sprintit template list')
+  .example('  kadence template save bug --type bug --priority high --label triage')
+  .example('  kadence template list')
   .action(
     (
       action: string | undefined,
@@ -602,7 +602,7 @@ cli
       switch (action) {
         case 'save': {
           if (name === undefined) {
-            emit(usage('A template name is required:\n  sprintit template save bug --type bug'), json);
+            emit(usage('A template name is required:\n  kadence template save bug --type bug'), json);
           }
           const labels =
             options.label === undefined
@@ -629,7 +629,7 @@ cli
           break;
         case 'delete':
           if (name === undefined) {
-            emit(usage('Which template?\n  sprintit template delete bug'), json);
+            emit(usage('Which template?\n  kadence template delete bug'), json);
           }
           emit(runTemplateDelete(cwd, process.env, name), json);
           break;
@@ -642,7 +642,7 @@ cli
 cli
   .command('ui', 'Interactive kanban board')
   .alias('board:ui')
-  .example('  sprintit ui')
+  .example('  kadence ui')
   .action(async () => {
     // Imported lazily so the fast commands never load the UI layer.
     const { runUi } = await import('./commands/ui.js');
@@ -670,7 +670,7 @@ const negativeEstimate = process.argv.findIndex(
 if (negativeEstimate !== -1) {
   process.stderr.write(
     `Estimate must be a positive number, got "${process.argv[negativeEstimate]}".\n` +
-      '  sprintit task add "Fix login" --estimate 3\n',
+      '  kadence task add "Fix login" --estimate 3\n',
   );
   process.exit(2);
 }

@@ -62,12 +62,12 @@ export function resolveContext(cwd: string, env: NodeJS.ProcessEnv): Context | C
       ok: false,
       exitCode: 1,
       message:
-        'sprintit lives inside a git repository, and there is none here.\n' +
+        'kadence lives inside a git repository, and there is none here.\n' +
         'Create one and try again:\n  git init',
     };
   }
 
-  // Check .sprintit/, NOT .sprintit/events/: git does not version empty
+  // Check .kadence/, NOT .kadence/events/: git does not version empty
   // directories, so the events folder disappears when switching to a branch
   // without events. The CLI used to demand a repeat init on a perfectly
   // working repository — found by the merge integration test.
@@ -75,7 +75,7 @@ export function resolveContext(cwd: string, env: NodeJS.ProcessEnv): Context | C
     return {
       ok: false,
       exitCode: 1,
-      message: 'No .sprintit/ found here.\nRun:\n  npx sprintit init',
+      message: 'No .kadence/ found here.\nRun:\n  npx kadence init',
     };
   }
 
@@ -91,7 +91,7 @@ export function resolveContext(cwd: string, env: NodeJS.ProcessEnv): Context | C
   }
 
   // We never guess the source: without the variable an event counts as human.
-  const source = env['SPRINTIT_SOURCE'] === 'agent' ? 'agent' : 'human';
+  const source = env['KADENCE_SOURCE'] === 'agent' ? 'agent' : 'human';
   return { root, actor, source };
 }
 
@@ -140,7 +140,7 @@ export function runTaskAdd(
     };
   }
 
-  // A parent may be given as FLOW-1, but the event must store the stable ULID.
+  // A parent may be given as KAD-1, but the event must store the stable ULID.
   let resolvedParent: string | undefined;
   if (options.parent !== undefined) {
     const { state } = loadState(ctx.root, ctx.actor);
@@ -149,14 +149,14 @@ export function runTaskAdd(
       return {
         ok: false,
         exitCode: 1,
-        message: `No parent task ${options.parent}.\n  sprintit task list`,
+        message: `No parent task ${options.parent}.\n  kadence task list`,
       };
     }
     resolvedParent = parent.id;
   }
 
   // The event and the entity it creates share one ULID: for task.created they
-  // are the same thing. The human-readable FLOW-N is assigned while folding the
+  // are the same thing. The human-readable KAD-N is assigned while folding the
   // journal, not here — otherwise two branches diverging from a common ancestor
   // would hand out the same number (Probe A, invariant I7).
   const id = ulid();
@@ -194,7 +194,7 @@ export function runTaskAdd(
     ok: true,
     exitCode: 0,
     message: `Created: ${trimmed}${warning}`,
-    data: { schema: 'sprintit/v1', ok: true, task: { id, title: trimmed } },
+    data: { schema: 'kadence/v1', ok: true, task: { id, title: trimmed } },
   };
 }
 
@@ -215,19 +215,19 @@ export function loadState(
     warnings.push(
       `The journal is badly damaged: ${read.corrupted.length} of ` +
         `${read.corrupted.length + read.events.length} events are unreadable. ` +
-        'Try: git checkout .sprintit/',
+        'Try: git checkout .kadence/',
     );
   } else if (read.corrupted.length > 0) {
     warnings.push(`Skipped ${read.corrupted.length} corrupted event(s).`);
   }
   if (read.unknownTypes > 0) {
-    warnings.push(`Skipped ${read.unknownTypes} event(s) from a newer format. Update sprintit.`);
+    warnings.push(`Skipped ${read.unknownTypes} event(s) from a newer format. Update kadence.`);
   }
 
   return { state: loaded.state, warnings };
 }
 
-/** A task can be named by ULID or by its human-readable FLOW-N. */
+/** A task can be named by ULID or by its human-readable KAD-N. */
 export function findTask(state: ProjectState, ref: string): Task | undefined {
   const needle = ref.toUpperCase();
   return state.tasks.find((t) => t.id === needle || t.label === needle);
@@ -239,7 +239,7 @@ function unknownStatus(value: string, available: readonly string[]): CommandResu
     exitCode: 2,
     message:
       `Unknown status "${value}".\nAvailable: ${available.join(', ')}\n` +
-      '  sprintit board config --statuses "todo,doing,done"',
+      '  kadence board config --statuses "todo,doing,done"',
   };
 }
 
@@ -299,7 +299,7 @@ export function runTaskList(
       exitCode: 0,
       warnings,
       message: describeEmptyResult(filters),
-      data: { schema: 'sprintit/v1', ok: true, tasks: [] },
+      data: { schema: 'kadence/v1', ok: true, tasks: [] },
     };
   }
 
@@ -312,7 +312,7 @@ export function runTaskList(
         ? renderTaskTree(tasks, colorsEnabled(env, process.stdout.isTTY === true))
         : renderTaskTable(tasks, colorsEnabled(env, process.stdout.isTTY === true)),
     data: {
-      schema: 'sprintit/v1',
+      schema: 'kadence/v1',
       ok: true,
       tasks: tasks.map(serializeTask),
       cycles: state.cycles,
@@ -359,7 +359,7 @@ export function runTaskMove(
     });
     moved.push(task);
 
-    // Skipped stages are allowed: sprintit describes work, it does not police it.
+    // Skipped stages are allowed: kadence describes work, it does not police it.
     if (tasks.length === 1 && state.statuses.indexOf(to) - state.statuses.indexOf(from) > 1) {
       skipped = `\nMoved straight from ${from} to ${to}, skipping the stages between.`;
     }
@@ -382,7 +382,7 @@ export function runTaskMove(
     warnings,
     message: `${summarise('moved', moved, `${moved[0]!.status} → ${to}`)}${skipped}${note}`,
     data: {
-      schema: 'sprintit/v1',
+      schema: 'kadence/v1',
       ok: true,
       moved: moved.map((t) => ({ id: t.id, label: t.label, to })),
     },
@@ -463,7 +463,7 @@ export function runTaskAssign(
         ? summarise('unassigned', changed, 'unassigned.')
         : summarise('assigned', changed, `→ ${assignee}`),
     data: {
-      schema: 'sprintit/v1',
+      schema: 'kadence/v1',
       ok: true,
       assigned: changed.map((t) => ({ id: t.id, label: t.label, assignee })),
     },
@@ -477,7 +477,7 @@ export function runTaskShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): C
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   const task = findTask(state, ref);
   if (task === undefined) {
-    return { ok: false, exitCode: 1, message: `No task ${ref}.\n  sprintit task list` };
+    return { ok: false, exitCode: 1, message: `No task ${ref}.\n  kadence task list` };
   }
 
   return {
@@ -485,7 +485,7 @@ export function runTaskShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): C
     exitCode: 0,
     warnings,
     message: renderTaskDetail(task),
-    data: { schema: 'sprintit/v1', ok: true, task: serializeTask(task) },
+    data: { schema: 'kadence/v1', ok: true, task: serializeTask(task) },
   };
 }
 
@@ -527,7 +527,7 @@ export function runTaskEdit(
     return {
       ok: false,
       exitCode: 2,
-      message: `Due date must be YYYY-MM-DD, got "${edits.due}".\n  sprintit task edit FLOW-1 --due 2026-09-30`,
+      message: `Due date must be YYYY-MM-DD, got "${edits.due}".\n  kadence task edit KAD-1 --due 2026-09-30`,
     };
   }
 
@@ -609,7 +609,7 @@ export function runTaskEdit(
     warnings,
     message: summarise('updated', touched, `updated ${fields}.`),
     data: {
-      schema: 'sprintit/v1',
+      schema: 'kadence/v1',
       ok: true,
       updated: touched.map((t) => ({ id: t.id, label: t.label })),
       changed: [...allChanged],
@@ -663,7 +663,7 @@ export function runTaskCancel(cwd: string, env: NodeJS.ProcessEnv, ref: string):
       `${summarise('cancelled', changed, 'cancelled.')}\n` +
       'Cancelled work stays in history and does not count as missed.',
     data: {
-      schema: 'sprintit/v1',
+      schema: 'kadence/v1',
       ok: true,
       cancelled: changed.map((t) => ({ id: t.id, label: t.label })),
     },
@@ -703,7 +703,7 @@ export function runTaskDelete(cwd: string, env: NodeJS.ProcessEnv, ref: string):
     // so the event remains and history is never rewritten.
     message: `${what}\nThe events stay in the journal — history is never rewritten.`,
     data: {
-      schema: 'sprintit/v1',
+      schema: 'kadence/v1',
       ok: true,
       deleted: tasks.map((t) => ({ id: t.id, label: t.label })),
     },
@@ -727,7 +727,7 @@ export function runTaskComment(
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   const task = findTask(state, ref);
   if (task === undefined) {
-    return { ok: false, exitCode: 1, message: `No task ${ref}.\n  sprintit task list` };
+    return { ok: false, exitCode: 1, message: `No task ${ref}.\n  kadence task list` };
   }
 
   append(ctx.root, {
@@ -745,7 +745,7 @@ export function runTaskComment(
     exitCode: 0,
     warnings,
     message: `Comment added to ${task.label}.`,
-    data: { schema: 'sprintit/v1', ok: true, task: { id: task.id, label: task.label } },
+    data: { schema: 'kadence/v1', ok: true, task: { id: task.id, label: task.label } },
   };
 }
 
@@ -782,7 +782,7 @@ export function resolveRefs(
       tasks: [],
       error:
         `No task ${missing.join(', ')} — nothing was changed.\n` +
-        'All ids must exist before a bulk change runs.\n  sprintit task list',
+        'All ids must exist before a bulk change runs.\n  kadence task list',
     };
   }
 
@@ -817,7 +817,7 @@ export function runTaskParent(
   if (!detach) {
     const parent = findTask(state, parentRef);
     if (parent === undefined) {
-      return { ok: false, exitCode: 1, message: `No task ${parentRef}.\n  sprintit task list` };
+      return { ok: false, exitCode: 1, message: `No task ${parentRef}.\n  kadence task list` };
     }
     if (tasks.some((t) => t.id === parent.id)) {
       return { ok: false, exitCode: 2, message: 'A task cannot be its own parent.' };
@@ -850,7 +850,7 @@ export function runTaskParent(
     message: detach
       ? summarise('detached', changed, 'detached from its parent.')
       : summarise('moved', changed, `→ child of ${label}`),
-    data: { schema: 'sprintit/v1', ok: true, parent: parentId },
+    data: { schema: 'kadence/v1', ok: true, parent: parentId },
   };
 }
 
@@ -871,7 +871,7 @@ export function runTaskBlock(
 
   const blocker = findTask(state, blockerRef);
   if (blocker === undefined) {
-    return { ok: false, exitCode: 1, message: `No task ${blockerRef}.\n  sprintit task list` };
+    return { ok: false, exitCode: 1, message: `No task ${blockerRef}.\n  kadence task list` };
   }
   if (tasks.some((t) => t.id === blocker.id)) {
     return { ok: false, exitCode: 2, message: 'A task cannot block itself.' };
@@ -908,7 +908,7 @@ export function runTaskBlock(
     message: remove
       ? summarise('unblocked', changed, `no longer blocked by ${blocker.label}.`)
       : summarise('blocked', changed, `blocked by ${blocker.label}.`),
-    data: { schema: 'sprintit/v1', ok: true, blocker: blocker.id },
+    data: { schema: 'kadence/v1', ok: true, blocker: blocker.id },
   };
 }
 
@@ -961,15 +961,15 @@ export function runTaskLog(
       exitCode: 2,
       message:
         `Cannot read "${duration}" as a duration.\n` +
-        'Use hours or minutes:\n  sprintit task log FLOW-1 2h\n  sprintit task log FLOW-1 90m\n' +
-        '  sprintit task log FLOW-1 -30m   to correct a mistake',
+        'Use hours or minutes:\n  kadence task log KAD-1 2h\n  kadence task log KAD-1 90m\n' +
+        '  kadence task log KAD-1 -30m   to correct a mistake',
     };
   }
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   const task = findTask(state, ref);
   if (task === undefined) {
-    return { ok: false, exitCode: 1, message: `No task ${ref}.\n  sprintit task list` };
+    return { ok: false, exitCode: 1, message: `No task ${ref}.\n  kadence task list` };
   }
 
   append(ctx.root, {
@@ -993,6 +993,6 @@ export function runTaskLog(
     exitCode: 0,
     warnings,
     message: `${task.label}: ${total.toFixed(1)}h logged in total.${estimate}`,
-    data: { schema: 'sprintit/v1', ok: true, task: { id: task.id, label: task.label, loggedHours: total } },
+    data: { schema: 'kadence/v1', ok: true, task: { id: task.id, label: task.label, loggedHours: total } },
   };
 }

@@ -23,7 +23,7 @@ function at(month: string, title = 'Task'): FlowEvent {
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'sprintit-compact-'));
+  root = mkdtempSync(join(tmpdir(), 'kadence-compact-'));
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 

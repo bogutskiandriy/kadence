@@ -20,14 +20,14 @@ function git(...args: string[]): string {
   return execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
-function sprintit(args: string[], email?: string): { stdout: string; code: number } {
+function kadence(args: string[], email?: string): { stdout: string; code: number } {
   if (email !== undefined) git('config', 'user.email', email);
   const r = spawnSync('node', [CLI, ...args], { cwd: repo, encoding: 'utf8' });
   return { stdout: r.stdout, code: r.status ?? -1 };
 }
 
 function tasks(): Array<{ label: string; title: string; status: string; history: unknown[] }> {
-  return JSON.parse(sprintit(['task', 'list', '--json']).stdout).tasks;
+  return JSON.parse(kadence(['task', 'list', '--json']).stdout).tasks;
 }
 
 /** Merges a branch and reports whether it conflicted — we ask git, not guess. */
@@ -37,13 +37,13 @@ function merge(branch: string): boolean {
 }
 
 beforeEach(() => {
-  repo = mkdtempSync(join(tmpdir(), 'sprintit-merge-'));
+  repo = mkdtempSync(join(tmpdir(), 'kadence-merge-'));
   git('init', '-q', '-b', 'main');
   git('config', 'user.email', 'main@example.com');
   git('config', 'user.name', 'Main');
-  sprintit(['init']);
+  kadence(['init']);
   git('add', '-A');
-  git('commit', '-qm', 'sprintit init');
+  git('commit', '-qm', 'kadence init');
 });
 afterEach(() => rmSync(repo, { recursive: true, force: true }));
 
@@ -51,7 +51,7 @@ describe('branch merges', () => {
   it('three people edit ONE task — zero conflicts, every intent preserved', () => {
     // The worst case and simultaneously 89% of real conflicts per Probe A:
     // CONFLICT (content) in a file tracker with mutable state.
-    sprintit(['task', 'add', 'Shared task', '--estimate', '3']);
+    kadence(['task', 'add', 'Shared task', '--estimate', '3']);
     git('add', '-A');
     git('commit', '-qm', 'task created');
 
@@ -63,7 +63,7 @@ describe('branch merges', () => {
 
     for (const [who, to] of moves) {
       git('checkout', '-q', '-b', who, 'main');
-      sprintit(['task', 'move', 'FLOW-1', to], `${who}@example.com`);
+      kadence(['task', 'move', 'KAD-1', to], `${who}@example.com`);
       git('add', '-A');
       git('commit', '-qm', `${who}: ${to}`);
       git('checkout', '-q', 'main');
@@ -73,7 +73,7 @@ describe('branch merges', () => {
     const conflicts = moves.filter(([who]) => merge(who)).length;
     expect(conflicts).toBe(0);
 
-    const task = tasks().find((t) => t.label === 'FLOW-1')!;
+    const task = tasks().find((t) => t.label === 'KAD-1')!;
     // The state is deterministic — the highest ULID wins.
     expect(task.status).toBe('done');
     // And no intent is lost.
@@ -90,7 +90,7 @@ describe('branch merges', () => {
     // about ID collisions across branches.
     for (const who of ['alice', 'bob', 'carol']) {
       git('checkout', '-q', '-b', who, 'main');
-      sprintit(['task', 'add', `Task from ${who}`, '--estimate', '2'], `${who}@example.com`);
+      kadence(['task', 'add', `Task from ${who}`, '--estimate', '2'], `${who}@example.com`);
       git('add', '-A');
       git('commit', '-qm', `${who}: new task`);
       git('checkout', '-q', 'main');
@@ -104,17 +104,17 @@ describe('branch merges', () => {
     expect(all).toHaveLength(3);
     // Numbers are sequential and unique — exactly what a counter in a file cannot do.
     expect(new Set(all.map((t) => t.label)).size).toBe(3);
-    expect(all.map((t) => t.label).sort()).toEqual(['FLOW-1', 'FLOW-2', 'FLOW-3']);
+    expect(all.map((t) => t.label).sort()).toEqual(['KAD-1', 'KAD-2', 'KAD-3']);
   });
 
   it('the state is identical regardless of merge order', () => {
-    sprintit(['task', 'add', 'Task', '--estimate', '5']);
+    kadence(['task', 'add', 'Task', '--estimate', '5']);
     git('add', '-A');
     git('commit', '-qm', 'task');
 
     for (const [who, to] of [['x', 'in_progress'], ['y', 'in_review']] as const) {
       git('checkout', '-q', '-b', who, 'main');
-      sprintit(['task', 'move', 'FLOW-1', to], `${who}@example.com`);
+      kadence(['task', 'move', 'KAD-1', to], `${who}@example.com`);
       git('add', '-A');
       git('commit', '-qm', who);
       git('checkout', '-q', 'main');
@@ -138,29 +138,29 @@ describe('branch merges', () => {
     // Git does not version empty directories. The spike reproduced this twice,
     // hence mkdir -p on EVERY write.
     git('checkout', '-q', '-b', 'with-events');
-    sprintit(['task', 'add', 'Branch task']);
+    kadence(['task', 'add', 'Branch task']);
     git('add', '-A');
     git('commit', '-qm', 'event');
 
     git('checkout', '-q', 'main');
-    const monthDirs = existsSync(join(repo, '.sprintit', 'events'))
-      ? readdirSync(join(repo, '.sprintit', 'events'))
+    const monthDirs = existsSync(join(repo, '.kadence', 'events'))
+      ? readdirSync(join(repo, '.kadence', 'events'))
       : [];
     expect(monthDirs.filter((d) => d !== 'archive')).toHaveLength(0);
 
-    const r = sprintit(['task', 'add', 'Task on main']);
+    const r = kadence(['task', 'add', 'Task on main']);
     expect(r.code).toBe(0);
     expect(tasks()).toHaveLength(1);
   });
 
   it('the journal survives a rebase — ULIDs stay valid', () => {
     git('checkout', '-q', '-b', 'feature');
-    sprintit(['task', 'add', 'Feature task', '--estimate', '2']);
+    kadence(['task', 'add', 'Feature task', '--estimate', '2']);
     git('add', '-A');
     git('commit', '-qm', 'feature');
 
     git('checkout', '-q', 'main');
-    sprintit(['task', 'add', 'Task main', '--estimate', '1']);
+    kadence(['task', 'add', 'Task main', '--estimate', '1']);
     git('add', '-A');
     git('commit', '-qm', 'main');
 
@@ -174,16 +174,16 @@ describe('branch merges', () => {
 
   it('a sprint closed on two branches stays closed exactly once', () => {
     // Invariant I5: the velocity of an already closed sprint is not rewritten.
-    sprintit(['sprint', 'create', 'Sprint 1']);
-    sprintit(['task', 'add', 'Task', '--estimate', '3']);
-    sprintit(['sprint', 'add', 'FLOW-1']);
-    sprintit(['task', 'move', 'FLOW-1', 'done']);
+    kadence(['sprint', 'create', 'Sprint 1']);
+    kadence(['task', 'add', 'Task', '--estimate', '3']);
+    kadence(['sprint', 'add', 'KAD-1']);
+    kadence(['task', 'move', 'KAD-1', 'done']);
     git('add', '-A');
     git('commit', '-qm', 'sprint with a task');
 
     for (const who of ['p', 'q']) {
       git('checkout', '-q', '-b', who, 'main');
-      sprintit(['sprint', 'close'], `${who}@example.com`);
+      kadence(['sprint', 'close'], `${who}@example.com`);
       git('add', '-A');
       git('commit', '-qm', `${who} closed the sprint`);
       git('checkout', '-q', 'main');
@@ -192,7 +192,7 @@ describe('branch merges', () => {
     git('config', 'user.email', 'main@example.com');
     expect(['p', 'q'].filter(merge).length).toBe(0);
 
-    const status = JSON.parse(sprintit(['sprint', 'status', '--json']).stdout);
+    const status = JSON.parse(kadence(['sprint', 'status', '--json']).stdout);
     // No active sprint — exactly one close happened.
     expect(status.sprint).toBeNull();
   });

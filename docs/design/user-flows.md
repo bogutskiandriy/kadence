@@ -11,15 +11,15 @@
 
 ```mermaid
 flowchart TD
-    A([npx flowit init]) --> B{Це git-репозиторій?}
-    B -- ні --> B1[Помилка: FlowIt живе всередині репозиторію<br/>Підказка: git init] --> Z([вихід 1])
-    B -- так --> C{.flowit/ вже існує?}
+    A([npx kadence init]) --> B{Це git-репозиторій?}
+    B -- ні --> B1[Помилка: kadence живе всередині репозиторію<br/>Підказка: git init] --> Z([вихід 1])
+    B -- так --> C{.kadence/ вже існує?}
     C -- так --> C1[Нічого не руйнуємо<br/>Повідомлення: вже ініціалізовано] --> Z2([вихід 0])
     C -- ні --> D{git config user.email є?}
     D -- ні --> D1[Помилка з точною командою<br/>git config user.email you@example.com] --> Z
-    D -- так --> E[Створити .flowit/events/<br/>Дописати state.json у .gitignore<br/>Створити .flowit/README.md для агента]
+    D -- так --> E[Створити .kadence/events/<br/>Дописати state.json у .gitignore<br/>Створити .kadence/README.md для агента]
     E --> F{AGENTS.md існує?}
-    F -- так --> F1[Дописати секцію FlowIt<br/>написане людиною не чіпати]
+    F -- так --> F1[Дописати секцію kadence<br/>написане людиною не чіпати]
     F -- ні --> F2[Пропустити]
     F1 --> G[Показати 3 наступні кроки]
     F2 --> G --> Z3([вихід 0])
@@ -33,13 +33,13 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A([flowit task add]) --> B[Записати task.created<br/>ULID + FLOW-N]
-    B --> C([flowit task list])
+    A([kadence task add]) --> B[Записати task.created<br/>ULID + FLOW-N]
+    B --> C([kadence task list])
     C --> D{Задача моя?}
-    D -- так --> E([flowit task move FLOW-42 in_progress])
+    D -- так --> E([kadence task move FLOW-42 in_progress])
     E --> F[Записати task.moved]
     F --> G([робота в коді])
-    G --> H([flowit task move FLOW-42 done])
+    G --> H([kadence task move FLOW-42 done])
     H --> I{Задача у відкритому спринті?}
     I -- так --> J[Зарахувати у velocity]
     I -- ні --> K[Просто змінити стан]
@@ -53,15 +53,15 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A([Агент стартує в репозиторії]) --> B[Читає .flowit/README.md<br/>як звичайний файл]
-    B --> C([flowit task list --json])
+    A([Агент стартує в репозиторії]) --> B[Читає .kadence/README.md<br/>як звичайний файл]
+    B --> C([kadence task list --json])
     C --> D{Є задача в роботі?}
-    D -- так --> E([flowit task show FLOW-42 --json])
-    D -- ні --> F([flowit context --json<br/>стан за поточною гілкою])
+    D -- так --> E([kadence task show FLOW-42 --json])
+    D -- ні --> F([kadence context --json<br/>стан за поточною гілкою])
     E --> G[Агент виконує роботу]
     F --> G
-    G --> H([flowit task move ... --json])
-    H --> I[Подія з source: agent<br/>з FLOWIT_SOURCE=agent]
+    G --> H([kadence task move ... --json])
+    H --> I[Подія з source: agent<br/>з KADENCE_SOURCE=agent]
 ```
 
 **Ключова відмінність від конкурентів:** крок B — це читання файлу, а не запит до MCP-сервера. Мережі, токена й запущеного процесу не потрібно.
@@ -76,7 +76,7 @@ flowchart TD
 flowchart TD
     A([git merge feature-branch]) --> B{Конфлікти у файлах подій?}
     B -- ні, і так завжди --> C[Git зливає журнали<br/>події — окремі файли]
-    C --> D([будь-яка команда flowit])
+    C --> D([будь-яка команда kadence])
     D --> E{state.json відповідає<br/>останньому ULID?}
     E -- ні --> F[Перебудувати стан із журналу]
     E -- так --> G[Взяти з кешу]
@@ -96,7 +96,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A([flowit sprint close]) --> B{Є активний спринт?}
+    A([kadence sprint close]) --> B{Є активний спринт?}
     B -- ні --> B1[Помилка: активного спринту немає] --> Z([вихід 1])
     B -- так --> C[Згорнути журнал за період спринту]
     C --> D{Є задачі без оцінки?}

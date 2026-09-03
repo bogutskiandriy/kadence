@@ -44,7 +44,7 @@ jobs:
           npm test
 
       - name: The fast path must not load the UI layer
-        # The whole point of the dynamic import: `flowit task add` never pays
+        # The whole point of the dynamic import: `kadence task add` never pays
         # for blessed. A regression here is invisible until someone measures.
         run: |
           if grep -q "blessed" dist/cli.js; then

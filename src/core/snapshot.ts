@@ -14,7 +14,7 @@ import { project, type ProjectState } from './projection.js';
  * from the journal" comes up, the answer is always "rebuild it".
  */
 
-const SNAPSHOT_VERSION = 'sprintit-snapshot/1';
+const SNAPSHOT_VERSION = 'kadence-snapshot/1';
 
 interface Snapshot {
   version: string;

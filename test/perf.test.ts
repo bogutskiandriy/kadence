@@ -22,7 +22,7 @@ const EVENT_COUNT = 10_000;
 let root: string;
 
 beforeAll(() => {
-  root = mkdtempSync(join(tmpdir(), 'sprintit-perf-'));
+  root = mkdtempSync(join(tmpdir(), 'kadence-perf-'));
   const gen = createUlid();
   const taskIds: string[] = [];
 
@@ -154,7 +154,7 @@ describe('journal size', () => {
   it(`fits within ${SIZE_BUDGET_MB} MB for ${EVENT_COUNT} events`, () => {
     // Its own journal: other tests here already ran compact, so a "before"
     // measurement on shared data would show the state AFTER compaction.
-    const own = mkdtempSync(join(tmpdir(), 'sprintit-size-'));
+    const own = mkdtempSync(join(tmpdir(), 'kadence-size-'));
     const gen = createUlid();
     for (let i = 0; i < EVENT_COUNT; i++) {
       const id = gen();

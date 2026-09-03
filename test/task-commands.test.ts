@@ -10,7 +10,7 @@ let dir: string;
 const env = {} as NodeJS.ProcessEnv;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'sprintit-cmd-'));
+  dir = mkdtempSync(join(tmpdir(), 'kadence-cmd-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'tester@example.com'], { cwd: dir });
   runInit(dir);
@@ -33,8 +33,8 @@ describe('runTaskList', () => {
     addTask('First');
     addTask('Second');
     const r = runTaskList(dir, env, {});
-    expect(r.message).toContain('FLOW-1');
-    expect(r.message).toContain('FLOW-2');
+    expect(r.message).toContain('KAD-1');
+    expect(r.message).toContain('KAD-2');
     expect(r.message).toContain('First');
   });
 
@@ -63,7 +63,7 @@ describe('runTaskMove', () => {
 
   it('accepts a human-readable number, not just a ULID', () => {
     addTask('Task');
-    const r = runTaskMove(dir, env, 'FLOW-1', 'done');
+    const r = runTaskMove(dir, env, 'KAD-1', 'done');
     expect(r.ok).toBe(true);
   });
 
@@ -87,10 +87,10 @@ describe('runTaskMove', () => {
   });
 
   it('reports when the task does not exist', () => {
-    const r = runTaskMove(dir, env, 'FLOW-99', 'done');
+    const r = runTaskMove(dir, env, 'KAD-99', 'done');
     expect(r.ok).toBe(false);
     expect(r.exitCode).toBe(1);
-    expect(r.message).toMatch(/FLOW-99/);
+    expect(r.message).toMatch(/KAD-99/);
   });
 
   it('rejects an unknown status', () => {

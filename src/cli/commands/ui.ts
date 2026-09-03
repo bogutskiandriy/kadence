@@ -20,7 +20,7 @@ import { runTaskEdit } from './task.js';
 /**
  * The interactive board.
  *
- * blessed is imported dynamically and nowhere else: a `sprintit task add` must
+ * blessed is imported dynamically and nowhere else: a `kadence task add` must
  * not pay the ~28 ms it costs to load. The 200 ms guardrail applies to
  * commands people run dozens of times a day; an interactive session is started
  * once and lives for minutes, so the cost lands where it is invisible.
@@ -35,7 +35,7 @@ export async function runUi(cwd: string, env: NodeJS.ProcessEnv): Promise<Comman
       exitCode: 1,
       message:
         'The interactive board needs a terminal.\n' +
-        'For pipes and scripts use:\n  sprintit board --json',
+        'For pipes and scripts use:\n  kadence board --json',
     };
   }
 
@@ -48,7 +48,7 @@ export async function runUi(cwd: string, env: NodeJS.ProcessEnv): Promise<Comman
       exitCode: 1,
       message:
         `The interactive board could not start: ${(err as Error).message}\n` +
-        'The plain board always works:\n  sprintit board',
+        'The plain board always works:\n  kadence board',
     };
   }
 

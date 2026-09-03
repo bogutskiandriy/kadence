@@ -41,7 +41,7 @@ export interface FlowEvent {
   /**
    * ULID of the entity this event refers to.
    *
-   * A ULID, not `FLOW-42`: the human-readable number is derived and assigned
+   * A ULID, not `KAD-42`: the human-readable number is derived and assigned
    * while folding the journal, so referring to it would mean referring to a
    * value that can change after branches are merged (invariant I7).
    */
@@ -116,7 +116,7 @@ export function serialize(event: FlowEvent): string {
 export interface ParseResult {
   event: FlowEvent | null;
   error: string | null;
-  /** Event from a newer sprintit: not an error, just a reason to skip it. */
+  /** Event from a newer kadence: not an error, just a reason to skip it. */
   unknownType: boolean;
 }
 

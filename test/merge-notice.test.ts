@@ -26,7 +26,7 @@ function ev(type: 'task.created' | 'task.moved', entity: string, id?: string): F
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'sprintit-notice-'));
+  root = mkdtempSync(join(tmpdir(), 'kadence-notice-'));
   execFileSync('git', ['init', '-q'], { cwd: root });
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));

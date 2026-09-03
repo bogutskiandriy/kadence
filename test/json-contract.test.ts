@@ -23,7 +23,7 @@ function run(args: string[], env: Record<string, string> = {}): Run {
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'sprintit-json-'));
+  dir = mkdtempSync(join(tmpdir(), 'kadence-json-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'tester@example.com'], { cwd: dir });
   run(['init']);
@@ -39,23 +39,23 @@ describe('the --json contract', () => {
 
   it('every response carries a schema version', () => {
     const r = run(['task', 'add', 'Task', '--json']);
-    expect(JSON.parse(r.stdout).schema).toBe('sprintit/v1');
+    expect(JSON.parse(r.stdout).schema).toBe('kadence/v1');
   });
 
   it('an error comes back as JSON too, not as text', () => {
     // An agent handed text instead of JSON cannot tell a failure from an empty
     // response.
-    const r = run(['task', 'move', 'FLOW-99', 'done', '--json']);
+    const r = run(['task', 'move', 'KAD-99', 'done', '--json']);
     const parsed = JSON.parse(r.stdout);
-    expect(parsed.schema).toBe('sprintit/v1');
+    expect(parsed.schema).toBe('kadence/v1');
     expect(parsed.ok).toBe(false);
-    expect(parsed.error.message).toMatch(/FLOW-99/);
+    expect(parsed.error.message).toMatch(/KAD-99/);
   });
 
   it('warnings go to stderr and never corrupt the JSON on stdout', () => {
     run(['task', 'add', 'Task']);
     // Corrupt one event so a warning appears.
-    const events = execFileSync('find', ['.sprintit/events', '-name', '*.json'], {
+    const events = execFileSync('find', ['.kadence/events', '-name', '*.json'], {
       cwd: dir,
       encoding: 'utf8',
     })
@@ -73,11 +73,11 @@ describe('the --json contract', () => {
   });
 
   it('exit code 1 on a runtime error', () => {
-    expect(run(['task', 'move', 'FLOW-99', 'done', '--json']).code).toBe(1);
+    expect(run(['task', 'move', 'KAD-99', 'done', '--json']).code).toBe(1);
   });
 
   it('exit code 2 on bad arguments', () => {
-    expect(run(['task', 'move', 'FLOW-1', 'flying', '--json']).code).toBe(2);
+    expect(run(['task', 'move', 'KAD-1', 'flying', '--json']).code).toBe(2);
   });
 
   it('the task list has a stable record shape', () => {
@@ -93,18 +93,18 @@ describe('the --json contract', () => {
     );
   });
 
-  it('SPRINTIT_SOURCE=agent marks event authorship', () => {
-    run(['task', 'add', 'From agent'], { SPRINTIT_SOURCE: 'agent' });
-    const raw = execFileSync('sh', ['-c', 'cat .sprintit/events/*/*.json'], {
+  it('KADENCE_SOURCE=agent marks event authorship', () => {
+    run(['task', 'add', 'From agent'], { KADENCE_SOURCE: 'agent' });
+    const raw = execFileSync('sh', ['-c', 'cat .kadence/events/*/*.json'], {
       cwd: dir,
       encoding: 'utf8',
     });
     expect(raw).toContain('"source":"agent"');
   });
 
-  it('without SPRINTIT_SOURCE an event counts as human — we never guess', () => {
+  it('without KADENCE_SOURCE an event counts as human — we never guess', () => {
     run(['task', 'add', 'From human']);
-    const raw = execFileSync('sh', ['-c', 'cat .sprintit/events/*/*.json'], {
+    const raw = execFileSync('sh', ['-c', 'cat .kadence/events/*/*.json'], {
       cwd: dir,
       encoding: 'utf8',
     });
@@ -114,7 +114,7 @@ describe('the --json contract', () => {
   it('in human mode stdout contains no JSON', () => {
     run(['task', 'add', 'Task']);
     const r = run(['task', 'list']);
-    expect(r.stdout).toContain('FLOW-1');
+    expect(r.stdout).toContain('KAD-1');
     expect(r.stdout).not.toContain('"schema"');
   });
 

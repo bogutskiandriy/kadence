@@ -17,7 +17,7 @@ let dir: string;
 const env = {} as NodeJS.ProcessEnv;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'sprintit-sprint-'));
+  dir = mkdtempSync(join(tmpdir(), 'kadence-sprint-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'tester@example.com'], { cwd: dir });
   runInit(dir);
@@ -53,20 +53,20 @@ describe('runSprintAdd', () => {
   it('adds a task to the active sprint', () => {
     runSprintCreate(dir, env, 'S1');
     addTask('Task', 3);
-    expect(runSprintAdd(dir, env, 'FLOW-1').ok).toBe(true);
-    expect(runSprintStatus(dir, env).message).toContain('FLOW-1');
+    expect(runSprintAdd(dir, env, 'KAD-1').ok).toBe(true);
+    expect(runSprintStatus(dir, env).message).toContain('KAD-1');
   });
 
   it('reports when there is no active sprint', () => {
     addTask('Task', 3);
-    const r = runSprintAdd(dir, env, 'FLOW-1');
+    const r = runSprintAdd(dir, env, 'KAD-1');
     expect(r.ok).toBe(false);
     expect(r.message).toMatch(/sprint create/);
   });
 
   it('reports when the task does not exist', () => {
     runSprintCreate(dir, env, 'S1');
-    expect(runSprintAdd(dir, env, 'FLOW-99').exitCode).toBe(1);
+    expect(runSprintAdd(dir, env, 'KAD-99').exitCode).toBe(1);
   });
 });
 

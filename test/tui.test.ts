@@ -87,7 +87,7 @@ describe('ui entry point', () => {
   const CLI = resolve('dist/cli.js');
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'sprintit-ui-'));
+    dir = mkdtempSync(join(tmpdir(), 'kadence-ui-'));
     execFileSync('git', ['init', '-q'], { cwd: dir });
     execFileSync('git', ['config', 'user.email', 'pm@example.com'], { cwd: dir });
     spawnSync('node', [CLI, 'init'], { cwd: dir });
@@ -95,11 +95,11 @@ describe('ui entry point', () => {
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
   it('refuses to start without a terminal and points at the alternative', () => {
-    // stdout here is a pipe, exactly like in CI or `sprintit ui | less`.
+    // stdout here is a pipe, exactly like in CI or `kadence ui | less`.
     const r = spawnSync('node', [CLI, 'ui'], { cwd: dir, encoding: 'utf8' });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/needs a terminal/i);
-    expect(r.stderr).toContain('sprintit board --json');
+    expect(r.stderr).toContain('kadence board --json');
   });
 
   it('keeps blessed out of the main bundle', () => {
@@ -118,7 +118,7 @@ describe('editable fields', () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'sprintit-fields-'));
+    dir = mkdtempSync(join(tmpdir(), 'kadence-fields-'));
     execFileSync('git', ['init', '-q'], { cwd: dir });
     execFileSync('git', ['config', 'user.email', 'pm@example.com'], { cwd: dir });
     spawnSync('node', [resolve('dist/cli.js'), 'init'], { cwd: dir });
@@ -133,10 +133,10 @@ describe('editable fields', () => {
     const cli = resolve('dist/cli.js');
     const args =
       field === 'status'
-        ? ['task', 'move', 'FLOW-1', value]
+        ? ['task', 'move', 'KAD-1', value]
         : field === 'assignee'
-          ? ['task', 'assign', 'FLOW-1', value]
-          : ['task', 'edit', 'FLOW-1', `--${field}`, value];
+          ? ['task', 'assign', 'KAD-1', value]
+          : ['task', 'edit', 'KAD-1', `--${field}`, value];
     const r = spawnSync('node', [cli, ...args], { cwd: dir, encoding: 'utf8' });
     return r.stdout + r.stderr;
   }
@@ -179,7 +179,7 @@ describe('multi-line descriptions', () => {
   const CLI = resolve('dist/cli.js');
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'sprintit-multiline-'));
+    dir = mkdtempSync(join(tmpdir(), 'kadence-multiline-'));
     execFileSync('git', ['init', '-q'], { cwd: dir });
     execFileSync('git', ['config', 'user.email', 'pm@example.com'], { cwd: dir });
     spawnSync('node', [CLI, 'init'], { cwd: dir });
@@ -196,7 +196,7 @@ describe('multi-line descriptions', () => {
 
   it('stores it as an array of lines so git diff stays readable', () => {
     spawnSync('node', [CLI, 'task', 'add', 'T', '-d', 'One.\n\nTwo.'], { cwd: dir });
-    const raw = execFileSync('sh', ['-c', 'cat .sprintit/events/*/*.json'], {
+    const raw = execFileSync('sh', ['-c', 'cat .kadence/events/*/*.json'], {
       cwd: dir,
       encoding: 'utf8',
     });
@@ -289,8 +289,8 @@ describe('renderers that had no test', () => {
 
   it('cycle warnings name tasks by label, not by ulid', async () => {
     const { renderCycles } = await import('../src/cli/output.js');
-    const labels = new Map([['id-a', 'FLOW-1'], ['id-b', 'FLOW-2']]);
+    const labels = new Map([['id-a', 'KAD-1'], ['id-b', 'KAD-2']]);
     const out = renderCycles([{ kind: 'blocking', path: ['id-a', 'id-b', 'id-a'] }], labels);
-    expect(out[0]).toContain('FLOW-1 → FLOW-2 → FLOW-1');
+    expect(out[0]).toContain('KAD-1 → KAD-2 → KAD-1');
   });
 });

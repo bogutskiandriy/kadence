@@ -63,7 +63,7 @@ export const PRIORITIES: readonly Priority[] = ['low', 'normal', 'high', 'urgent
 export interface Task {
   /** ULID — the stable identifier. */
   id: string;
-  /** FLOW-N — a derived label assigned during this fold. */
+  /** KAD-N — a derived label assigned during this fold. */
   label: string;
   title: string;
   /** Full description. Lives in the event, not a separate file: a file per
@@ -221,7 +221,7 @@ export function project(input: readonly FlowEvent[]): ProjectState {
   // numbers after a merge, with no human involved (invariant I7).
   const ordered = [...tasks.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
   ordered.forEach((task, i) => {
-    task.label = `FLOW-${i + 1}`;
+    task.label = `KAD-${i + 1}`;
   });
 
   // A deleted parent leaves dangling references; drop them so the tree stays
@@ -471,7 +471,7 @@ function readText(v: unknown): string | null {
 
 /**
  * An unknown type falls back to `task` rather than breaking the fold: the event
- * may have been written by a newer sprintit, and the state must stay usable.
+ * may have been written by a newer kadence, and the state must stay usable.
  */
 function readType(v: unknown): TaskType {
   return TASK_TYPES.includes(v as TaskType) ? (v as TaskType) : 'task';

@@ -36,7 +36,7 @@ function moved(entity: string, to: string): FlowEvent {
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'sprintit-snap-'));
+  root = mkdtempSync(join(tmpdir(), 'kadence-snap-'));
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
@@ -89,7 +89,7 @@ describe('loadOrBuild', () => {
     append(root, last);
     loadOrBuild(root);
 
-    rmSync(join(root, '.sprintit', 'events', '2026-09', `${mid.id}.json`));
+    rmSync(join(root, '.kadence', 'events', '2026-09', `${mid.id}.json`));
     const r = loadOrBuild(root);
     expect(r.fromCache).toBe(false);
   });
@@ -108,13 +108,13 @@ describe('loadOrBuild', () => {
     append(root, created('Task'));
     loadOrBuild(root);
     const snap = JSON.parse(readFileSync(snapshotPath(root), 'utf8'));
-    snap.version = 'sprintit-snapshot/999';
+    snap.version = 'kadence-snapshot/999';
     writeFileSync(snapshotPath(root), JSON.stringify(snap));
 
     expect(loadOrBuild(root).fromCache).toBe(false);
   });
 
-  it('the cache keeps FLOW-N numbers stable', () => {
+  it('the cache keeps KAD-N numbers stable', () => {
     append(root, created('First'));
     append(root, created('Second'));
     const cold = loadOrBuild(root).state.tasks.map((t) => t.label);
