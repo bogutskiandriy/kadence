@@ -253,3 +253,44 @@ describe('field highlight in the detail dialog', () => {
     expect(stripTags(renderField('due', '2026-09-04', false))).toContain('due          2026');
   });
 });
+
+describe('renderers that had no test', () => {
+  const sample = () => [task({ title: 'A', estimate: 3 }), task({ title: 'B', priority: 'urgent' })];
+
+  it('the plain table lists every task', async () => {
+    const { renderTaskTable } = await import('../src/cli/output.js');
+    const out = renderTaskTable(sample(), false);
+    expect(out.split('\n')).toHaveLength(2);
+  });
+
+  it('the tree renderer survives a cycle instead of recursing forever', async () => {
+    // Cycles are reported, not rejected, so the renderer must tolerate one.
+    const { renderTaskTree } = await import('../src/cli/output.js');
+    const a = task({ title: 'A' });
+    const b = task({ title: 'B' });
+    a.parent = b.id;
+    b.parent = a.id;
+    expect(() => renderTaskTree([a, b], false)).not.toThrow();
+  });
+
+  it('a task whose parent is filtered out still appears', async () => {
+    const { renderTaskTree } = await import('../src/cli/output.js');
+    const child = task({ title: 'Child' });
+    child.parent = 'MISSING_PARENT_ULID_0000000';
+    expect(renderTaskTree([child], false)).toContain('Child');
+  });
+
+  it('colours are off when NO_COLOR is set, whatever the terminal', async () => {
+    const { colorsEnabled } = await import('../src/cli/output.js');
+    expect(colorsEnabled({ NO_COLOR: '1' } as NodeJS.ProcessEnv, true)).toBe(false);
+    expect(colorsEnabled({} as NodeJS.ProcessEnv, false)).toBe(false);
+    expect(colorsEnabled({} as NodeJS.ProcessEnv, true)).toBe(true);
+  });
+
+  it('cycle warnings name tasks by label, not by ulid', async () => {
+    const { renderCycles } = await import('../src/cli/output.js');
+    const labels = new Map([['id-a', 'FLOW-1'], ['id-b', 'FLOW-2']]);
+    const out = renderCycles([{ kind: 'blocking', path: ['id-a', 'id-b', 'id-a'] }], labels);
+    expect(out[0]).toContain('FLOW-1 → FLOW-2 → FLOW-1');
+  });
+});
