@@ -17,7 +17,7 @@ let dir: string;
 const env = {} as NodeJS.ProcessEnv;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'flowit-sprint-'));
+  dir = mkdtempSync(join(tmpdir(), 'sprintit-sprint-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'tester@example.com'], { cwd: dir });
   runInit(dir);

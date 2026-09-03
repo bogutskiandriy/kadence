@@ -37,7 +37,7 @@ export function runTemplateSave(
       exitCode: 2,
       message:
         'A template needs at least one field.\n' +
-        '  flowit template save bug --type bug --priority high --label triage',
+        '  sprintit template save bug --type bug --priority high --label triage',
     };
   }
 
@@ -56,8 +56,8 @@ export function runTemplateSave(
   return {
     ok: true,
     exitCode: 0,
-    message: `Template "${trimmed}" saved: ${Object.keys(kept).join(', ')}.\n  flowit task add "title" --template ${trimmed}`,
-    data: { schema: 'flowit/v1', ok: true, template: { name: trimmed, fields: kept } },
+    message: `Template "${trimmed}" saved: ${Object.keys(kept).join(', ')}.\n  sprintit task add "title" --template ${trimmed}`,
+    data: { schema: 'sprintit/v1', ok: true, template: { name: trimmed, fields: kept } },
   };
 }
 
@@ -71,8 +71,8 @@ export function runTemplateList(cwd: string, env: NodeJS.ProcessEnv): CommandRes
       ok: true,
       exitCode: 0,
       warnings,
-      message: 'No templates yet.\n  flowit template save bug --type bug --priority high',
-      data: { schema: 'flowit/v1', ok: true, templates: [] },
+      message: 'No templates yet.\n  sprintit template save bug --type bug --priority high',
+      data: { schema: 'sprintit/v1', ok: true, templates: [] },
     };
   }
 
@@ -88,7 +88,7 @@ export function runTemplateList(cwd: string, env: NodeJS.ProcessEnv): CommandRes
         return `  ${t.name.padEnd(14)} ${fields}`;
       })
       .join('\n'),
-    data: { schema: 'flowit/v1', ok: true, templates: state.templates },
+    data: { schema: 'sprintit/v1', ok: true, templates: state.templates },
   };
 }
 
@@ -102,7 +102,7 @@ export function runTemplateDelete(
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   if (!state.templates.some((t) => t.name === name)) {
-    return { ok: false, exitCode: 1, message: `No template "${name}".\n  flowit template list` };
+    return { ok: false, exitCode: 1, message: `No template "${name}".\n  sprintit template list` };
   }
 
   append(ctx.root, {
@@ -137,7 +137,7 @@ export function findTemplate(
         exitCode: 1,
         message:
           `No template "${name}".` +
-          (known.length > 0 ? `\nAvailable: ${known}` : '\n  flowit template save ...'),
+          (known.length > 0 ? `\nAvailable: ${known}` : '\n  sprintit template save ...'),
       },
     };
   }

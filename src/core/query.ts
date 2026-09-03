@@ -129,9 +129,9 @@ export function describeEmptyResult(filters: TaskFilters): string {
   if (filters.dueBefore !== undefined) active.push(`due before ${filters.dueBefore}`);
 
   if (active.length === 0) {
-    return 'No tasks yet.\nCreate the first one:\n  flowit task add "title"';
+    return 'No tasks yet.\nCreate the first one:\n  sprintit task add "title"';
   }
-  return `No tasks match ${active.join(' and ')}.\nTry fewer filters:\n  flowit task list`;
+  return `No tasks match ${active.join(' and ')}.\nTry fewer filters:\n  sprintit task list`;
 }
 
 /** Valid values, exported so the CLI can list them in error messages. */

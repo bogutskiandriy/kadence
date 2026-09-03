@@ -36,16 +36,16 @@ repository, with no server, account or network.
 
 ### Board
 
-- `flowit board` — plain columns for pipes and scripts.
-- `flowit ui` — interactive kanban: keyboard, mouse, drag between columns, and
-  every field editable in place. Loads lazily, so `flowit task add` never pays
+- `sprintit board` — plain columns for pipes and scripts.
+- `sprintit ui` — interactive kanban: keyboard, mouse, drag between columns, and
+  every field editable in place. Loads lazily, so `sprintit task add` never pays
   for it.
 - Custom columns per team; `done` cannot be removed because every analytic is
   computed from it.
 
 ### For agents
 
-- `--json` on every command with a stable `schema: "flowit/v1"`.
+- `--json` on every command with a stable `schema: "sprintit/v1"`.
 - stdout carries JSON only; warnings go to stderr.
 - `init` writes a guide the agent finds on its own.
 

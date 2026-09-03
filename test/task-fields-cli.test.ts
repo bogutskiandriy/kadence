@@ -11,7 +11,7 @@ let dir: string;
 const env = {} as NodeJS.ProcessEnv;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'flowit-fields-'));
+  dir = mkdtempSync(join(tmpdir(), 'sprintit-fields-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'pm@example.com'], { cwd: dir });
   runInit(dir);
@@ -145,7 +145,7 @@ describe('board', () => {
   it('returns a structure for agents', () => {
     runTaskAdd(dir, env, 'Task', {});
     const data = runBoard(dir, env, {}).data!;
-    expect(data['schema']).toBe('flowit/v1');
+    expect(data['schema']).toBe('sprintit/v1');
     expect(Object.keys(data['columns'] as object)).toContain('backlog');
   });
 });

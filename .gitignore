@@ -1,4 +1,4 @@
 node_modules/
 dist/
-.flowit/state.json
+.sprintit/state.json
 *.log

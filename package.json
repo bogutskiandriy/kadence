@@ -1,5 +1,5 @@
 {
-  "name": "flowit",
+  "name": "sprintit",
   "version": "0.1.0",
   "description": "Tasks, sprints and velocity as plain files inside your git repository",
   "type": "module",
@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "bin": {
-    "flowit": "dist/cli.js"
+    "sprintit": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -48,10 +48,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bogutski/flowit.git"
+    "url": "git+https://github.com/bogutskiandriy/FlowIt.git"
   },
-  "homepage": "https://github.com/bogutski/flowit#readme",
+  "homepage": "https://github.com/bogutskiandriy/FlowIt#readme",
   "bugs": {
-    "url": "https://github.com/bogutski/flowit/issues"
+    "url": "https://github.com/bogutskiandriy/FlowIt/issues"
   }
 }

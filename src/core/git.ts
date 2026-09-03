@@ -23,7 +23,7 @@ function git(cwd: string, args: string[]): string | null {
  * Root of the CURRENT working tree, not of the main repository.
  *
  * `--show-toplevel` is deliberate rather than `--git-common-dir`: inside a
- * git worktree the latter points at the main repository, and FlowIt would
+ * git worktree the latter points at the main repository, and sprintit would
  * write its journal to the wrong place. That exact mistake is an open issue
  * (#558) in Backlog.md.
  */

@@ -87,7 +87,7 @@ describe('ui entry point', () => {
   const CLI = resolve('dist/cli.js');
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'flowit-ui-'));
+    dir = mkdtempSync(join(tmpdir(), 'sprintit-ui-'));
     execFileSync('git', ['init', '-q'], { cwd: dir });
     execFileSync('git', ['config', 'user.email', 'pm@example.com'], { cwd: dir });
     spawnSync('node', [CLI, 'init'], { cwd: dir });
@@ -95,11 +95,11 @@ describe('ui entry point', () => {
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
   it('refuses to start without a terminal and points at the alternative', () => {
-    // stdout here is a pipe, exactly like in CI or `flowit ui | less`.
+    // stdout here is a pipe, exactly like in CI or `sprintit ui | less`.
     const r = spawnSync('node', [CLI, 'ui'], { cwd: dir, encoding: 'utf8' });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/needs a terminal/i);
-    expect(r.stderr).toContain('flowit board --json');
+    expect(r.stderr).toContain('sprintit board --json');
   });
 
   it('keeps blessed out of the main bundle', () => {
@@ -118,7 +118,7 @@ describe('editable fields', () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'flowit-fields-'));
+    dir = mkdtempSync(join(tmpdir(), 'sprintit-fields-'));
     execFileSync('git', ['init', '-q'], { cwd: dir });
     execFileSync('git', ['config', 'user.email', 'pm@example.com'], { cwd: dir });
     spawnSync('node', [resolve('dist/cli.js'), 'init'], { cwd: dir });
@@ -179,7 +179,7 @@ describe('multi-line descriptions', () => {
   const CLI = resolve('dist/cli.js');
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'flowit-multiline-'));
+    dir = mkdtempSync(join(tmpdir(), 'sprintit-multiline-'));
     execFileSync('git', ['init', '-q'], { cwd: dir });
     execFileSync('git', ['config', 'user.email', 'pm@example.com'], { cwd: dir });
     spawnSync('node', [CLI, 'init'], { cwd: dir });
@@ -196,7 +196,7 @@ describe('multi-line descriptions', () => {
 
   it('stores it as an array of lines so git diff stays readable', () => {
     spawnSync('node', [CLI, 'task', 'add', 'T', '-d', 'One.\n\nTwo.'], { cwd: dir });
-    const raw = execFileSync('sh', ['-c', 'cat .flowit/events/*/*.json'], {
+    const raw = execFileSync('sh', ['-c', 'cat .sprintit/events/*/*.json'], {
       cwd: dir,
       encoding: 'utf8',
     });

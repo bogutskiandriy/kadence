@@ -19,7 +19,7 @@ let dir: string;
 const env = {} as NodeJS.ProcessEnv;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'flowit-crud-'));
+  dir = mkdtempSync(join(tmpdir(), 'sprintit-crud-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'pm@example.com'], { cwd: dir });
   runInit(dir);
@@ -173,7 +173,7 @@ describe('editor', () => {
   });
 
   it('refuses to open an editor for an agent — vi would hang forever', () => {
-    expect(canUseEditor({ FLOWIT_SOURCE: 'agent' } as NodeJS.ProcessEnv, true)).toBe(false);
+    expect(canUseEditor({ SPRINTIT_SOURCE: 'agent' } as NodeJS.ProcessEnv, true)).toBe(false);
   });
 
   it('refuses to open an editor without a terminal', () => {

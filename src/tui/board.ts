@@ -13,7 +13,7 @@ import {
 /**
  * The interactive board.
  *
- * Columns side by side, as a kanban actually looks. The plain `flowit board`
+ * Columns side by side, as a kanban actually looks. The plain `sprintit board`
  * stays a list because a pipe has no width to negotiate; here the terminal is
  * ours for the session, so the grid is worth its cost.
  */
@@ -53,7 +53,7 @@ const CANCELLED = 'cancelled';
 export function runBoardUi(callbacks: BoardCallbacks): void {
   const screen = blessed.screen({
     smartCSR: true,
-    title: 'FlowIt',
+    title: 'sprintit',
     fullUnicode: true,
     // Mouse is on: dragging a card between columns is the one interaction
     // that is genuinely faster with a pointer than with keys.
@@ -235,10 +235,10 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
     const active = state.sprints.find((s) => s.status === 'active');
     const sprintName = active === undefined ? 'no active sprint' : active.name;
     const filterNote = filter === '' ? '' : `  filter: "${filter}"`;
-    header.setContent(` FlowIt  ${sprintName}  ${total} tasks, ${points} points${filterNote}`);
+    header.setContent(` sprintit  ${sprintName}  ${total} tasks, ${points} points${filterNote}`);
 
     if (state.cycles.length > 0) {
-      say(`${state.cycles.length} dependency cycle(s) — see flowit task list`, THEME.danger);
+      say(`${state.cycles.length} dependency cycle(s) — see sprintit task list`, THEME.danger);
     }
     screen.render();
   }
@@ -504,7 +504,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
    * A scrollable report with optional actions.
    *
    * The body is plain text produced by the same code the CLI prints, so the
-   * board can never show a different velocity than `flowit sprint status`.
+   * board can never show a different velocity than `sprintit sprint status`.
    */
   function showReport(
     title: string,

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, renameSync, readdirSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { flowitDir, eventsDir, readAll } from './store.js';
+import { dataDir, eventsDir, readAll } from './store.js';
 import { project, type ProjectState } from './projection.js';
 
 /**
@@ -14,7 +14,7 @@ import { project, type ProjectState } from './projection.js';
  * from the journal" comes up, the answer is always "rebuild it".
  */
 
-const SNAPSHOT_VERSION = 'flowit-snapshot/1';
+const SNAPSHOT_VERSION = 'sprintit-snapshot/1';
 
 interface Snapshot {
   version: string;
@@ -26,7 +26,7 @@ interface Snapshot {
 }
 
 export function snapshotPath(root: string): string {
-  return join(flowitDir(root), 'state.json');
+  return join(dataDir(root), 'state.json');
 }
 
 export interface LoadResult {
@@ -135,7 +135,7 @@ function readSnapshot(root: string): Snapshot | null {
 
 function writeSnapshot(root: string, snapshot: Snapshot): void {
   try {
-    mkdirSync(flowitDir(root), { recursive: true });
+    mkdirSync(dataDir(root), { recursive: true });
     const target = snapshotPath(root);
     const tmp = `${target}.tmp`;
     writeFileSync(tmp, JSON.stringify(snapshot), 'utf8');

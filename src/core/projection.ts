@@ -471,7 +471,7 @@ function readText(v: unknown): string | null {
 
 /**
  * An unknown type falls back to `task` rather than breaking the fold: the event
- * may have been written by a newer FlowIt, and the state must stay usable.
+ * may have been written by a newer sprintit, and the state must stay usable.
  */
 function readType(v: unknown): TaskType {
   return TASK_TYPES.includes(v as TaskType) ? (v as TaskType) : 'task';

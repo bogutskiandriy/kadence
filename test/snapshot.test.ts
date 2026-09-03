@@ -36,7 +36,7 @@ function moved(entity: string, to: string): FlowEvent {
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'flowit-snap-'));
+  root = mkdtempSync(join(tmpdir(), 'sprintit-snap-'));
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
@@ -89,7 +89,7 @@ describe('loadOrBuild', () => {
     append(root, last);
     loadOrBuild(root);
 
-    rmSync(join(root, '.flowit', 'events', '2026-09', `${mid.id}.json`));
+    rmSync(join(root, '.sprintit', 'events', '2026-09', `${mid.id}.json`));
     const r = loadOrBuild(root);
     expect(r.fromCache).toBe(false);
   });
@@ -108,7 +108,7 @@ describe('loadOrBuild', () => {
     append(root, created('Task'));
     loadOrBuild(root);
     const snap = JSON.parse(readFileSync(snapshotPath(root), 'utf8'));
-    snap.version = 'flowit-snapshot/999';
+    snap.version = 'sprintit-snapshot/999';
     writeFileSync(snapshotPath(root), JSON.stringify(snap));
 
     expect(loadOrBuild(root).fromCache).toBe(false);

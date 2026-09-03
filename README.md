@@ -1,15 +1,15 @@
-# FlowIt
+# sprintit
 
-**Your team plans sprints on gut feel. FlowIt counts what it actually delivers — from a journal that lives in your repository.**
+**Your team plans sprints on gut feel. sprintit counts what it actually delivers — from a journal that lives in your repository.**
 
 Tasks, sprints and velocity as plain files inside your git repo. No server, no
 account, no network. Works offline, and works for AI agents because the data is
 just files they can read.
 
 ```bash
-npx flowit init
-npx flowit task add "Fix login" -d "Broken since 2.3" --type bug --estimate 3
-npx flowit ui        # interactive board, or `flowit board` for a plain list
+npx sprintit init
+npx sprintit task add "Fix login" -d "Broken since 2.3" --type bug --estimate 3
+npx sprintit ui        # interactive board, or `sprintit board` for a plain list
 ```
 
 > **v0.1.0.** The architecture is measured and covered by 383 tests. The product
@@ -21,10 +21,10 @@ npx flowit ui        # interactive board, or `flowit board` for a plain list
 There are good file-based trackers already:
 [git-bug](https://github.com/git-bug/git-bug),
 [Backlog.md](https://github.com/MrLesk/Backlog.md),
-[git-issues](https://steviee.github.io/git-issues/). FlowIt differs in two ways.
+[git-issues](https://steviee.github.io/git-issues/). sprintit differs in two ways.
 
 **1. It never conflicts on merge.** The others store a task as a *mutable* file,
-so two branches touching one task collide. FlowIt stores an append-only journal
+so two branches touching one task collide. sprintit stores an append-only journal
 of events: one file per event, never rewritten.
 
 We measured this rather than assumed it. Across **8,396 merge commits from 130
@@ -34,7 +34,7 @@ the type this design eliminates. Full data:
 [probe-a-results.md](docs/research/probe-a-results.md).
 
 **2. It computes velocity.** None of the three tracks sprints, velocity, or how
-estimates compare with reality. FlowIt derives all of it from the journal, so
+estimates compare with reality. sprintit derives all of it from the journal, so
 the numbers cannot be forgotten or faked — they are a product of the work.
 
 ```
@@ -52,20 +52,20 @@ costs your team.
 Requires Node 20 or newer, and a git repository.
 
 ```bash
-npx flowit init
+npx sprintit init
 ```
 
-No global install needed. `init` creates `.flowit/`, adds the derived cache to
+No global install needed. `init` creates `.sprintit/`, adds the derived cache to
 `.gitignore`, and writes a short guide for AI agents. It does **not** commit
 anything — that call is yours.
 
 ## Commands
 
 ```
-flowit init                          set up FlowIt in this repository
-flowit ui                            interactive kanban board
+sprintit init                          set up sprintit in this repository
+sprintit ui                            interactive kanban board
 
-flowit task add "<title>"            create a task
+sprintit task add "<title>"            create a task
     -d, --description <text>         full description
     --type task|bug|story|epic       type; an epic is simply a parent task
     --priority low|normal|high|urgent
@@ -75,42 +75,42 @@ flowit task add "<title>"            create a task
     --parent <task>                  make it a subtask
     --template <name>                pre-fill from a saved template
     --estimate <points>              estimate, always last
-flowit task list                     list tasks
+sprintit task list                     list tasks
     --search <text>                  title, description and comments
     --status|--type|--priority|--assignee|--label
     --overdue  --due-before <date>
     --sort created|priority|due|estimate
     --tree                           show parent/child structure
-flowit task show FLOW-1              full detail and history
-flowit task edit FLOW-1              opens $EDITOR; or pass field flags
-flowit task move FLOW-1 done         change state
-flowit task assign FLOW-1 <who>      assign; "none" unassigns
-flowit task comment FLOW-1 "text"    comment
-flowit task log FLOW-1 2h            log time; 90m, -30m to correct
-flowit task parent FLOW-2 FLOW-1     nest under a parent
-flowit task block FLOW-2 FLOW-1      FLOW-2 waits for FLOW-1
-flowit task cancel FLOW-1            keeps it in history
-flowit task delete FLOW-1            drops it from the board
+sprintit task show FLOW-1              full detail and history
+sprintit task edit FLOW-1              opens $EDITOR; or pass field flags
+sprintit task move FLOW-1 done         change state
+sprintit task assign FLOW-1 <who>      assign; "none" unassigns
+sprintit task comment FLOW-1 "text"    comment
+sprintit task log FLOW-1 2h            log time; 90m, -30m to correct
+sprintit task parent FLOW-2 FLOW-1     nest under a parent
+sprintit task block FLOW-2 FLOW-1      FLOW-2 waits for FLOW-1
+sprintit task cancel FLOW-1            keeps it in history
+sprintit task delete FLOW-1            drops it from the board
 
-flowit board                         plain board, one column per status
+sprintit board                         plain board, one column per status
     -a, --assignee me                only your tasks
     --sprint                         only the active sprint
-flowit board config                  show or change the columns
+sprintit board config                  show or change the columns
     --statuses "todo,doing,done"     your own workflow
 
-flowit sprint create "Sprint 1"      first starts now, later ones are planned
-flowit sprint add FLOW-1 [--sprint "Sprint 2"]
-flowit sprint start ["Sprint 2"]     start the next planned sprint
-flowit sprint close                  close and report velocity
-flowit sprint status                 progress of the active sprint
-flowit sprint burndown               chart rebuilt from the journal
-flowit sprint list                   every sprint
+sprintit sprint create "Sprint 1"      first starts now, later ones are planned
+sprintit sprint add FLOW-1 [--sprint "Sprint 2"]
+sprintit sprint start ["Sprint 2"]     start the next planned sprint
+sprintit sprint close                  close and report velocity
+sprintit sprint status                 progress of the active sprint
+sprintit sprint burndown               chart rebuilt from the journal
+sprintit sprint list                   every sprint
 
-flowit template save bug --type bug --priority high
-flowit template list | delete <name>
+sprintit template save bug --type bug --priority high
+sprintit template list | delete <name>
 ```
 
-Most commands accept several tasks at once — `flowit task move FLOW-1,FLOW-2 done`
+Most commands accept several tasks at once — `sprintit task move FLOW-1,FLOW-2 done`
 — and apply **all or nothing**: if one id does not exist, nothing changes.
 
 Add `--json` to any command for a stable machine-readable shape.
@@ -118,7 +118,7 @@ Add `--json` to any command for a stable machine-readable shape.
 ## The interactive board
 
 ```
-flowit ui
+sprintit ui
 ```
 
 Columns side by side, mouse and keyboard:
@@ -135,7 +135,7 @@ Enter opens a card where every field is editable in place. Dragging a card with
 the mouse moves it between columns. Each action runs the same command the CLI
 does, so the board can never disagree with the terminal.
 
-The board loads its UI layer lazily — `flowit task add` never pays for it.
+The board loads its UI layer lazily — `sprintit task add` never pays for it.
 
 ## For AI agents
 
@@ -143,24 +143,24 @@ Tasks are files. An agent reads them directly, or through the CLI — no MCP
 server, no token, no network:
 
 ```bash
-flowit board --json
-flowit task list --json --status in_progress --sort priority
-flowit task show FLOW-1 --json
-flowit sprint status --json
-FLOWIT_SOURCE=agent flowit task move FLOW-1 in_progress
+sprintit board --json
+sprintit task list --json --status in_progress --sort priority
+sprintit task show FLOW-1 --json
+sprintit sprint status --json
+SPRINTIT_SOURCE=agent sprintit task move FLOW-1 in_progress
 ```
 
-Every `--json` response carries `schema: "flowit/v1"`. stdout holds JSON and
+Every `--json` response carries `schema: "sprintit/v1"`. stdout holds JSON and
 nothing else; warnings go to stderr. Exit codes: `0` success, `1` runtime error,
 `2` bad arguments.
 
-`init` writes `.flowit/README.md` and a section in `AGENTS.md` so your agent
+`init` writes `.sprintit/README.md` and a section in `AGENTS.md` so your agent
 finds this on its own.
 
 ## How it works
 
 ```
-.flowit/
+.sprintit/
 ├── state.json          derived cache — gitignored, safe to delete
 └── events/
     ├── archive/        compacted history, one file per month

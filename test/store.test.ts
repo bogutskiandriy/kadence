@@ -20,7 +20,7 @@ const ev = (over: Partial<FlowEvent> = {}): FlowEvent => ({
 });
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'flowit-store-'));
+  root = mkdtempSync(join(tmpdir(), 'sprintit-store-'));
 });
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });

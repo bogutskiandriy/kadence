@@ -23,7 +23,7 @@ function run(args: string[], env: Record<string, string> = {}): Run {
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'flowit-json-'));
+  dir = mkdtempSync(join(tmpdir(), 'sprintit-json-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'tester@example.com'], { cwd: dir });
   run(['init']);
@@ -39,7 +39,7 @@ describe('the --json contract', () => {
 
   it('every response carries a schema version', () => {
     const r = run(['task', 'add', 'Task', '--json']);
-    expect(JSON.parse(r.stdout).schema).toBe('flowit/v1');
+    expect(JSON.parse(r.stdout).schema).toBe('sprintit/v1');
   });
 
   it('an error comes back as JSON too, not as text', () => {
@@ -47,7 +47,7 @@ describe('the --json contract', () => {
     // response.
     const r = run(['task', 'move', 'FLOW-99', 'done', '--json']);
     const parsed = JSON.parse(r.stdout);
-    expect(parsed.schema).toBe('flowit/v1');
+    expect(parsed.schema).toBe('sprintit/v1');
     expect(parsed.ok).toBe(false);
     expect(parsed.error.message).toMatch(/FLOW-99/);
   });
@@ -55,7 +55,7 @@ describe('the --json contract', () => {
   it('warnings go to stderr and never corrupt the JSON on stdout', () => {
     run(['task', 'add', 'Task']);
     // Corrupt one event so a warning appears.
-    const events = execFileSync('find', ['.flowit/events', '-name', '*.json'], {
+    const events = execFileSync('find', ['.sprintit/events', '-name', '*.json'], {
       cwd: dir,
       encoding: 'utf8',
     })
@@ -93,18 +93,18 @@ describe('the --json contract', () => {
     );
   });
 
-  it('FLOWIT_SOURCE=agent marks event authorship', () => {
-    run(['task', 'add', 'From agent'], { FLOWIT_SOURCE: 'agent' });
-    const raw = execFileSync('sh', ['-c', 'cat .flowit/events/*/*.json'], {
+  it('SPRINTIT_SOURCE=agent marks event authorship', () => {
+    run(['task', 'add', 'From agent'], { SPRINTIT_SOURCE: 'agent' });
+    const raw = execFileSync('sh', ['-c', 'cat .sprintit/events/*/*.json'], {
       cwd: dir,
       encoding: 'utf8',
     });
     expect(raw).toContain('"source":"agent"');
   });
 
-  it('without FLOWIT_SOURCE an event counts as human — we never guess', () => {
+  it('without SPRINTIT_SOURCE an event counts as human — we never guess', () => {
     run(['task', 'add', 'From human']);
-    const raw = execFileSync('sh', ['-c', 'cat .flowit/events/*/*.json'], {
+    const raw = execFileSync('sh', ['-c', 'cat .sprintit/events/*/*.json'], {
       cwd: dir,
       encoding: 'utf8',
     });

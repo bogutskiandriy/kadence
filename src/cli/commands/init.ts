@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '../../core/git.js';
-import { eventsDir, flowitDir } from '../../core/store.js';
+import { eventsDir, dataDir } from '../../core/store.js';
 import { AGENT_README, upsertAgentsSection } from '../../agent/contract.js';
 
-const GITIGNORE_ENTRY = '.flowit/state.json';
+const GITIGNORE_ENTRY = '.sprintit/state.json';
 
 export interface InitResult {
   ok: boolean;
@@ -21,7 +21,7 @@ export function runInit(cwd: string): InitResult {
       alreadyInitialized: false,
       root: null,
       message:
-        'FlowIt lives inside a git repository, and there is none here.\n' +
+        'sprintit lives inside a git repository, and there is none here.\n' +
         'Create one and try again:\n  git init',
     };
   }
@@ -32,7 +32,7 @@ export function runInit(cwd: string): InitResult {
   ensureGitignore(root);
 
   // Never overwrite the README: the user may have added their own rules.
-  const readme = join(flowitDir(root), 'README.md');
+  const readme = join(dataDir(root), 'README.md');
   if (!existsSync(readme)) writeFileSync(readme, AGENT_README, 'utf8');
 
   ensureAgentsFile(root);
@@ -42,10 +42,10 @@ export function runInit(cwd: string): InitResult {
     alreadyInitialized: already,
     root,
     message: already
-      ? 'FlowIt is already initialised.'
-      : 'FlowIt is ready.\n\n' +
-        '  flowit task add "first task"\n' +
-        '  flowit board\n\n' +
+      ? 'sprintit is already initialised.'
+      : 'sprintit is ready.\n\n' +
+        '  sprintit task add "first task"\n' +
+        '  sprintit board\n\n' +
         'Files were created but not committed — that call is yours.',
   };
 }

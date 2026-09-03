@@ -12,12 +12,12 @@ import { parse, serialize, type FlowEvent } from './event.js';
 /** Share of unreadable events above which staying silent is unsafe. */
 const SYSTEMIC_CORRUPTION_RATIO = 0.2;
 
-export function flowitDir(root: string): string {
-  return join(root, '.flowit');
+export function dataDir(root: string): string {
+  return join(root, '.sprintit');
 }
 
 export function eventsDir(root: string): string {
-  return join(flowitDir(root), 'events');
+  return join(dataDir(root), 'events');
 }
 
 /**
@@ -61,7 +61,7 @@ export interface ReadResult {
   events: FlowEvent[];
   /** Paths of events that could not be read. */
   corrupted: string[];
-  /** How many events were skipped as written by a newer FlowIt. */
+  /** How many events were skipped as written by a newer sprintit. */
   unknownTypes: number;
   /** Enough corruption that this is no longer a one-off failure. */
   systemicCorruption: boolean;

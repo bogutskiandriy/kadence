@@ -116,7 +116,7 @@ export function serialize(event: FlowEvent): string {
 export interface ParseResult {
   event: FlowEvent | null;
   error: string | null;
-  /** Event from a newer FlowIt: not an error, just a reason to skip it. */
+  /** Event from a newer sprintit: not an error, just a reason to skip it. */
   unknownType: boolean;
 }
 
