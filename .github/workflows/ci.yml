@@ -28,6 +28,13 @@ jobs:
       - name: Types
         run: npm run typecheck
 
+      # Build first: the JSON-contract tests spawn dist/cli.js as a real
+      # process, which is the only way to prove stdout carries JSON alone.
+      # Locally that dependency is hidden by vitest's globalSetup building on
+      # demand; in CI the ordering has to be explicit.
+      - name: Build
+        run: npm run build
+
       - name: Tests
         # Integration tests create real git repositories, so git needs an
         # identity even though nothing is ever committed.
@@ -35,9 +42,6 @@ jobs:
           git config --global user.email "ci@example.com"
           git config --global user.name "CI"
           npm test
-
-      - name: Build
-        run: npm run build
 
       - name: The fast path must not load the UI layer
         # The whole point of the dynamic import: `flowit task add` never pays
