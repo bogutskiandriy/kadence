@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "bin": {
-    "flowit": "./dist/cli.js"
+    "flowit": "dist/cli.js"
   },
   "files": [
     "dist",
