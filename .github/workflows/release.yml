@@ -3,6 +3,14 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Manual runs matter more than they look: a rerun reuses the environment from
+  # when the run started, so a secret added afterwards is invisible to it. This
+  # is how you retry a release without moving the tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to publish, e.g. v0.1.0
+        required: true
 
 jobs:
   publish:
@@ -13,6 +21,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A manual run checks out the tag it was given; a tag push already
+          # has it.
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
