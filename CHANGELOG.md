@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.3] — 2026-09-03
+
+### Testing
+
+- End-to-end coverage through the real binary: a full sprint from `init` to
+  `sprint close` with velocity computed from actual events, every reachable
+  command checked for a clean exit, three branches editing one task, an agent
+  driving the tool with JSON alone, and the events folder vanishing on a
+  branch switch. 390 tests.
+
 ## [0.1.2] — 2026-09-03
 
 ### Documentation

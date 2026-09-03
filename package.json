@@ -1,6 +1,6 @@
 {
   "name": "kadence",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Tasks, sprints and velocity as plain files inside your git repository",
   "type": "module",
   "license": "MIT",
