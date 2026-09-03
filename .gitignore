@@ -1,4 +1,56 @@
+# What belongs in this repository is written down in
+# docs/decisions/007-what-goes-into-git.md. Change both together.
+
+# ── Dependencies ──────────────────────────────────────────────────────
 node_modules/
+.npm/
+.pnpm-store/
+
+# ── Build output ──────────────────────────────────────────────────────
+# dist/ is published to npm, not committed: `npm run build` regenerates it
+# and a checked-in bundle conflicts on every merge.
 dist/
-.kadence/state.json
+*.tsbuildinfo
+
+# ── Test and coverage artefacts ───────────────────────────────────────
+coverage/
+*.lcov
+.vitest/
+
+# ── Logs and crash reports ────────────────────────────────────────────
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Local environment ─────────────────────────────────────────────────
+# Secrets never enter the journal. An .env.example may be committed.
+.env
+.env.*
+!.env.example
+
+# ── Editors and OS ────────────────────────────────────────────────────
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# ── Developer tooling — local to each machine, not to the project ─────
+# Agent skills, caches and indexes are reinstalled per developer. The
+# committed contract for agents is AGENTS.md and .kadence/README.md.
+.claude/*
+!.claude/settings.json
+.serena/
+.cursor/
+.aider*
+
+# ── kadence's own board ───────────────────────────────────────────────
+# .kadence/events/ IS the data and is committed on purpose — that is the
+# whole product. state.json is a derived snapshot, rebuilt from events.
+.kadence/state.json
+.kadence/*.lock

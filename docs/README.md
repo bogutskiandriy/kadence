@@ -43,7 +43,8 @@
 | [product/story-map.md](product/story-map.md) | Карта історій. Наша сила проявляється рідко, слабкість — щодня |
 | [product/prioritization.md](product/prioritization.md) | Value/Effort. Борд і повідомлення про злиття заходять у v0.1 |
 | [../SPEC.md](../SPEC.md) | Технічна специфікація, вісім модулів |
-| [decisions/](decisions/) | П'ять ADR зі стеку, всі підкріплені вимірами |
+| [decisions/](decisions/) | Сім ADR, усі підкріплені вимірами |
+| [decisions/007-what-goes-into-git.md](decisions/007-what-goes-into-git.md) | Що комітимо, а що ні. Читати перед додаванням нової теки |
 
 ## Стан на 2026-09-02
 
