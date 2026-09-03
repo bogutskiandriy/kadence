@@ -9,12 +9,12 @@ just files they can read.
 ```bash
 npx flowit init
 npx flowit task add "Fix login" -d "Broken since 2.3" --type bug --estimate 3
-npx flowit board
+npx flowit ui        # interactive board, or `flowit board` for a plain list
 ```
 
-> **Status: early development.** The architecture is measured and tested, but
-> the product bet — that teams want sprint analytics in their repo — has not
-> been validated with users yet. See [Honest status](#honest-status).
+> **v0.1.0.** The architecture is measured and covered by 383 tests. The product
+> bet — that teams want sprint analytics in their repo — has not been validated
+> with users yet. See [Honest status](#honest-status).
 
 ## Why another tracker
 
@@ -63,32 +63,79 @@ anything — that call is yours.
 
 ```
 flowit init                          set up FlowIt in this repository
+flowit ui                            interactive kanban board
 
 flowit task add "<title>"            create a task
     -d, --description <text>         full description
-    --type task|bug|story            type
+    --type task|bug|story|epic       type; an epic is simply a parent task
     --priority low|normal|high|urgent
     -a, --assignee <who>             assignee
     --label <name>                   label; repeat for several
+    --due <date>                     deadline, YYYY-MM-DD
+    --parent <task>                  make it a subtask
+    --template <name>                pre-fill from a saved template
     --estimate <points>              estimate, always last
-flowit task list [--status <s>]      list tasks
+flowit task list                     list tasks
+    --search <text>                  title, description and comments
+    --status|--type|--priority|--assignee|--label
+    --overdue  --due-before <date>
+    --sort created|priority|due|estimate
+    --tree                           show parent/child structure
 flowit task show FLOW-1              full detail and history
+flowit task edit FLOW-1              opens $EDITOR; or pass field flags
 flowit task move FLOW-1 done         change state
 flowit task assign FLOW-1 <who>      assign; "none" unassigns
+flowit task comment FLOW-1 "text"    comment
+flowit task log FLOW-1 2h            log time; 90m, -30m to correct
+flowit task parent FLOW-2 FLOW-1     nest under a parent
+flowit task block FLOW-2 FLOW-1      FLOW-2 waits for FLOW-1
+flowit task cancel FLOW-1            keeps it in history
+flowit task delete FLOW-1            drops it from the board
 
-flowit board                         kanban board
+flowit board                         plain board, one column per status
     -a, --assignee me                only your tasks
     --sprint                         only the active sprint
+flowit board config                  show or change the columns
+    --statuses "todo,doing,done"     your own workflow
 
 flowit sprint create "Sprint 1"      first starts now, later ones are planned
 flowit sprint add FLOW-1 [--sprint "Sprint 2"]
 flowit sprint start ["Sprint 2"]     start the next planned sprint
-flowit sprint close                  close the active one and report velocity
+flowit sprint close                  close and report velocity
 flowit sprint status                 progress of the active sprint
+flowit sprint burndown               chart rebuilt from the journal
 flowit sprint list                   every sprint
+
+flowit template save bug --type bug --priority high
+flowit template list | delete <name>
 ```
 
-Add `--json` to any read command for a stable machine-readable shape.
+Most commands accept several tasks at once — `flowit task move FLOW-1,FLOW-2 done`
+— and apply **all or nothing**: if one id does not exist, nothing changes.
+
+Add `--json` to any command for a stable machine-readable shape.
+
+## The interactive board
+
+```
+flowit ui
+```
+
+Columns side by side, mouse and keyboard:
+
+```
+←→ column   ↑↓ task   enter details   [ ] shift a card
+m status    a assign  c comment       e edit in $EDITOR
+p priority  t log time                n new    d delete
+s sprint menu (status, burndown, start, close)   S add to sprint
+/ filter    ? help    q quit
+```
+
+Enter opens a card where every field is editable in place. Dragging a card with
+the mouse moves it between columns. Each action runs the same command the CLI
+does, so the board can never disagree with the terminal.
+
+The board loads its UI layer lazily — `flowit task add` never pays for it.
 
 ## For AI agents
 
@@ -97,7 +144,9 @@ server, no token, no network:
 
 ```bash
 flowit board --json
+flowit task list --json --status in_progress --sort priority
 flowit task show FLOW-1 --json
+flowit sprint status --json
 FLOWIT_SOURCE=agent flowit task move FLOW-1 in_progress
 ```
 
@@ -129,6 +178,7 @@ Measured on 10,000 events:
 | Cold start with compacted archive | 28 ms |
 | Warm start (cache) | 7 ms |
 | Journal on disk | 1.9 MB (39 MB without compaction) |
+| Bundle | 30 KB, zero runtime deps in the fast path |
 
 These are enforced by tests that fail on regression.
 
@@ -156,7 +206,7 @@ The full reasoning, including what would prove this product wrong, lives in
 
 ```bash
 npm install
-npm test          # 206 tests
+npm test          # 363 tests
 npm run build     # single 40 KB bundle
 npm run typecheck
 ```

@@ -1,6 +1,11 @@
 // Один бандл: кожен import у node_modules — це окремий resolve під час старту,
 // а вони й формують ті мілісекунди, за які ми боремося (ADR-001).
 import { build } from 'esbuild';
+import { rmSync } from 'node:fs';
+
+// esbuild does not clean its output directory, so chunk hashes from previous
+// builds accumulate and ship inside the package as dead weight.
+rmSync('dist', { recursive: true, force: true });
 
 await build({
   entryPoints: ['src/cli/index.ts'],

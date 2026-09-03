@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20 is the floor the package declares; 22 is what most people run.
+        node: [20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Types
+        run: npm run typecheck
+
+      - name: Tests
+        # Integration tests create real git repositories, so git needs an
+        # identity even though nothing is ever committed.
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI"
+          npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: The fast path must not load the UI layer
+        # The whole point of the dynamic import: `flowit task add` never pays
+        # for blessed. A regression here is invisible until someone measures.
+        run: |
+          if grep -q "blessed" dist/cli.js; then
+            echo "blessed leaked into the main bundle"
+            exit 1
+          fi
+          echo "main bundle is clean"
+
+      - name: Package
+        run: npm pack --dry-run

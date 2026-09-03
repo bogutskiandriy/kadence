@@ -36,8 +36,3 @@ export function getActorEmail(cwd: string): string | null {
   const email = git(cwd, ['config', 'user.email']);
   return email === null || email.length === 0 ? null : email;
 }
-
-export function currentBranch(cwd: string): string | null {
-  const b = git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
-  return b === null || b.length === 0 ? null : b;
-}
