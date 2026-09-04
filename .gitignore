@@ -54,3 +54,8 @@ Thumbs.db
 # whole product. state.json is a derived snapshot, rebuilt from events.
 .kadence/state.json
 .kadence/*.lock
+
+# ── Лендінг ───────────────────────────────────────────────────────────
+# site/ готується тут, а живе окремим репозиторієм — ADR-008.
+# Файли лишаються на диску, в історію продукту не йдуть.
+site/
