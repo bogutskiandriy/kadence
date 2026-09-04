@@ -122,11 +122,18 @@ the TUI is verified by hand. **After changing anything in `src/tui/`, run
 
 ## Honest state of the product
 
-The architecture is measured. The product bet — that teams want sprint
-analytics in their repo — is not. Probe A established that conflicts in task
-files are real but rare (15% of repositories, one merge in two hundred), which
-is why the headline message is analytics rather than conflict-freedom. Probe B
-— interviews — has not been run.
+The architecture is measured. The product bet is not.
+
+Since 2026-09-04 the bet is **shared context**: that a team and its agents lose
+enough of it between sessions to want a journal. The industry named the problem
+(spec drift, agent context amnesia) — our users have not. Probe B, the
+interviews, still has not been run.
+
+Probe A established that conflicts in task files are real but rare (15% of
+repositories, one merge in two hundred), which is why conflict-freedom is proof
+and not the headline. Sprint velocity is now a **consequence** of the journal,
+not the pitch — see `docs/product/positioning.md` and the reasoning in
+`docs/product/positioning-review-2026-09.md`.
 
 Say so when it matters. The README does, and so should any plan built on that
 assumption.

@@ -1,5 +1,11 @@
 # kadence — Product Requirements Document
 
+> **Поточна рамка (2026-09-04).** Головний меседж змінено з аналітики спринтів
+> на **спільний контекст роботи команди й AI**. Розділ про конкурентів застарів
+> удвічі: актуальний ландшафт — GitHub Spec Kit, Beads, Backlog.md — розібраний
+> у [positioning-review-2026-09.md](product/positioning-review-2026-09.md).
+
+
 **Статус:** Draft v0.1 (pre-discovery)
 **Дата:** 2026-09-01
 **Автор:** bogutski2005@gmail.com

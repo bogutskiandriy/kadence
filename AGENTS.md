@@ -12,3 +12,10 @@ When acting as an agent, set `KADENCE_SOURCE=agent`.
 
 Details: `.kadence/README.md`
 <!-- kadence:end -->
+
+## Where the context is
+
+`kadence task show <ref> --json` returns the full state of one piece of work:
+status, blockers, comments, logged hours and the complete `history` of events
+that led there. Read it before asking a human what happened — it is the layer
+the code and `git log` do not carry.

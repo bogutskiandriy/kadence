@@ -1,48 +1,77 @@
 # kadence
 
-**Sprint tracking that lives in your git repo — and tells you what a story point actually costs.**
+**Your team and your agents work from the same context — it lives in your repo and remembers what the code cannot.**
 
 ```bash
 npm install -g kadence
 kadence init
 ```
 
-No server. No account. No network. Your tasks are files next to your code, and
-they move with your branches.
+No server. No account. No network. Tasks, their whole history and the time they
+took are files next to your code, and they move with your branches.
 
 ---
 
-## The number nobody has
+## The context your code cannot hold
 
-Every team estimates in points. Almost none can say what a point costs them.
+Your code says **what** exists. `git log` says **when** it changed. Neither says
+what was tried and abandoned, why a task is blocked, or what the team agreed on
+Tuesday.
 
+That gap costs a human a few minutes. It costs an agent the entire session:
+every new one starts from scratch, re-reads the same files and asks the same
+questions you answered yesterday.
+
+kadence keeps that missing layer as an append-only journal — one file per event,
+committed with the code:
+
+```bash
+$ kadence task show KAD-1 --json
 ```
-$ kadence sprint close
 
-Sprint "Sprint 14" closed.
-
-  Velocity:  23 of 28 points
-  Actual:    37h — 1.6h per point
-
-  Carried over (2):
-    · KAD-12  Auth refactor
+```json
+{
+  "schema": "kadence/v1",
+  "label": "KAD-1",
+  "title": "Fix login",
+  "status": "in_review",
+  "loggedHours": 4.5,
+  "blockedBy": ["KAD-7"],
+  "comments": [
+    { "at": "2026-09-02T09:14:00Z", "by": "ana",
+      "text": "Session cookie is fine — the redirect drops it." }
+  ],
+  "history": [
+    { "at": "2026-09-01T10:02:00Z", "by": "ana",  "type": "task.created" },
+    { "at": "2026-09-01T14:40:00Z", "by": "ana",  "type": "task.moved", "to": "in_progress" },
+    { "at": "2026-09-02T09:20:00Z", "by": "agent","type": "task.blocked_by_added" }
+  ]
+}
 ```
 
-`1.6h per point` is derived from the journal — every state change your team
-already made, timestamped. Nobody fills in a form. Nobody can forget to update
-it. Next sprint you plan against a measured number instead of a feeling.
+That is the whole state of a piece of work, in one call, with no server to ask
+and no context to rebuild. A human reads it in `kadence task show`. An agent
+reads the same thing as JSON.
 
-## Three things a browser tab cannot do
+## Why events and not files
 
-**Your board is in the commit.** `git checkout` a release from three months ago
-and the tasks are exactly as they were that day. Not roughly — the same files.
+Every other tool that keeps work in a repository keeps **state**: a task file, a
+row in a database, the current spec. State has three failure modes, and all
+three are why kadence stores **events** instead.
 
-**Merges do not fight you.** Two people editing one task on two branches is a
+**It drifts.** A spec written on Monday and edited by an agent on Thursday no
+longer says what actually happened. An event cannot drift — it records that
+something occurred, not what is currently true.
+
+**It conflicts.** Two people editing one task on two branches is a merge
 conflict in every file-based tracker. Here it is not, by construction: the
 journal is append-only, one file per event.
 
-**Agents read it without a bridge.** No MCP server, no token, no network. It is
-files, plus `--json` on every command.
+**It forgets.** Rewriting a task file destroys the previous version. The journal
+keeps every step, so «how did we get here» has an answer.
+
+State is still there when you want it — it is folded from the journal on read,
+which is why the board can never drift from reality.
 
 ---
 
@@ -70,7 +99,7 @@ kadence init
 
 kadence sprint create "Sprint 14"
 kadence task add "Fix login" -d "Broken since 2.3" --type bug --priority high --estimate 3
-kadence sprint add KAD-1
+kadence task comment KAD-1 "Session cookie is fine — the redirect drops it."
 kadence task move KAD-1 done
 kadence sprint close
 ```
@@ -91,39 +120,43 @@ $ kadence ui
 Keyboard, mouse, drag between columns, every field editable in place. It calls
 the same commands the CLI does, so the two can never disagree.
 
-**For an agent:**
+**And because the journal has the timestamps, the cost comes out of it for free:**
 
-```bash
-kadence board --json
-KADENCE_SOURCE=agent kadence task move KAD-1 in_progress
+```
+$ kadence sprint close
+
+Sprint "Sprint 14" closed.
+
+  Velocity:  23 of 28 points
+  Actual:    37h — 1.6h per point
+
+  Carried over (2):
+    · KAD-12  Auth refactor
 ```
 
-Every response carries `schema: "kadence/v1"`. stdout is JSON and nothing else;
-warnings go to stderr. `init` writes a guide the agent finds on its own.
+Nobody fills in a form. Nobody can forget to update it. The number is derived
+from state changes the team already made.
 
 ---
 
-## Commands
+## For agents
 
-```
-kadence init                      set up in this repository
-kadence ui                        interactive board
+Files first. Every command speaks `--json`, every response carries
+`schema: "kadence/v1"`, stdout is JSON and nothing else, warnings go to stderr.
 
-kadence task add "<title>"        -d --type --priority -a --label --due
-                                  --parent --template --estimate
-kadence task list                 --search --status --assignee --overdue
-                                  --sort --tree
-kadence task show KAD-1           detail, comments and history
-kadence task edit KAD-1           opens $EDITOR, or pass field flags
-kadence task move KAD-1 done      also: assign, comment, log, parent, block,
-                                  cancel, delete
-kadence board                     plain columns; `board config` sets your own
-kadence sprint create|add|start|close|status|burndown|list
-kadence template save|list|delete
+```bash
+kadence board --json
+kadence task show KAD-1 --json          # full history and comments
+KADENCE_SOURCE=agent kadence task move KAD-1 in_progress
 ```
 
-Bulk works everywhere: `kadence task move KAD-1,KAD-2 done` — **all or
-nothing**, so a typo changes nothing rather than half your board.
+`init` writes a guide the agent finds on its own — no MCP server to run, no
+token to issue, no network call to make. An MCP wrapper is on the roadmap as an
+**optional package**, so the core keeps its zero dependencies and works with
+agents that have no MCP client at all.
+
+Bulk works everywhere and is all or nothing: `kadence task move KAD-1,KAD-2 done`
+either moves both or changes nothing. A typo does not leave half a board.
 
 ---
 
@@ -148,13 +181,20 @@ tests that fail if they regress. That the conflict problem exists in the wild �
 measured, not assumed. 390 tests, including an end-to-end run through the
 installed binary.
 
-**Not verified.** Whether teams want this. The velocity bet rests on reasoning,
-not on user interviews — that research is
+**Not verified.** That teams and agents actually lose enough context to want
+this. The bet rests on reasoning and on the industry naming the problem out
+loud — not on our own users. That research is
 [designed](docs/research/interview-script.md) and not yet run.
 
-**Known limits.** Conflicts are real but rare: roughly one merge in two
-hundred. That is why the headline is analytics, not conflict-freedom. Terminal
-interaction is covered by manual testing; only the key router is unit-tested.
+**On the roadmap, not shipped.** `kadence context <task>` (the whole history of
+one piece of work, formatted for an agent's context window), `kadence decision`
+(record why, as its own event type) and the optional MCP package. Today the
+history is reachable through `task show --json`, which is where the idea came
+from.
+
+**Known limits.** Conflicts are real but rare: roughly one merge in two hundred.
+Terminal interaction is covered by manual testing; only the key router is
+unit-tested.
 
 ---
 
