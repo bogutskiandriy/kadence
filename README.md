@@ -1,6 +1,6 @@
 # kadence
 
-**Your team and your agents work from the same context — it lives in your repo and remembers what the code cannot.**
+**Your team and your AI agents work from the same context — it lives in your repo and remembers what the code cannot.**
 
 ```bash
 npm install -g kadence
@@ -18,7 +18,7 @@ Your code says **what** exists. `git log` says **when** it changed. Neither says
 what was tried and abandoned, why a task is blocked, or what the team agreed on
 Tuesday.
 
-That gap costs a human a few minutes. It costs an agent the entire session:
+That gap costs a human a few minutes. It costs an AI agent the entire session:
 every new one starts from scratch, re-reads the same files and asks the same
 questions you answered yesterday.
 
@@ -50,7 +50,7 @@ $ kadence task show KAD-1 --json
 ```
 
 That is the whole state of a piece of work, in one call, with no server to ask
-and no context to rebuild. A human reads it in `kadence task show`. An agent
+and no context to rebuild. A human reads it in `kadence task show`. An AI agent
 reads the same thing as JSON.
 
 ## Why events and not files
@@ -150,10 +150,10 @@ kadence task show KAD-1 --json          # full history and comments
 KADENCE_SOURCE=agent kadence task move KAD-1 in_progress
 ```
 
-`init` writes a guide the agent finds on its own — no MCP server to run, no
+`init` writes a guide the AI agent finds on its own — no MCP server to run, no
 token to issue, no network call to make. An MCP wrapper is on the roadmap as an
 **optional package**, so the core keeps its zero dependencies and works with
-agents that have no MCP client at all.
+AI agents that have no MCP client at all.
 
 Bulk works everywhere and is all or nothing: `kadence task move KAD-1,KAD-2 done`
 either moves both or changes nothing. A typo does not leave half a board.
@@ -181,13 +181,13 @@ tests that fail if they regress. That the conflict problem exists in the wild �
 measured, not assumed. 390 tests, including an end-to-end run through the
 installed binary.
 
-**Not verified.** That teams and agents actually lose enough context to want
+**Not verified.** That teams and their AI agents actually lose enough context to want
 this. The bet rests on reasoning and on the industry naming the problem out
 loud — not on our own users. That research is
 [designed](docs/research/interview-script.md) and not yet run.
 
 **On the roadmap, not shipped.** `kadence context <task>` (the whole history of
-one piece of work, formatted for an agent's context window), `kadence decision`
+one piece of work, formatted for an AI agent's context window), `kadence decision`
 (record why, as its own event type) and the optional MCP package. Today the
 history is reachable through `task show --json`, which is where the idea came
 from.

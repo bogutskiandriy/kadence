@@ -23,9 +23,9 @@
 ## Meta
 
 ```
-title:       kadence — shared context for your team and your agents
+title:       kadence — shared context for your team and your AI agents
 description: Tasks, their history and the time they took live in your git repo as an
-             append-only journal. Your team and your agents read the same thing.
+             append-only journal. Your team and your AI agents read the same thing.
 og:image:    the task history JSON on the site's own background
 ```
 
@@ -35,11 +35,11 @@ og:image:    the task history JSON on the site's own background
 
 **H1**
 
-> Your team and your agents, working from the same context.
+> Your team and your AI agents, working from the same context.
 
 **Підзаголовок**
 
-> Tasks, their whole history and the time they took live in your git repo as an append-only journal — one file per event, right next to the code. Agents pick up where the last session stopped. Nobody fills in a form.
+> Tasks, their whole history and the time they took live in your git repo as an append-only journal — one file per event, right next to the code. AI agents pick up where the last session stopped. Nobody fills in a form.
 
 **Головний CTA**
 
@@ -89,7 +89,7 @@ $ kadence task show KAD-1 --json
 
 **Agitate**
 
-> For a person that costs a few minutes. For an agent it costs the whole session: every new one starts from scratch, re-reads the same files, and asks the question you answered yesterday. Then the next one asks again.
+> For a person that costs a few minutes. For an AI agent it costs the whole session: every new one starts from scratch, re-reads the same files, and asks the question you answered yesterday. Then the next one asks again.
 
 **After**
 
@@ -106,7 +106,7 @@ $ kadence task show KAD-1 --json
 Три картки — єдине місце з картками на сторінці:
 
 **State drifts.**
-> A spec written on Monday and edited by an agent on Thursday no longer says what happened. An event cannot drift: it records that something occurred, not what is currently true.
+> A spec written on Monday and edited by an AI agent on Thursday no longer says what happened. An event cannot drift: it records that something occurred, not what is currently true.
 
 **State conflicts.**
 > Two people editing one task on two branches is a merge conflict in every file-based tracker. Here it is not, by construction: append-only, one file per event.
@@ -142,7 +142,7 @@ $ kadence task show KAD-1 --json
 
 > Files first. MCP optional.
 
-> Every command speaks `--json`. Every response carries `schema: "kadence/v1"`. stdout is JSON and nothing else; warnings go to stderr. `init` writes a guide the agent finds on its own — no server to run, no token to issue, no network call to make.
+> Every command speaks `--json`. Every response carries `schema: "kadence/v1"`. stdout is JSON and nothing else; warnings go to stderr. `init` writes a guide the AI agent finds on its own — no server to run, no token to issue, no network call to make.
 
 ```bash
 kadence board --json
@@ -150,7 +150,7 @@ kadence task show KAD-1 --json        # full history and comments
 KADENCE_SOURCE=agent kadence task move KAD-1 in_progress
 ```
 
-> An MCP wrapper is coming as an optional package, so the core keeps its zero dependencies and still works with agents that have no MCP client at all.
+> An MCP wrapper is coming as an optional package, so the core keeps its zero dependencies and still works with AI agents that have no MCP client at all.
 
 **Формулювання свідоме.** Не «no MCP» як гасло — у 2026 це читається як «відстало». «Files first» — це факт і перевага: файли читає будь-який агент, включно з тим, у якого MCP немає.
 
@@ -161,10 +161,10 @@ KADENCE_SOURCE=agent kadence task move KAD-1 in_progress
 **Verified** — без змін.
 
 **Not verified**
-> That teams and agents actually lose enough context to want this. The bet rests on reasoning and on the industry naming the problem out loud — not on our own users.
+> That teams and their AI agents actually lose enough context to want this. The bet rests on reasoning and on the industry naming the problem out loud — not on our own users.
 
 **On the roadmap, not shipped**
-> `kadence context <task>` — the whole history of one piece of work, formatted for an agent's context window. `kadence decision` — record why, as its own event type. The optional MCP package. Today that history is reachable through `task show --json`, which is where the idea came from.
+> `kadence context <task>` — the whole history of one piece of work, formatted for an AI agent's context window. `kadence decision` — record why, as its own event type. The optional MCP package. Today that history is reachable through `task show --json`, which is where the idea came from.
 
 **Known limits** — без змін.
 
@@ -175,8 +175,8 @@ KADENCE_SOURCE=agent kadence task move KAD-1 in_progress
 ## 10. Міні-FAQ
 
 1. **Is this another tracker? We use Jira.**
-   > It does not replace Jira for the company. It keeps the layer Jira has no place for: what actually happened to a piece of work, in a form your agent can read. They live side by side.
-2. **My agent already reads the repo. What does this add?**
+   > It does not replace Jira for the company. It keeps the layer Jira has no place for: what actually happened to a piece of work, in a form your AI agent can read. They live side by side.
+2. **My AI agent already reads the repo. What does this add?**
    > The repo tells it what the code is. It does not tell it what was tried, what was rejected, what is blocked and why. That is the part people keep in their heads and in chat threads — and it is the part that disappears between sessions.
 3. **What does it do to my repository?**
    > It creates `.kadence/` and appends files to it. It edits nothing, deletes nothing, and runs no git command on your behalf.
