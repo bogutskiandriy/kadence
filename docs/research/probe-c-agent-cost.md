@@ -135,7 +135,7 @@ the rule is not only about terminals.
 | # | Action | Rests on |
 |---|---|---|
 | 1 | Stop citing MCP token economics as the reason the wrapper is optional; say the real reasons | Finding 3 |
-| 2 | Give `board --json` a size story — `--fields`, a limit, or a documented refusal | Finding 4 |
+| 2 | ~~Give `board --json` a size story~~ — **done 2026-09-08**: `--fields` on `board` and `task list`, with `unknown_field` naming what exists | Finding 4 |
 | 3 | Put the constant-cost claim in the README, with the number | Finding 1 |
 | 4 | State the I7 consequence where agents will read it | Finding 2 |
 

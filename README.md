@@ -176,6 +176,13 @@ and it is not the saving the industry benchmarks suggest — but it would be a
 second way to say the same thing, and it would not work for agents that have no
 MCP client at all.
 
+Ask for only what you need — a board of a thousand tasks is 803 KB in full, and
+a tenth of that with the fields an agent actually reads:
+
+```bash
+kadence board --json --fields label,status,assignee
+```
+
 Bulk works everywhere and is all or nothing: `kadence task move KAD-1,KAD-2 done`
 either moves both or changes nothing. A typo does not leave half a board.
 
@@ -200,7 +207,7 @@ true.
 
 **Verified.** The merge thesis, on real git branches. Performance and size, by
 tests that fail if they regress. That the conflict problem exists in the wild —
-measured, not assumed. 421 tests, including an end-to-end run through the
+measured, not assumed. 428 tests, including an end-to-end run through the
 installed binary.
 
 **Not verified.** That teams and their AI agents actually lose enough context to want
@@ -208,11 +215,13 @@ this. The bet rests on reasoning and on the industry naming the problem out
 loud — not on our own users. That research is
 [designed](docs/research/interview-script.md) and not yet run.
 
-**On the roadmap, not shipped.** `kadence context <task>` (the whole history of
-one piece of work, formatted for an AI agent's context window), `kadence decision`
-(record why, as its own event type) and the optional MCP package. Today the
-history is reachable through `task show --json`, which is where the idea came
-from.
+**On the roadmap, not shipped.** `kadence decision` (record why, as its own event
+type) and the optional MCP package — the latter kept as a response to someone who
+cannot use the CLI, not as an inevitability.
+
+`kadence context <task>` was dropped: we measured what `task show --json` already
+returns and it is the whole history of one piece of work, 948 bytes, constant.
+The only thing left to add was a different format, and nobody has asked for one.
 
 **Known limits.** Conflicts are real but rare: roughly one merge in two hundred.
 Terminal interaction is covered by manual testing; only the key router is
@@ -241,7 +250,7 @@ revisit it: [docs/decisions/](docs/decisions/).
 
 ```bash
 npm install
-npm test          # 421 tests
+npm test          # 428 tests
 npm run build     # 29 KB bundle
 ```
 

@@ -1,6 +1,13 @@
 import { renderBoard, colorsEnabled } from '../output.js';
 import type { Task } from '../../core/projection.js';
-import { resolveContext, isContext, loadState, serializeTask, type CommandResult } from './task.js';
+import {
+  resolveContext,
+  isContext,
+  loadState,
+  serializeTask,
+  parseFields,
+  type CommandResult,
+} from './task.js';
 import { append } from '../../core/store.js';
 import { ulid } from '../../core/ulid.js';
 import { TERMINAL_STATUS, CANCELLED_STATUS } from '../../core/projection.js';
@@ -24,9 +31,14 @@ export function runBoard(
   cwd: string,
   env: NodeJS.ProcessEnv,
   filters: BoardFilters,
+  fieldSpec?: string,
 ): CommandResult {
   const ctx = resolveContext(cwd, env);
   if (!isContext(ctx)) return ctx;
+
+  // Validated before any work: a typo in --fields should cost nothing.
+  const { fields, error: fieldError } = parseFields(fieldSpec);
+  if (fieldError !== null) return fieldError;
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
 
@@ -75,7 +87,7 @@ export function runBoard(
       schema: 'kadence/v1',
       ok: true,
       columns: Object.fromEntries(
-        Object.entries(columns).map(([k, v]) => [k, v.map(serializeTask)]),
+        Object.entries(columns).map(([k, v]) => [k, v.map((t) => serializeTask(t, fields))]),
       ),
     },
   };

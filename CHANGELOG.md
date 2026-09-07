@@ -12,6 +12,11 @@
   `received`, `allowed` and `hint` where each is knowable. `allowed` matters
   most for statuses: they are configured per project, so an agent cannot learn
   the valid set from documentation.
+- `--fields` on `board --json` and `task list --json`, so an agent can ask for
+  the columns it reads instead of every description. A 1000-task board was
+  803 KB — larger than the journal it was folded from. An unknown name fails
+  with `unknown_field` and the list of what exists; the selectable fields are
+  published in `kadence schema --json`.
 - `init` writes the kadence section into `CLAUDE.md` as well as `AGENTS.md`.
   Claude Code does not read `AGENTS.md`, so a repository carrying only the
   latter was invisible to the largest agent audience. Human-written text in
@@ -30,6 +35,13 @@
 
 - `resolveRefs` returns a full `CommandResult` instead of an error string,
   removing seven copies of the same error-construction line.
+
+### Removed
+
+- `kadence context <task>` is off the roadmap. `task show --json` already returns
+  the whole history of one piece of work in 948 bytes, constant regardless of
+  project size; the remaining difference was formatting nobody has asked for.
+  See [Probe C](docs/research/probe-c-agent-cost.md).
 
 All three follow [ADR-009](docs/decisions/009-the-agent-contract.md) and the
 research in `docs/research/agent-readability-2026-09.md`.

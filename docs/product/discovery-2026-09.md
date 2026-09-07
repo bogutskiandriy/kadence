@@ -66,8 +66,9 @@ premise being true — these are repairs and consequences.
 | 3 | **State the I7 consequence for agents** — that `KAD-3` cannot be found by grep, so the CLI is the only bridge | Probe C §2, verified | trivial |
 | 4 | **A real-size fixture in the suite** | the truncation bug passed 418 tests because every fixture was small | small, done for JSON |
 
-Items 2–4 are largely done in this cycle. Item 1 is open and is the only one
-that needs a design decision.
+**All four are done as of 2026-09-08.** Item 1 shipped as `--fields` on
+`board --json` and `task list --json`, with `unknown_field` returning the list of
+what exists; the selectable set is published in `kadence schema --json`.
 
 ## 4. What the evidence supports removing
 
@@ -91,9 +92,9 @@ The remaining difference between the two is *formatting* — and we have no
 evidence that any agent needs a different format from the JSON it already parses
 cleanly. Building it would be inventing a requirement.
 
-**Recommendation:** drop it from the roadmap until someone asks. If the request
-arrives, it will arrive with the format attached, which is the part we cannot
-guess.
+**Decided 2026-09-08: dropped.** Removed from the README roadmap and annotated in
+prioritization. If the request arrives, it will arrive with the format attached,
+which is the part we cannot guess.
 
 ### Downgrade: the optional MCP package
 

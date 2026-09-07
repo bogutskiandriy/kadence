@@ -54,8 +54,15 @@ returns nothing. Folding the journal yourself is the only alternative to asking.
 
 Asking is also cheaper, and stays cheap: \`task show --json\` is about 950 bytes
 whether the project holds ten tasks or a thousand, while the journal behind it
-grows past 500 KB. The one exception is \`board --json\`, which returns every task
-in full — on a large project prefer \`task list\` with filters.
+grows past 500 KB.
+
+\`board --json\` is the exception: it returns every task in full, which on a large
+project is a lot of description you did not ask for. Narrow it:
+
+    kadence board --json --fields label,status,assignee
+    kadence task list --json --fields id,label,status
+
+\`kadence schema --json\` lists every selectable field.
 
 ## What not to do
 
@@ -110,6 +117,34 @@ export function upsertAgentsSection(existing: string | null): string {
 }
 
 /**
+ * The task fields `--fields` can select.
+ *
+ * Same order as `serializeTask` emits them, and published in the contract: an
+ * agent that cannot see the list has to guess, and a guess costs it a round trip
+ * (Probe C §4).
+ */
+export const TASK_FIELDS = [
+  'id',
+  'label',
+  'title',
+  'description',
+  'type',
+  'priority',
+  'status',
+  'labels',
+  'assignee',
+  'reporter',
+  'sprint',
+  'loggedHours',
+  'parent',
+  'blockedBy',
+  'due',
+  'comments',
+  'estimate',
+  'history',
+] as const;
+
+/**
  * Every failure kadence can name.
  *
  * Agents branch on these, so the list is part of the --json contract: a code may
@@ -125,6 +160,7 @@ export const ERROR_CODES = [
   'unknown_status',
   'unknown_type',
   'unknown_priority',
+  'unknown_field',
   'invalid_argument',
 ] as const;
 
@@ -140,6 +176,7 @@ const ERROR_MEANINGS: Record<ErrorCode, string> = {
     'The status is not one of this project\u2019s columns. They are configurable, so read `allowed`.',
   unknown_type: 'The task type is not one of the four kadence defines.',
   unknown_priority: 'The priority is not one of the four kadence defines.',
+  unknown_field: 'A name given to --fields is not a task field. Read `allowed`.',
   invalid_argument: 'An argument was missing or malformed; the command did nothing.',
 };
 
@@ -185,9 +222,12 @@ export function buildContract(version: string): Record<string, unknown> {
           'blockedBy',
           'loggedHours',
         ],
+        selectable: [...TASK_FIELDS],
         notes: {
           id: 'ULID. The identity of the task; KAD-N is a label derived while folding and is never stored.',
           history: 'Present in `task show` only — the events that produced this state.',
+          required:
+            'What a full response carries. With --fields you get exactly what you asked for and nothing else.',
         },
       },
       board: { required: ['schema', 'ok', 'columns'] },
@@ -203,8 +243,19 @@ export function buildContract(version: string): Record<string, unknown> {
     commands: [
       { name: 'schema', summary: 'This contract. Works outside a repository.' },
       { name: 'init', summary: 'Create .kadence/ and the agent instruction files.' },
-      { name: 'board', summary: 'The whole board, grouped by column.', json: true },
-      { name: 'task list', summary: 'All tasks, filterable.', json: true },
+      {
+        name: 'board',
+        summary:
+          'The whole board, grouped by column. Every task in full — pass --fields on a large project.',
+        flags: ['--json', '--fields'],
+        json: true,
+      },
+      {
+        name: 'task list',
+        summary: 'All tasks, filterable.',
+        flags: ['--json', '--fields'],
+        json: true,
+      },
       {
         name: 'task show',
         summary: 'One task with its comments and full history.',

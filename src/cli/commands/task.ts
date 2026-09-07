@@ -1,4 +1,4 @@
-import { ERROR_CODES, type ErrorCode } from '../../agent/contract.js';
+import { ERROR_CODES, TASK_FIELDS, type ErrorCode } from '../../agent/contract.js';
 import { findRepoRoot, getActorEmail } from '../../core/git.js';
 import { append, dataDir, readAll } from '../../core/store.js';
 import { ulid } from '../../core/ulid.js';
@@ -58,7 +58,7 @@ export interface CommandError {
   hint?: string;
 }
 
-export { ERROR_CODES, type ErrorCode };
+export { ERROR_CODES, TASK_FIELDS, type ErrorCode };
 
 export interface CommandResult {
   ok: boolean;
@@ -303,6 +303,8 @@ export interface ListOptions extends TaskFilters {
   sort?: string;
   /** Show parent/child structure instead of a flat list. */
   tree?: boolean;
+  /** Comma-separated field names for --json; absent means every field. */
+  fields?: string;
 }
 
 export function runTaskList(
@@ -320,6 +322,9 @@ export function runTaskList(
   if (options.priority !== undefined && !PRIORITIES.includes(options.priority as Priority)) {
     return unknownValue('unknown_priority', 'priority', options.priority as string, PRIORITIES);
   }
+  // Validated before any work: a typo in --fields should cost nothing.
+  const { fields, error: fieldError } = parseFields(options.fields);
+  if (fieldError !== null) return fieldError;
   if (options.sort !== undefined && !isSortKey(options.sort)) {
     return {
       ok: false,
@@ -362,7 +367,7 @@ export function runTaskList(
     data: {
       schema: 'kadence/v1',
       ok: true,
-      tasks: tasks.map(serializeTask),
+      tasks: tasks.map((t) => serializeTask(t, fields)),
       cycles: state.cycles,
     },
   };
@@ -438,7 +443,62 @@ export function runTaskMove(
 }
 
 /** Stable task shape for agents. New fields are only ever added. */
-export function serializeTask(t: Task): Record<string, unknown> {
+/**
+ * Turns `--fields id,label` into a checked list.
+ *
+ * Returns `null` when the flag was absent, which every caller reads as "all
+ * fields" — distinct from an empty selection, which is a user error.
+ */
+export function parseFields(
+  spec: string | undefined,
+): { fields: readonly string[] | null; error: CommandResult | null } {
+  if (spec === undefined) return { fields: null, error: null };
+
+  const wanted = spec
+    .split(',')
+    .map((f) => f.trim())
+    .filter((f) => f.length > 0);
+
+  if (wanted.length === 0) {
+    return {
+      fields: null,
+      error: failure(2, 'invalid_argument', '--fields needs at least one field name.', {
+        allowed: TASK_FIELDS,
+      }),
+    };
+  }
+
+  const unknown = wanted.find((f) => !TASK_FIELDS.includes(f as (typeof TASK_FIELDS)[number]));
+  if (unknown !== undefined) {
+    return {
+      fields: null,
+      error: failure(
+        2,
+        'unknown_field',
+        `Unknown field "${unknown}".\nAvailable: ${TASK_FIELDS.join(', ')}`,
+        { received: unknown, allowed: TASK_FIELDS },
+      ),
+    };
+  }
+
+  return { fields: wanted, error: null };
+}
+
+/**
+ * The JSON form of a task, whole or narrowed to `fields`.
+ *
+ * A board of 1000 tasks came to 803 KB — larger than the journal it was folded
+ * from — because every task went out in full. Selection is the fix; the shape of
+ * each field is unchanged, so a narrowed response is a subset, never a variant
+ * (Probe C §4, ADR-009).
+ */
+export function serializeTask(t: Task, fields: readonly string[] | null = null): Record<string, unknown> {
+  const full = fullTask(t);
+  if (fields === null) return full;
+  return Object.fromEntries(fields.map((f) => [f, full[f]]));
+}
+
+function fullTask(t: Task): Record<string, unknown> {
   return {
     id: t.id,
     label: t.label,

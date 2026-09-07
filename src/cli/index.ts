@@ -191,12 +191,14 @@ cli
   .option('--tree', 'Show parent/child structure')
   .option('--parent <task>', 'Parent task, e.g. KAD-1 (use "none" to detach)')
   .option('--template <name>', 'Pre-fill fields from a saved template')
+  .option('--fields <list>', 'JSON only: comma-separated task fields to return')
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence task add "Fix login" -d "Broken since 2.3" --type bug --priority high --estimate 3')
   .example('  kadence task list --status in_progress --sort priority')
   .example('  kadence task list --search cookie --overdue')
   .example('  kadence task list --assignee me --label auth')
   .example('  kadence task list --tree')
+  .example('  kadence task list --json --fields id,label,status')
   .example('  kadence task move KAD-1,KAD-2,KAD-3 done     bulk: all or nothing')
   .example('  kadence task add "Login form" --parent KAD-1   KAD-1 can be an epic')
   .example('  kadence task parent KAD-2 KAD-1')
@@ -220,6 +222,7 @@ cli
       options: {
         title?: string;
         description?: string;
+        fields?: string;
         type?: string;
         priority?: string;
         assignee?: string;
@@ -444,6 +447,8 @@ cli
               ...(options.dueBefore !== undefined ? { dueBefore: options.dueBefore } : {}),
               ...(options.sort !== undefined ? { sort: options.sort } : {}),
               ...(options.tree === true ? { tree: true } : {}),
+              // Selection only narrows JSON; the table renders its own columns.
+              ...(json && options.fields !== undefined ? { fields: options.fields } : {}),
             }),
             json,
           );
@@ -496,15 +501,17 @@ cli
 
 cli
   .command('board [action]', 'Kanban board in the terminal; "config" edits the columns')
+  .option('--fields <list>', 'JSON only: comma-separated task fields to return')
   .option('--statuses <list>', 'Comma-separated columns, e.g. "todo,doing,done"')
   .option('-a, --assignee <who>', 'Only this person\'s tasks; "me" means you')
   .option('--sprint', 'Only tasks in the active sprint')
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence board')
   .example('  kadence board --assignee me --sprint')
+  .example('  kadence board --json --fields label,status,assignee')
   .example('  kadence board config')
   .example('  kadence board config --statuses "todo,doing,review,done"')
-  .action((action: string | undefined, options: { assignee?: string; sprint?: boolean; statuses?: string; json?: boolean }) => {
+  .action((action: string | undefined, options: { assignee?: string; sprint?: boolean; statuses?: string; fields?: string; json?: boolean }) => {
     if (action === 'config') {
       emit(runBoardConfig(process.cwd(), process.env, options.statuses), options.json === true);
     }
@@ -512,10 +519,16 @@ cli
       emit(usage(`Unknown action "${action}".\nAvailable: config\n  kadence board --help`), options.json === true);
     }
     emit(
-      runBoard(process.cwd(), process.env, {
-        ...(options.assignee !== undefined ? { assignee: options.assignee } : {}),
-        ...(options.sprint === true ? { sprint: 'active' as const } : {}),
-      }),
+      runBoard(
+        process.cwd(),
+        process.env,
+        {
+          ...(options.assignee !== undefined ? { assignee: options.assignee } : {}),
+          ...(options.sprint === true ? { sprint: 'active' as const } : {}),
+        },
+        // Selection only narrows JSON; the human board renders its own columns.
+        options.json === true ? options.fields : undefined,
+      ),
       options.json === true,
     );
   });
