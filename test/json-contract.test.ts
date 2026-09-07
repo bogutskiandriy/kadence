@@ -124,3 +124,115 @@ describe('the --json contract', () => {
     expect(r.stdout).not.toContain('[');
   });
 });
+
+describe('errors an agent can act on', () => {
+  // An agent handed only a prose message can tell that something failed and
+  // nothing else — in the worst case it retries the same broken input until it
+  // runs out of budget. See docs/research/agent-readability-2026-09.md §4.
+
+  it('names a machine-readable code, not just a sentence', () => {
+    const r = run(['task', 'move', 'KAD-99', 'done', '--json']);
+    expect(JSON.parse(r.stdout).error.code).toBe('task_not_found');
+  });
+
+  it('echoes what it received, so the agent knows which input was wrong', () => {
+    const r = run(['task', 'move', 'KAD-99', 'done', '--json']);
+    expect(JSON.parse(r.stdout).error.received).toBe('KAD-99');
+  });
+
+  it('lists the allowed statuses — they are project-configurable, so guessing fails', () => {
+    run(['task', 'add', 'Task']);
+    const r = run(['task', 'move', 'KAD-1', 'shipped', '--json']);
+    const err = JSON.parse(r.stdout).error;
+
+    expect(err.code).toBe('unknown_status');
+    expect(err.received).toBe('shipped');
+    expect(err.allowed).toContain('done');
+    expect(err.hint).toMatch(/board config|statuses/i);
+  });
+
+  it('reports the configured statuses, not the defaults', () => {
+    // The whole reason `allowed` is worth carrying: a team's columns are its
+    // own, so an agent cannot learn the valid set from documentation. `done`
+    // always survives — velocity is computed from it.
+    run(['board', 'config', '--statuses', 'todo,doing,done']);
+    run(['task', 'add', 'Task']);
+    const r = run(['task', 'move', 'KAD-1', 'in_progress', '--json']);
+    const err = JSON.parse(r.stdout).error;
+
+    expect(err.code).toBe('unknown_status');
+    expect(err.allowed).toEqual(['todo', 'doing', 'done']);
+    expect(err.allowed).not.toContain('in_progress');
+  });
+
+  it('lists the allowed types', () => {
+    const r = run(['task', 'add', 'Task', '--type', 'chore', '--json']);
+    const err = JSON.parse(r.stdout).error;
+    expect(err.code).toBe('unknown_type');
+    expect(err.allowed).toContain('bug');
+  });
+
+  it('lists the allowed priorities', () => {
+    const r = run(['task', 'add', 'Task', '--priority', 'critical', '--json']);
+    const err = JSON.parse(r.stdout).error;
+    expect(err.code).toBe('unknown_priority');
+    expect(err.received).toBe('critical');
+    expect(err.allowed).toContain('urgent');
+  });
+
+  it('says the repository was never initialised, distinctly from any other failure', () => {
+    const fresh = mkdtempSync(join(tmpdir(), 'kadence-bare-'));
+    execFileSync('git', ['init', '-q'], { cwd: fresh });
+    const r = spawnSync('node', [CLI, 'task', 'list', '--json'], {
+      cwd: fresh,
+      encoding: 'utf8',
+    });
+    expect(JSON.parse(r.stdout).error.code).toBe('not_initialised');
+    rmSync(fresh, { recursive: true, force: true });
+  });
+
+  it('keeps the human message alongside the code — nothing existing breaks', () => {
+    const r = run(['task', 'move', 'KAD-99', 'done', '--json']);
+    expect(JSON.parse(r.stdout).error.message).toMatch(/KAD-99/);
+  });
+
+  it('carries no retry flag: every failure here is deterministic', () => {
+    // There is no network and no lock. Retrying the same command with the same
+    // input always fails the same way, so a `retryable` field would be a
+    // constant `false` dressed up as information (ADR-009).
+    const r = run(['task', 'move', 'KAD-99', 'done', '--json']);
+    expect(JSON.parse(r.stdout).error.retryable).toBeUndefined();
+  });
+});
+
+describe('large responses survive the pipe', () => {
+  // Found by Probe C, not by the suite: every --json response over 128 KiB was
+  // truncated mid-string when stdout was a pipe — which is exactly how an agent
+  // reads it. process.exit() does not wait for an asynchronous write to drain,
+  // and a pipe write is asynchronous while a file write is not. The suite missed
+  // it because every fixture until now was small.
+  it('a board bigger than the pipe buffer still parses', () => {
+    const filler = 'x'.repeat(6000);
+    for (let i = 0; i < 25; i++) {
+      run(['task', 'add', `Task ${i}`, '-d', filler]);
+    }
+
+    const r = run(['board', '--json']);
+    expect(r.stdout.length).toBeGreaterThan(131072);
+    expect(() => JSON.parse(r.stdout)).not.toThrow();
+  });
+
+  it('and reports every task it was given', () => {
+    const filler = 'x'.repeat(6000);
+    for (let i = 0; i < 25; i++) {
+      run(['task', 'add', `Task ${i}`, '-d', filler]);
+    }
+
+    const board = JSON.parse(run(['board', '--json']).stdout);
+    const count = Object.values(board.columns as Record<string, unknown[]>).reduce(
+      (n, column) => n + column.length,
+      0,
+    );
+    expect(count).toBe(25);
+  });
+});

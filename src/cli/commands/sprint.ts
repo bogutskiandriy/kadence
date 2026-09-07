@@ -4,7 +4,9 @@ import { sprintReport, type SprintReport } from '../../core/velocity.js';
 import { burndown, renderBurndown } from '../../core/burndown.js';
 import { readAll } from '../../core/store.js';
 import type { ProjectState } from '../../core/projection.js';
-import { resolveContext, isContext, loadState, findTask, type CommandResult, type Context } from './task.js';
+import { resolveContext, isContext, loadState, findTask, type CommandResult, type Context,
+  taskNotFound,
+} from './task.js';
 
 /**
  * Sprint commands.
@@ -112,7 +114,7 @@ export function runSprintAdd(
 
   const task = findTask(state, ref);
   if (task === undefined) {
-    return { ok: false, exitCode: 1, message: `No task ${ref}.\n  kadence task list` };
+    return taskNotFound(ref);
   }
   if (task.sprint === sprint.id) {
     return { ok: true, exitCode: 0, warnings, message: `${task.label} is already in the sprint.` };

@@ -53,6 +53,11 @@ That is the whole state of a piece of work, in one call, with no server to ask
 and no context to rebuild. A human reads it in `kadence task show`. An AI agent
 reads the same thing as JSON.
 
+**And it stays one call.** That answer is 948 bytes whether the project holds ten
+tasks or a thousand — while the journal behind it grows from 5 KB to 528 KB. The
+cost of asking does not grow with the history that makes the answer worth having.
+[Measured](docs/research/probe-c-agent-cost.md).
+
 ## Why events and not files
 
 Every other tool that keeps work in a repository keeps **state**: a task file, a
@@ -150,10 +155,26 @@ kadence task show KAD-1 --json          # full history and comments
 KADENCE_SOURCE=agent kadence task move KAD-1 in_progress
 ```
 
-`init` writes a guide the AI agent finds on its own — no MCP server to run, no
-token to issue, no network call to make. An MCP wrapper is on the roadmap as an
-**optional package**, so the core keeps its zero dependencies and works with
-AI agents that have no MCP client at all.
+`init` writes that guide into both `AGENTS.md` and `CLAUDE.md` — the first is the
+cross-tool convention, the second is what Claude Code actually reads. Whatever a
+human wrote in either is left alone. No MCP server to run, no token to issue, no
+network call to make.
+
+The contract is not a promise you have to take on trust:
+
+```bash
+kadence schema --json      # every command, every field, every error code
+```
+
+A failure carries `error.code` and, where the valid set is knowable, `allowed` —
+which matters most for statuses, because they are configured per project and no
+documentation can tell an agent what yours are.
+
+An MCP wrapper stays on the roadmap as an **optional package**: it costs about
+700 tokens a session over the CLI path — [we measured it](docs/research/probe-c-agent-cost.md),
+and it is not the saving the industry benchmarks suggest — but it would be a
+second way to say the same thing, and it would not work for agents that have no
+MCP client at all.
 
 Bulk works everywhere and is all or nothing: `kadence task move KAD-1,KAD-2 done`
 either moves both or changes nothing. A typo does not leave half a board.
@@ -164,10 +185,11 @@ either moves both or changes nothing. A typo does not leave half a board.
 
 | | |
 |---|---|
-| Install | 32 KB, one runtime dependency |
+| Install | 29 KB, one runtime dependency |
 | Startup | 80 ms |
 | 10,000 events | 28 ms cold, 7 ms warm |
 | Journal on disk | 1.9 MB |
+| One task, as an agent reads it | 948 bytes — the same at 10 tasks or 1,000 |
 
 These are tests. They fail the build on regression, which is why they are still
 true.
@@ -178,7 +200,7 @@ true.
 
 **Verified.** The merge thesis, on real git branches. Performance and size, by
 tests that fail if they regress. That the conflict problem exists in the wild —
-measured, not assumed. 390 tests, including an end-to-end run through the
+measured, not assumed. 421 tests, including an end-to-end run through the
 installed binary.
 
 **Not verified.** That teams and their AI agents actually lose enough context to want
@@ -219,8 +241,8 @@ revisit it: [docs/decisions/](docs/decisions/).
 
 ```bash
 npm install
-npm test          # 390 tests
-npm run build     # 32 KB bundle
+npm test          # 421 tests
+npm run build     # 29 KB bundle
 ```
 
 `CLAUDE.md` documents the invariants, the boundaries, and the decisions that

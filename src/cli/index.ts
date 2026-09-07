@@ -16,6 +16,8 @@ import {
   TASK_STATUSES,
   type CommandResult,
 } from './commands/task.js';
+import { buildContract } from '../agent/contract.js';
+import { writeSync } from 'node:fs';
 import { editText, canUseEditor } from './editor.js';
 import { runBoard, runBoardConfig } from './commands/board.js';
 import {
@@ -38,6 +40,28 @@ import { TASK_TYPES, PRIORITIES } from '../core/projection.js';
 import { SORT_KEYS } from '../core/query.js';
 
 /**
+ * Writes to a file descriptor and does not return until the bytes are gone.
+ *
+ * `process.stdout.write` is asynchronous when stdout is a pipe — which is how
+ * every agent reads us — and `process.exit()` does not wait for it. Anything
+ * past the pipe buffer was silently truncated mid-JSON; a file, being a
+ * synchronous write, looked fine. Found by Probe C, not by the suite.
+ */
+function writeAll(fd: number, text: string): void {
+  const buffer = Buffer.from(text, 'utf8');
+  let offset = 0;
+  while (offset < buffer.length) {
+    try {
+      offset += writeSync(fd, buffer, offset, buffer.length - offset);
+    } catch (err) {
+      // A non-blocking pipe refuses the write while its buffer is full; the
+      // reader drains it a moment later. Everything else is a real failure.
+      if ((err as NodeJS.ErrnoException).code !== 'EAGAIN') throw err;
+    }
+  }
+}
+
+/**
  * Entry point.
  *
  * Commands are declared as `task <action>` rather than `task add`: cac does not
@@ -55,17 +79,19 @@ const cli = cac('kadence');
  * cannot parse it. Everything human goes to stderr.
  */
 function emit(result: CommandResult, json: boolean): never {
-  for (const w of result.warnings ?? []) process.stderr.write(`${w}\n`);
+  for (const w of result.warnings ?? []) writeAll(2, `${w}\n`);
 
   if (json) {
+    // A structured error when the command supplied one, the sentence otherwise:
+    // an agent branches on `error.code`, and nothing existing loses `message`.
     const payload = result.data ?? {
       schema: 'kadence/v1',
       ok: result.ok,
-      ...(result.ok ? {} : { error: { message: result.message } }),
+      ...(result.ok ? {} : { error: result.error ?? { message: result.message } }),
     };
-    process.stdout.write(`${JSON.stringify(payload)}\n`);
+    writeAll(1, `${JSON.stringify(payload)}\n`);
   } else {
-    (result.ok ? process.stdout : process.stderr).write(`${result.message}\n`);
+    writeAll(result.ok ? 1 : 2, `${result.message}\n`);
   }
   process.exit(result.exitCode);
 }
@@ -102,6 +128,42 @@ function textFromFlagOrEditor(
 function usage(message: string): CommandResult {
   return { ok: false, exitCode: 2, message };
 }
+
+/**
+ * The human answer to `kadence schema`.
+ *
+ * A person asking this wants to know what an agent will be told, not to read the
+ * JSON — so it summarises rather than pretty-prints.
+ */
+function renderContractSummary(contract: Record<string, unknown>): string {
+  const commands = contract['commands'] as { name: string }[];
+  const errors = contract['errors'] as { code: string }[];
+  return (
+    `kadence/v1 — ${commands.length} commands, ${errors.length} error codes.\n` +
+    `${contract['stability'] as string}\n\n` +
+    'The machine-readable form is what agents read:\n  kadence schema --json'
+  );
+}
+
+cli
+  .command('schema', 'The machine-readable --json contract, for agents')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence schema --json')
+  .action((options: { json?: boolean }) => {
+    const json = options.json === true;
+    // No resolveContext: the contract describes the tool, not a project, and an
+    // agent asks what kadence can do before it has a repository to ask about.
+    const contract = buildContract(__VERSION__);
+    emit(
+      {
+        ok: true,
+        exitCode: 0,
+        message: renderContractSummary(contract),
+        data: { schema: 'kadence/v1', ok: true, contract },
+      },
+      json,
+    );
+  });
 
 cli
   .command('init', 'Set up kadence in this repository')

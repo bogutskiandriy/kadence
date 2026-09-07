@@ -6,6 +6,17 @@ import { AGENT_README, upsertAgentsSection } from '../../agent/contract.js';
 
 const GITIGNORE_ENTRY = '.kadence/state.json';
 
+/**
+ * Where agents look for project instructions.
+ *
+ * AGENTS.md is the cross-tool convention (Codex, Cursor, Copilot, Gemini CLI and
+ * ~30 others). Claude Code loads CLAUDE.md and does not read AGENTS.md — so a
+ * repository with only the former is invisible to the largest agent audience.
+ * The same section goes into both, regenerated on every init, so they cannot
+ * drift (ADR-009).
+ */
+const INSTRUCTION_FILES = ['AGENTS.md', 'CLAUDE.md'] as const;
+
 export interface InitResult {
   ok: boolean;
   message: string;
@@ -35,7 +46,9 @@ export function runInit(cwd: string): InitResult {
   const readme = join(dataDir(root), 'README.md');
   if (!existsSync(readme)) writeFileSync(readme, AGENT_README, 'utf8');
 
-  ensureAgentsFile(root);
+  // Two files, not one: AGENTS.md is the cross-tool convention, and Claude Code
+  // reads CLAUDE.md instead of it (ADR-009).
+  for (const name of INSTRUCTION_FILES) ensureInstructionFile(root, name);
 
   return {
     ok: true,
@@ -62,9 +75,9 @@ function ensureGitignore(root: string): void {
   writeFileSync(path, `${content}${prefix}${GITIGNORE_ENTRY}\n`, 'utf8');
 }
 
-/** Extends AGENTS.md without touching what a human wrote. */
-function ensureAgentsFile(root: string): void {
-  const path = join(root, 'AGENTS.md');
+/** Extends an instruction file without touching what a human wrote. */
+function ensureInstructionFile(root: string, name: string): void {
+  const path = join(root, name);
   const existing = existsSync(path) ? readFileSync(path, 'utf8') : null;
   const next = upsertAgentsSection(existing);
   if (next !== existing) writeFileSync(path, next, 'utf8');

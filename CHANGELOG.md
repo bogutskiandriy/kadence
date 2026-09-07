@@ -1,5 +1,39 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `kadence schema --json` — the machine-readable contract behind
+  `schema: "kadence/v1"`: every command, the fields you can rely on, and every
+  error code. Works outside a repository, because an agent asks what the tool
+  does before it has a project to ask about.
+- Failed `--json` calls now carry `error.code` from a closed list, plus
+  `received`, `allowed` and `hint` where each is knowable. `allowed` matters
+  most for statuses: they are configured per project, so an agent cannot learn
+  the valid set from documentation.
+- `init` writes the kadence section into `CLAUDE.md` as well as `AGENTS.md`.
+  Claude Code does not read `AGENTS.md`, so a repository carrying only the
+  latter was invisible to the largest agent audience. Human-written text in
+  either file is left untouched, and a repeat `init` does not duplicate.
+
+### Fixed
+
+- **Any `--json` response larger than the pipe buffer was truncated mid-string.**
+  `process.exit()` does not wait for an asynchronous write to drain, and writing
+  to a pipe — how every agent reads us — is asynchronous, while writing to a file
+  is not. A 200-task board produced 131 072 bytes and a parse error; the same
+  command redirected to a file was valid. Output is now written synchronously.
+  Found by Probe C with 418 tests passing.
+
+### Changed
+
+- `resolveRefs` returns a full `CommandResult` instead of an error string,
+  removing seven copies of the same error-construction line.
+
+All three follow [ADR-009](docs/decisions/009-the-agent-contract.md) and the
+research in `docs/research/agent-readability-2026-09.md`.
+
 ## [0.1.5] — 2026-09-03
 
 ### Changed

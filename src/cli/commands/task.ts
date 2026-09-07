@@ -1,3 +1,4 @@
+import { ERROR_CODES, type ErrorCode } from '../../agent/contract.js';
 import { findRepoRoot, getActorEmail } from '../../core/git.js';
 import { append, dataDir, readAll } from '../../core/store.js';
 import { ulid } from '../../core/ulid.js';
@@ -33,14 +34,73 @@ import { existsSync } from 'node:fs';
  */
 export const TASK_STATUSES: readonly string[] = DEFAULT_STATUSES;
 
+/**
+ * A failure an agent can act on without parsing prose.
+ *
+ * `code` is the stable part — it is what a program branches on, and it never
+ * changes once published. `allowed` matters more here than in most CLIs because
+ * statuses are project-configurable: an agent cannot know the valid set from the
+ * documentation, only from the answer (ADR-009).
+ *
+ * Deliberately absent: `retryable`. There is no network and no lock, so the same
+ * input always fails the same way; the field would be a constant dressed up as
+ * information.
+ */
+export interface CommandError {
+  code: ErrorCode;
+  /** The same sentence a human sees, so nothing is lost in --json mode. */
+  message: string;
+  /** The offending input, echoed back. */
+  received?: string;
+  /** The values that would have worked, when the set is knowable. */
+  allowed?: readonly string[];
+  /** The command that resolves it. */
+  hint?: string;
+}
+
+export { ERROR_CODES, type ErrorCode };
+
 export interface CommandResult {
   ok: boolean;
   message: string;
   /** Payload for --json mode. */
   data?: Record<string, unknown>;
+  /** Structured failure detail for --json mode; absent when ok. */
+  error?: CommandError;
   /** Goes to stderr so it never corrupts the JSON on stdout. */
   warnings?: string[];
   exitCode: 0 | 1 | 2;
+}
+
+/** Builds a failing result whose human message and machine code stay in step. */
+export function failure(
+  exitCode: 1 | 2,
+  code: ErrorCode,
+  message: string,
+  detail: Omit<CommandError, 'code' | 'message'> = {},
+): CommandResult {
+  return { ok: false, exitCode, message, error: { code, message, ...detail } };
+}
+
+/** The same task-is-missing answer everywhere — it is raised from six commands. */
+export function taskNotFound(ref: string): CommandResult {
+  return failure(1, 'task_not_found', `No task ${ref}.\n  kadence task list`, {
+    received: ref,
+    hint: 'kadence task list --json',
+  });
+}
+
+/** A wrong value for a fixed vocabulary: type and priority. */
+function unknownValue(
+  code: 'unknown_type' | 'unknown_priority',
+  label: string,
+  value: string,
+  available: readonly string[],
+): CommandResult {
+  return failure(2, code, `Unknown ${label} "${value}".\nAvailable: ${available.join(', ')}`, {
+    received: value,
+    allowed: available,
+  });
 }
 
 export interface Context {
@@ -58,13 +118,13 @@ export interface Context {
 export function resolveContext(cwd: string, env: NodeJS.ProcessEnv): Context | CommandResult {
   const root = findRepoRoot(cwd);
   if (root === null) {
-    return {
-      ok: false,
-      exitCode: 1,
-      message:
-        'kadence lives inside a git repository, and there is none here.\n' +
+    return failure(
+      1,
+      'not_a_repository',
+      'kadence lives inside a git repository, and there is none here.\n' +
         'Create one and try again:\n  git init',
-    };
+      { hint: 'git init' },
+    );
   }
 
   // Check .kadence/, NOT .kadence/events/: git does not version empty
@@ -72,22 +132,20 @@ export function resolveContext(cwd: string, env: NodeJS.ProcessEnv): Context | C
   // without events. The CLI used to demand a repeat init on a perfectly
   // working repository — found by the merge integration test.
   if (!existsSync(dataDir(root))) {
-    return {
-      ok: false,
-      exitCode: 1,
-      message: 'No .kadence/ found here.\nRun:\n  npx kadence init',
-    };
+    return failure(1, 'not_initialised', 'No .kadence/ found here.\nRun:\n  npx kadence init', {
+      hint: 'kadence init',
+    });
   }
 
   const actor = getActorEmail(root);
   if (actor === null) {
-    return {
-      ok: false,
-      exitCode: 1,
-      message:
-        'Git does not know who you are, so there is no author for the event.\n' +
+    return failure(
+      1,
+      'no_git_identity',
+      'Git does not know who you are, so there is no author for the event.\n' +
         'Run:\n  git config user.email you@example.com',
-    };
+      { hint: 'git config user.email you@example.com' },
+    );
   }
 
   // We never guess the source: without the variable an event counts as human.
@@ -126,18 +184,10 @@ export function runTaskAdd(
   }
 
   if (options.type !== undefined && !TASK_TYPES.includes(options.type as TaskType)) {
-    return {
-      ok: false,
-      exitCode: 2,
-      message: `Unknown type "${options.type}".\nAvailable: ${TASK_TYPES.join(', ')}`,
-    };
+    return unknownValue('unknown_type', 'type', options.type as string, TASK_TYPES);
   }
   if (options.priority !== undefined && !PRIORITIES.includes(options.priority as Priority)) {
-    return {
-      ok: false,
-      exitCode: 2,
-      message: `Unknown priority "${options.priority}".\nAvailable: ${PRIORITIES.join(', ')}`,
-    };
+    return unknownValue('unknown_priority', 'priority', options.priority as string, PRIORITIES);
   }
 
   // A parent may be given as KAD-1, but the event must store the stable ULID.
@@ -234,13 +284,19 @@ export function findTask(state: ProjectState, ref: string): Task | undefined {
 }
 
 function unknownStatus(value: string, available: readonly string[]): CommandResult {
-  return {
-    ok: false,
-    exitCode: 2,
-    message:
-      `Unknown status "${value}".\nAvailable: ${available.join(', ')}\n` +
+  return failure(
+    2,
+    'unknown_status',
+    `Unknown status "${value}".\nAvailable: ${available.join(', ')}\n` +
       '  kadence board config --statuses "todo,doing,done"',
-  };
+    {
+      received: value,
+      // From the folded state, never from the constant: a team may have
+      // configured its own columns, and an agent has no other way to learn them.
+      allowed: available,
+      hint: 'kadence board statuses --json',
+    },
+  );
 }
 
 export interface ListOptions extends TaskFilters {
@@ -259,18 +315,10 @@ export function runTaskList(
 
 
   if (options.type !== undefined && !TASK_TYPES.includes(options.type as TaskType)) {
-    return {
-      ok: false,
-      exitCode: 2,
-      message: `Unknown type "${options.type}".\nAvailable: ${TASK_TYPES.join(', ')}`,
-    };
+    return unknownValue('unknown_type', 'type', options.type as string, TASK_TYPES);
   }
   if (options.priority !== undefined && !PRIORITIES.includes(options.priority as Priority)) {
-    return {
-      ok: false,
-      exitCode: 2,
-      message: `Unknown priority "${options.priority}".\nAvailable: ${PRIORITIES.join(', ')}`,
-    };
+    return unknownValue('unknown_priority', 'priority', options.priority as string, PRIORITIES);
   }
   if (options.sort !== undefined && !isSortKey(options.sort)) {
     return {
@@ -333,7 +381,7 @@ export function runTaskMove(
   if (!state.statuses.includes(to)) return unknownStatus(to, state.statuses);
 
   const { tasks, error } = resolveRefs(state, ref);
-  if (error !== null) return { ok: false, exitCode: 1, message: error };
+  if (error !== null) return error;
 
   const moved: Task[] = [];
   const already: Task[] = [];
@@ -424,7 +472,7 @@ export function runTaskAssign(
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   const { tasks, error } = resolveRefs(state, ref);
-  if (error !== null) return { ok: false, exitCode: 1, message: error };
+  if (error !== null) return error;
 
   // `none` unassigns — a deliberate action, and it should read as one.
   const assignee = who.trim().toLowerCase() === 'none' ? null : who.trim();
@@ -477,7 +525,7 @@ export function runTaskShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): C
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   const task = findTask(state, ref);
   if (task === undefined) {
-    return { ok: false, exitCode: 1, message: `No task ${ref}.\n  kadence task list` };
+    return taskNotFound(ref);
   }
 
   return {
@@ -510,18 +558,10 @@ export function runTaskEdit(
   if (!isContext(ctx)) return ctx;
 
   if (edits.type !== undefined && !TASK_TYPES.includes(edits.type as TaskType)) {
-    return {
-      ok: false,
-      exitCode: 2,
-      message: `Unknown type "${edits.type}".\nAvailable: ${TASK_TYPES.join(', ')}`,
-    };
+    return unknownValue('unknown_type', 'type', edits.type as string, TASK_TYPES);
   }
   if (edits.priority !== undefined && !PRIORITIES.includes(edits.priority as Priority)) {
-    return {
-      ok: false,
-      exitCode: 2,
-      message: `Unknown priority "${edits.priority}".\nAvailable: ${PRIORITIES.join(', ')}`,
-    };
+    return unknownValue('unknown_priority', 'priority', edits.priority as string, PRIORITIES);
   }
   if (edits.due !== undefined && edits.due !== '' && !isIsoDate(edits.due)) {
     return {
@@ -533,7 +573,7 @@ export function runTaskEdit(
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   const { tasks, error } = resolveRefs(state, ref);
-  if (error !== null) return { ok: false, exitCode: 1, message: error };
+  if (error !== null) return error;
 
   // A title is one task's identity — applying it to several would create
   // duplicates rather than edit them.
@@ -630,7 +670,7 @@ export function runTaskCancel(cwd: string, env: NodeJS.ProcessEnv, ref: string):
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   const { tasks, error } = resolveRefs(state, ref);
-  if (error !== null) return { ok: false, exitCode: 1, message: error };
+  if (error !== null) return error;
 
   const changed = tasks.filter((t) => t.status !== 'cancelled');
   if (changed.length === 0) {
@@ -676,7 +716,7 @@ export function runTaskDelete(cwd: string, env: NodeJS.ProcessEnv, ref: string):
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   const { tasks, error } = resolveRefs(state, ref);
-  if (error !== null) return { ok: false, exitCode: 1, message: error };
+  if (error !== null) return error;
 
   for (const task of tasks) {
     append(ctx.root, {
@@ -727,7 +767,7 @@ export function runTaskComment(
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   const task = findTask(state, ref);
   if (task === undefined) {
-    return { ok: false, exitCode: 1, message: `No task ${ref}.\n  kadence task list` };
+    return taskNotFound(ref);
   }
 
   append(ctx.root, {
@@ -759,14 +799,14 @@ export function runTaskComment(
 export function resolveRefs(
   state: ProjectState,
   refs: string,
-): { tasks: Task[]; error: string | null } {
+): { tasks: Task[]; error: CommandResult | null } {
   const wanted = refs
     .split(',')
     .map((r) => r.trim())
     .filter((r) => r.length > 0);
 
   if (wanted.length === 0) {
-    return { tasks: [], error: 'No task given.' };
+    return { tasks: [], error: failure(2, 'invalid_argument', 'No task given.') };
   }
 
   const found: Task[] = [];
@@ -780,9 +820,18 @@ export function resolveRefs(
   if (missing.length > 0) {
     return {
       tasks: [],
-      error:
+      error: failure(
+        1,
+        'task_not_found',
         `No task ${missing.join(', ')} — nothing was changed.\n` +
-        'All ids must exist before a bulk change runs.\n  kadence task list',
+          'All ids must exist before a bulk change runs.\n  kadence task list',
+        {
+          // One ref or several, the agent reads the same field. It is the refs
+          // that were missing, not every ref it passed.
+          received: missing.join(','),
+          hint: 'kadence task list --json',
+        },
+      ),
     };
   }
 
@@ -809,7 +858,7 @@ export function runTaskParent(
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   const { tasks, error } = resolveRefs(state, ref);
-  if (error !== null) return { ok: false, exitCode: 1, message: error };
+  if (error !== null) return error;
 
   const detach = parentRef.trim().toLowerCase() === 'none';
   let parentId: string | null = null;
@@ -817,7 +866,7 @@ export function runTaskParent(
   if (!detach) {
     const parent = findTask(state, parentRef);
     if (parent === undefined) {
-      return { ok: false, exitCode: 1, message: `No task ${parentRef}.\n  kadence task list` };
+      return taskNotFound(parentRef);
     }
     if (tasks.some((t) => t.id === parent.id)) {
       return { ok: false, exitCode: 2, message: 'A task cannot be its own parent.' };
@@ -867,11 +916,11 @@ export function runTaskBlock(
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   const { tasks, error } = resolveRefs(state, ref);
-  if (error !== null) return { ok: false, exitCode: 1, message: error };
+  if (error !== null) return error;
 
   const blocker = findTask(state, blockerRef);
   if (blocker === undefined) {
-    return { ok: false, exitCode: 1, message: `No task ${blockerRef}.\n  kadence task list` };
+    return taskNotFound(blockerRef);
   }
   if (tasks.some((t) => t.id === blocker.id)) {
     return { ok: false, exitCode: 2, message: 'A task cannot block itself.' };
@@ -969,7 +1018,7 @@ export function runTaskLog(
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   const task = findTask(state, ref);
   if (task === undefined) {
-    return { ok: false, exitCode: 1, message: `No task ${ref}.\n  kadence task list` };
+    return taskNotFound(ref);
   }
 
   append(ctx.root, {

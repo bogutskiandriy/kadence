@@ -8,6 +8,9 @@ import { project } from '../src/core/projection.js';
 import { loadOrBuild, snapshotPath } from '../src/core/snapshot.js';
 import { compact } from '../src/core/store.js';
 import { serialize, type FlowEvent } from '../src/core/event.js';
+import { execFileSync } from 'node:child_process';
+import { runInit } from '../src/cli/commands/init.js';
+import { runTaskAdd, runTaskShow } from '../src/cli/commands/task.js';
 
 /**
  * Guardrail from ADR-005. The test fails on regression by design: 200 ms is
@@ -178,4 +181,33 @@ describe('journal size', () => {
     // The default 5 s timeout was failing this test for being slow rather than
     // for breaching the budget it guards.
   }, 120_000);
+});
+
+describe('what an agent pays', () => {
+  /**
+   * Guardrail from Probe C. The product claim is not that the answer is small —
+   * it is that its size does not follow the history behind it. A change that
+   * makes `task show` grow with the project breaks the claim, and this fails.
+   */
+  it('one task costs the same at 10 tasks and at 200', () => {
+    const sizes = [10, 200].map((count) => {
+      const dir = mkdtempSync(join(tmpdir(), `kadence-cost-${count}-`));
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'ana@example.com'], { cwd: dir });
+      runInit(dir);
+
+      for (let i = 0; i < count; i++) {
+        runTaskAdd(dir, {} as NodeJS.ProcessEnv, `Task number ${i}`, { estimate: 3 });
+      }
+      const shown = runTaskShow(dir, {} as NodeJS.ProcessEnv, 'KAD-3');
+      const bytes = JSON.stringify(shown.data).length;
+
+      rmSync(dir, { recursive: true, force: true });
+      return bytes;
+    });
+
+    expect(sizes[0]).toBe(sizes[1]);
+    // Building 210 tasks through the real command path is slow on purpose: a
+    // faster fixture would not prove the folding stays out of the answer.
+  }, 60_000);
 });

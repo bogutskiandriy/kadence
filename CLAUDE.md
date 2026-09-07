@@ -100,7 +100,7 @@ would drift.
 ## Commands
 
 ```bash
-npm test           # 390 tests
+npm test           # 421 tests
 npm run typecheck
 npm run build      # single bundle, blessed stays external
 ```
@@ -119,6 +119,15 @@ They share a trait — code at the boundary with the terminal. Key routing is
 now a pure function with its own tests (`src/tui/keys.ts`), but the rest of
 the TUI is verified by hand. **After changing anything in `src/tui/`, run
 `kadence ui` and use it.** A passing suite is not evidence there.
+
+A fifth bug, same family, different boundary: every `--json` response over
+128 KiB came back truncated when stdout was a pipe — which is how agents read
+it — because `process.exit()` does not wait for an asynchronous write. Writing
+to a file looked fine. 418 tests passed over it, because every fixture was
+small. Found by [Probe C](docs/research/probe-c-agent-cost.md).
+
+**The rule is not "run the TUI by hand" — it is that anything crossing into the
+outside world needs a test at real size**, not a convenient one.
 
 ## Honest state of the product
 

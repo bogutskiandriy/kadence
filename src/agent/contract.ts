@@ -20,10 +20,42 @@ Every \`--json\` response carries \`schema: "kadence/v1"\`. stdout holds JSON an
 nothing else; warnings go to stderr. Exit codes: 0 success, 1 runtime error,
 2 bad arguments.
 
+The contract itself is machine-readable — read it instead of guessing:
+
+    kadence schema --json
+
+It lists every command, the fields you can rely on, and every error code. It
+works outside a repository, so you can read it before \`init\`.
+
+## When something fails
+
+A failed \`--json\` call carries \`error.code\` — branch on that, not on the
+sentence. Where the valid set is knowable it also carries \`allowed\`:
+
+    { "ok": false,
+      "error": { "code": "unknown_status", "received": "shipped",
+                 "allowed": ["backlog", "in_progress", "done"],
+                 "hint": "kadence board statuses --json" } }
+
+Statuses are configured per project, so \`allowed\` is the only reliable source —
+never assume the defaults. Retrying an identical command never helps: there is no
+network and no lock, so the same input always fails the same way.
+
 ## Working as an agent
 
 Set \`KADENCE_SOURCE=agent\` so events record your authorship. Without it an
 event is marked as human — we do not guess.
+
+## Why to ask rather than read the files
+
+You cannot find a task by its label in the journal. \`KAD-3\` is derived while
+folding and is never stored in an event, so \`grep -r "KAD-3" .kadence/events/\`
+returns nothing. Folding the journal yourself is the only alternative to asking.
+
+Asking is also cheaper, and stays cheap: \`task show --json\` is about 950 bytes
+whether the project holds ten tasks or a thousand, while the journal behind it
+grows past 500 KB. The one exception is \`board --json\`, which returns every task
+in full — on a large project prefer \`task list\` with filters.
 
 ## What not to do
 
@@ -44,7 +76,10 @@ Tasks live in \`.kadence/\` as plain files. Read them directly or via the CLI:
     kadence task list --json       all tasks
     kadence task move KAD-1 done  change state
 
-\`--json\` responses carry \`schema: "kadence/v1"\`; stdout is JSON only.
+    kadence schema --json          the contract: commands, fields, error codes
+
+\`--json\` responses carry \`schema: "kadence/v1"\`; stdout is JSON only. A failure
+carries \`error.code\` and, where knowable, \`allowed\`.
 When acting as an agent, set \`KADENCE_SOURCE=agent\`.
 
 Details: \`.kadence/README.md\`
@@ -72,4 +107,125 @@ export function upsertAgentsSection(existing: string | null): string {
 
   const sep = existing.endsWith('\n') ? '\n' : '\n\n';
   return `${existing}${sep}${AGENTS_SECTION}\n`;
+}
+
+/**
+ * Every failure kadence can name.
+ *
+ * Agents branch on these, so the list is part of the --json contract: a code may
+ * be added, never renamed or removed (ADR-009). `kadence schema --json`
+ * publishes it, and a test asserts the two cannot drift.
+ */
+export const ERROR_CODES = [
+  'not_a_repository',
+  'not_initialised',
+  'no_git_identity',
+  'task_not_found',
+  'sprint_not_found',
+  'unknown_status',
+  'unknown_type',
+  'unknown_priority',
+  'invalid_argument',
+] as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[number];
+
+const ERROR_MEANINGS: Record<ErrorCode, string> = {
+  not_a_repository: 'There is no git repository here. kadence stores its journal inside one.',
+  not_initialised: 'The repository has no .kadence/ folder yet. Run `kadence init`.',
+  no_git_identity: 'Git has no user.email, so an event would have no author.',
+  task_not_found: 'No task carries that ULID or KAD-N label. Nothing was changed.',
+  sprint_not_found: 'No sprint carries that name or id.',
+  unknown_status:
+    'The status is not one of this project\u2019s columns. They are configurable, so read `allowed`.',
+  unknown_type: 'The task type is not one of the four kadence defines.',
+  unknown_priority: 'The priority is not one of the four kadence defines.',
+  invalid_argument: 'An argument was missing or malformed; the command did nothing.',
+};
+
+/**
+ * The machine-readable contract behind `schema: "kadence/v1"`.
+ *
+ * Deliberately narrower than the actual output. Every field named here is a
+ * promise we keep; anything we emit but do not list may still change, which is
+ * the only way to leave room to grow (Hyrum\u2019s Law cuts both ways).
+ */
+export function buildContract(version: string): Record<string, unknown> {
+  return {
+    version: 'kadence/v1',
+    tool: { name: 'kadence', version },
+    stability:
+      'Additive only: fields and error codes may be added, never renamed or removed within kadence/v1.',
+    exitCodes: {
+      '0': 'success',
+      '1': 'runtime error — the command understood you and could not comply',
+      '2': 'bad arguments — nothing was attempted',
+    },
+    output: {
+      stdout: 'With --json, JSON and nothing else.',
+      stderr: 'Warnings and human messages, never part of the contract.',
+    },
+    env: {
+      KADENCE_SOURCE:
+        'Set to "agent" so events record agent authorship. Without it an event counts as human — we do not guess.',
+      NO_COLOR: 'Any value disables colour.',
+    },
+    errors: ERROR_CODES.map((code) => ({ code, meaning: ERROR_MEANINGS[code] })),
+    shapes: {
+      task: {
+        required: [
+          'id',
+          'label',
+          'title',
+          'status',
+          'type',
+          'priority',
+          'estimate',
+          'assignee',
+          'blockedBy',
+          'loggedHours',
+        ],
+        notes: {
+          id: 'ULID. The identity of the task; KAD-N is a label derived while folding and is never stored.',
+          history: 'Present in `task show` only — the events that produced this state.',
+        },
+      },
+      board: { required: ['schema', 'ok', 'columns'] },
+      error: {
+        required: ['code', 'message'],
+        optional: ['received', 'allowed', 'hint'],
+        notes: {
+          allowed: 'Present when the valid set is knowable — statuses are project-configurable.',
+          retryable: 'Deliberately absent: no network, no lock, so a retry always fails identically.',
+        },
+      },
+    },
+    commands: [
+      { name: 'schema', summary: 'This contract. Works outside a repository.' },
+      { name: 'init', summary: 'Create .kadence/ and the agent instruction files.' },
+      { name: 'board', summary: 'The whole board, grouped by column.', json: true },
+      { name: 'task list', summary: 'All tasks, filterable.', json: true },
+      {
+        name: 'task show',
+        summary: 'One task with its comments and full history.',
+        args: ['ref'],
+        json: true,
+      },
+      { name: 'task add', summary: 'Create a task.', args: ['title'], json: true },
+      {
+        name: 'task move',
+        summary: 'Change status. Accepts several refs, all or nothing.',
+        args: ['refs', 'status'],
+        json: true,
+      },
+      { name: 'task assign', summary: 'Assign or unassign.', args: ['refs', 'who'], json: true },
+      { name: 'task comment', summary: 'Append a comment.', args: ['ref', 'text'], json: true },
+      { name: 'task edit', summary: 'Change fields.', args: ['refs'], json: true },
+      { name: 'task log', summary: 'Log hours.', args: ['refs', 'hours'], json: true },
+      { name: 'task block', summary: 'Record a blocker.', args: ['ref', 'blocker'], json: true },
+      { name: 'sprint status', summary: 'Current sprint progress.', json: true },
+      { name: 'sprint create', summary: 'Start a sprint.', args: ['name'], json: true },
+      { name: 'sprint close', summary: 'Close it and report velocity.', json: true },
+    ],
+  };
 }

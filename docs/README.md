@@ -10,6 +10,7 @@
 | [product/positioning.md](product/positioning.md) | Формулювання за Moore. Категорія — не «трекер» |
 | [product/lean-canvas.md](product/lean-canvas.md) | Бізнес-модель. Несправедливої переваги немає — і це записано прямо |
 | [product/north-star.md](product/north-star.md) | Метрика фази валідації. Не зірки |
+| [product/discovery-2026-09.md](product/discovery-2026-09.md) | **Стан дискавері.** Що доведено, що ні, і що прибрати з роадмапу |
 
 ## 2. Дослідження
 
@@ -27,6 +28,8 @@
 | [research/probe-a-results.md](research/probe-a-results.md) | **✅ Виконано.** 8 396 злиттів зі 130 репозиторіїв. 15.4% — неоднозначно |
 | [research/pol-probe.md](research/pol-probe.md) | Дизайн трьох probe. A виконано, B і C — попереду |
 | [research/interview-script.md](research/interview-script.md) | Скрипт на 45 хвилин за Mom Test |
+| [research/probe-c-agent-cost.md](research/probe-c-agent-cost.md) | **✅ Виконано.** Відповідь про задачу — 948 байт незалежно від розміру проєкту; журнал росте до 528 КБ. Спростував наш власний аргумент про MCP |
+| [research/agent-readability-2026-09.md](research/agent-readability-2026-09.md) | **Читати перед зміною агентського контракту.** Як агенти читають репозиторій. Claude Code не читає `AGENTS.md` — а `init` пише тільки його |
 
 ## 4. Проєктування
 
@@ -43,7 +46,8 @@
 | [product/story-map.md](product/story-map.md) | Карта історій. Наша сила проявляється рідко, слабкість — щодня |
 | [product/prioritization.md](product/prioritization.md) | Value/Effort. Борд і повідомлення про злиття заходять у v0.1 |
 | [../SPEC.md](../SPEC.md) | Технічна специфікація, вісім модулів |
-| [decisions/](decisions/) | Сім ADR, усі підкріплені вимірами |
+| [decisions/](decisions/) | Дев'ять ADR, усі підкріплені вимірами |
+| [decisions/009-the-agent-contract.md](decisions/009-the-agent-contract.md) | Контракт для агентів: дві точки входу, коди помилок, `kadence schema --json` |
 | [decisions/007-what-goes-into-git.md](decisions/007-what-goes-into-git.md) | Що комітимо, а що ні. Читати перед додаванням нової теки |
 
 ## Стан на 2026-09-02
