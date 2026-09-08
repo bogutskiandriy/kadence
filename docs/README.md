@@ -44,7 +44,7 @@
 | Документ | Що всередині |
 |---|---|
 | [product/story-map.md](product/story-map.md) | Карта історій. Наша сила проявляється рідко, слабкість — щодня |
-| [product/prioritization.md](product/prioritization.md) | Value/Effort. Борд і повідомлення про злиття заходять у v0.1 |
+| [product/prioritization.md](product/prioritization.md) | Value/Effort, переглянуто 2026-09-08. Що відвантажено, що ні — і чому чотири найцінніші фічі 0.2.1 у плані були відсутні |
 | [../SPEC.md](../SPEC.md) | Технічна специфікація, вісім модулів |
 | [decisions/](decisions/) | Дев'ять ADR, усі підкріплені вимірами |
 | [decisions/009-the-agent-contract.md](decisions/009-the-agent-contract.md) | Контракт для агентів: дві точки входу, коди помилок, `kadence schema --json` |
