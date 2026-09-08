@@ -109,6 +109,13 @@ Tests build the binary first via `globalSetup` — several spawn `dist/cli.js`
 as a real process. A green suite that relies on a leftover `dist/` is a suite
 passing for the wrong reason; that happened once and cost a red CI.
 
+Because so much of the suite spawns that binary, the fork pool is capped at
+four in `vitest.config.ts`. Uncapped, a busy machine produces timeouts that
+look like product failures and are not — the reasoning and the numbers are in
+the comment there. **A test that fails with "Test timed out in 5000ms" after
+sitting for minutes is telling you about the machine, not the code.** Run the
+file on its own before believing it.
+
 ## What tests do not catch here
 
 Four TUI bugs shipped past a green suite and surfaced only when a human ran
