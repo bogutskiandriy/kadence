@@ -1,6 +1,11 @@
 # Changelog
 
-## [0.2.0] — 2026-09-08
+## [0.2.1] — 2026-09-08
+
+> Numbered 0.2.1 because 0.2.0 cannot be published under this name: a different
+> package called `kadence` used that version on 2026-02-05, before this one
+> claimed the name, and npm never allows a version number to be reused. Nothing
+> was released as 0.2.0 — this is the first release of the 0.2 line.
 
 The agent contract, made real. `schema: "kadence/v1"` used to be a version
 string that nothing checked; now the contract is published, the failures are

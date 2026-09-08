@@ -1,6 +1,6 @@
 {
   "name": "kadence",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Your team and your AI agents work from the same context: tasks, their full history and time as plain files in your git repository",
   "type": "module",
   "license": "MIT",
