@@ -28,7 +28,7 @@
 |---|---|
 | [research/probe-a-results.md](research/probe-a-results.md) | **✅ Виконано.** 8 396 злиттів зі 130 репозиторіїв. 15.4% — неоднозначно |
 | [research/pol-probe.md](research/pol-probe.md) | Дизайн трьох probe. A виконано, B і C — попереду |
-| [research/interview-script.md](research/interview-script.md) | Скрипт на 45 хвилин за Mom Test |
+| [research/interview-script.md](research/interview-script.md) | **Probe B, переписано 2026-09-08.** Головне питання — втрата контексту між сесіями агента, не конфлікти |
 | [research/decision-capture-2026-09.md](research/decision-capture-2026-09.md) | Чи існує біль під `kadence decision`. Біль описаний зовні; питання тепер про механізм, не про існування |
 | [research/probe-c-agent-cost.md](research/probe-c-agent-cost.md) | **✅ Виконано.** Відповідь про задачу — 948 байт незалежно від розміру проєкту; журнал росте до 528 КБ. Спростував наш власний аргумент про MCP |
 | [research/agent-readability-2026-09.md](research/agent-readability-2026-09.md) | **Читати перед зміною агентського контракту.** Як агенти читають репозиторій. Claude Code не читає `AGENTS.md` — а `init` пише тільки його |
