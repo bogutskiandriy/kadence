@@ -162,6 +162,8 @@ export const ERROR_CODES = [
   'unknown_priority',
   'unknown_field',
   'invalid_argument',
+  'template_not_found',
+  'conflicting_state',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -178,6 +180,9 @@ const ERROR_MEANINGS: Record<ErrorCode, string> = {
   unknown_priority: 'The priority is not one of the four kadence defines.',
   unknown_field: 'A name given to --fields is not a task field. Read `allowed`.',
   invalid_argument: 'An argument was missing or malformed; the command did nothing.',
+  template_not_found: 'No template carries that name.',
+  conflicting_state:
+    'The arguments were understood, but the current state does not allow it \u2014 a closed sprint, or one already started.',
 };
 
 /**

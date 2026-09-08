@@ -192,7 +192,7 @@ either moves both or changes nothing. A typo does not leave half a board.
 
 | | |
 |---|---|
-| Install | 29 KB, one runtime dependency |
+| Install | 37 KB packed — 128 KB of kadence, plus 1.8 MB of blessed |
 | Startup | 80 ms |
 | 10,000 events | 28 ms cold, 7 ms warm |
 | Journal on disk | 1.9 MB |
@@ -207,7 +207,7 @@ true.
 
 **Verified.** The merge thesis, on real git branches. Performance and size, by
 tests that fail if they regress. That the conflict problem exists in the wild —
-measured, not assumed. 428 tests, including an end-to-end run through the
+measured, not assumed. 484 tests, including an end-to-end run through the
 installed binary.
 
 **Not verified.** That teams and their AI agents actually lose enough context to want
@@ -250,8 +250,8 @@ revisit it: [docs/decisions/](docs/decisions/).
 
 ```bash
 npm install
-npm test          # 428 tests
-npm run build     # 29 KB bundle
+npm test          # 484 tests
+npm run build     # 30 KB bundle
 ```
 
 `CLAUDE.md` documents the invariants, the boundaries, and the decisions that

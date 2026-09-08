@@ -14,6 +14,7 @@ import {
   runTaskBlock,
   runTaskLog,
   TASK_STATUSES,
+  failure,
   type CommandResult,
 } from './commands/task.js';
 import { buildContract } from '../agent/contract.js';
@@ -124,9 +125,26 @@ function textFromFlagOrEditor(
   return r.text;
 }
 
-/** Usage errors all look the same, so they are built in one place. */
-function usage(message: string): CommandResult {
-  return { ok: false, exitCode: 2, message };
+/**
+ * The actions each command takes, named once so a mistyped one can be answered
+ * with the list instead of a sentence.
+ */
+const TASK_ACTIONS = [
+  'add', 'list', 'show', 'edit', 'move', 'assign', 'comment', 'log',
+  'parent', 'block', 'unblock', 'cancel', 'delete',
+] as const;
+const SPRINT_ACTIONS = [
+  'create', 'add', 'edit', 'start', 'close', 'status', 'list', 'burndown',
+] as const;
+const TEMPLATE_ACTIONS = ['save', 'list', 'delete'] as const;
+
+/**
+ * Usage errors all look the same, so they are built in one place — including
+ * the code. An agent that mistypes an action gets `invalid_argument` and, where
+ * the set is knowable, the actions that do exist (ADR-009).
+ */
+function usage(message: string, detail: { received?: string; allowed?: readonly string[] } = {}): CommandResult {
+  return failure(2, 'invalid_argument', message, detail);
 }
 
 /**
@@ -492,6 +510,7 @@ cli
                 'Available: add, list, show, edit, move, assign, comment, log,\n' +
                 '           parent, block, unblock, cancel, delete\n' +
                 '  kadence task --help',
+              { received: action, allowed: TASK_ACTIONS },
             ),
             json,
           );
@@ -516,7 +535,13 @@ cli
       emit(runBoardConfig(process.cwd(), process.env, options.statuses), options.json === true);
     }
     if (action !== undefined) {
-      emit(usage(`Unknown action "${action}".\nAvailable: config\n  kadence board --help`), options.json === true);
+      emit(
+        usage(`Unknown action "${action}".\nAvailable: config\n  kadence board --help`, {
+          received: action,
+          allowed: ['config'],
+        }),
+        options.json === true,
+      );
     }
     emit(
       runBoard(
@@ -641,6 +666,7 @@ cli
               `Unknown action "${action}".\n` +
                 'Available: create, add, edit, start, close, status, list, burndown\n' +
                 '  kadence sprint --help',
+              { received: action, allowed: SPRINT_ACTIONS },
             ),
             json,
           );
@@ -712,7 +738,13 @@ cli
           emit(runTemplateDelete(cwd, process.env, name), json);
           break;
         default:
-          emit(usage(`Unknown action "${action}".\nAvailable: save, list, delete`), json);
+          emit(
+            usage(`Unknown action "${action}".\nAvailable: save, list, delete`, {
+              received: action,
+              allowed: TEMPLATE_ACTIONS,
+            }),
+            json,
+          );
       }
     },
   );

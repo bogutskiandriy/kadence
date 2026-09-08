@@ -90,6 +90,33 @@ fields and codes may be added, never renamed or removed.
   public surface: additive changes only, forever.
 - **Measured:** bundle 29 KB (was 30 KB), `schema --json` 60 ms and 3.5 KB of
   output, performance budgets unchanged, 416 tests.
+## Amendment, 2026-09-08
+
+The decision said every failure carries a code. The implementation did not: only
+the paths that went through `failure()` did, and thirty-seven others returned a
+sentence with no code at all — most of `sprint`, all of `template`, `board
+config`, and every "unknown action". Three tests asserted the *published* list
+matched the constant, which is why none of them noticed that the commands were
+not using it.
+
+Two things follow.
+
+**Two codes added** (additive, as the stability rule allows):
+`template_not_found`, and `conflicting_state` for the case the existing codes
+could not express — arguments understood, current state refusing them: a closed
+sprint, one already started, one still open at close.
+
+**A `hint` must name a command that runs.** `unknown_status` pointed at
+`kadence board statuses --json`, which does not exist; following it produced a
+second failure, itself uncoded. The hint is now `kadence board config --json`,
+which already returns the configured columns, and a test executes every hint the
+CLI can emit and requires exit 0. A hint that sends an agent nowhere is worse
+than no hint, because the agent spends a turn discovering that.
+
+The scope is the `--json` surface. `init` and `ui` never emit JSON, and the
+editor path in `index.ts` is unreachable without a terminal; those four keep
+plain messages rather than being given a code that would not fit them.
+
 - **Revisit if:** Claude Code adds native `AGENTS.md` support — then the second
   file becomes redundant and should be dropped rather than kept out of habit. Or
   if consumers ask for formal JSON Schema, at which point the contract we already

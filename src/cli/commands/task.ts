@@ -180,7 +180,9 @@ export function runTaskAdd(
 
   const trimmed = title.trim();
   if (trimmed.length === 0) {
-    return { ok: false, exitCode: 2, message: 'A task needs a title.' };
+    return failure(2, 'invalid_argument', 'A task needs a title.', {
+      hint: 'kadence task list --json',
+    });
   }
 
   if (options.type !== undefined && !TASK_TYPES.includes(options.type as TaskType)) {
@@ -197,9 +199,7 @@ export function runTaskAdd(
     const parent = findTask(state, options.parent);
     if (parent === undefined) {
       return {
-        ok: false,
-        exitCode: 1,
-        message: `No parent task ${options.parent}.\n  kadence task list`,
+        ...taskNotFound(options.parent),
       };
     }
     resolvedParent = parent.id;
@@ -294,7 +294,9 @@ function unknownStatus(value: string, available: readonly string[]): CommandResu
       // From the folded state, never from the constant: a team may have
       // configured its own columns, and an agent has no other way to learn them.
       allowed: available,
-      hint: 'kadence board statuses --json',
+      // `board config --json` returns the configured columns; there is no
+      // `board statuses` command, and a hint naming one sends an agent nowhere.
+      hint: 'kadence board config --json',
     },
   );
 }
@@ -327,9 +329,12 @@ export function runTaskList(
   if (fieldError !== null) return fieldError;
   if (options.sort !== undefined && !isSortKey(options.sort)) {
     return {
-      ok: false,
-      exitCode: 2,
-      message: `Unknown sort key "${options.sort}".\nAvailable: ${SORT_KEYS.join(', ')}`,
+      ...failure(
+        2,
+        'invalid_argument',
+        `Unknown sort key "${options.sort}".\nAvailable: ${SORT_KEYS.join(', ')}`,
+        { received: options.sort, allowed: SORT_KEYS },
+      ),
     };
   }
 
@@ -625,9 +630,12 @@ export function runTaskEdit(
   }
   if (edits.due !== undefined && edits.due !== '' && !isIsoDate(edits.due)) {
     return {
-      ok: false,
-      exitCode: 2,
-      message: `Due date must be YYYY-MM-DD, got "${edits.due}".\n  kadence task edit KAD-1 --due 2026-09-30`,
+      ...failure(
+        2,
+        'invalid_argument',
+        `Due date must be YYYY-MM-DD, got "${edits.due}".\n  kadence task edit KAD-1 --due 2026-09-30`,
+        { received: edits.due },
+      ),
     };
   }
 
@@ -639,9 +647,7 @@ export function runTaskEdit(
   // duplicates rather than edit them.
   if (edits.title !== undefined && tasks.length > 1) {
     return {
-      ok: false,
-      exitCode: 2,
-      message: 'A title can only be set on one task at a time.',
+      ...failure(2, 'invalid_argument', 'A title can only be set on one task at a time.'),
     };
   }
 
@@ -821,7 +827,7 @@ export function runTaskComment(
 
   const trimmed = text.trim();
   if (trimmed.length === 0) {
-    return { ok: false, exitCode: 2, message: 'A comment needs text.' };
+    return failure(2, 'invalid_argument', 'A comment needs text.', { received: ref });
   }
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
@@ -929,7 +935,9 @@ export function runTaskParent(
       return taskNotFound(parentRef);
     }
     if (tasks.some((t) => t.id === parent.id)) {
-      return { ok: false, exitCode: 2, message: 'A task cannot be its own parent.' };
+      return failure(2, 'invalid_argument', 'A task cannot be its own parent.', {
+        received: ref,
+      });
     }
     parentId = parent.id;
   }
@@ -983,7 +991,7 @@ export function runTaskBlock(
     return taskNotFound(blockerRef);
   }
   if (tasks.some((t) => t.id === blocker.id)) {
-    return { ok: false, exitCode: 2, message: 'A task cannot block itself.' };
+    return failure(2, 'invalid_argument', 'A task cannot block itself.', { received: ref });
   }
 
   const changed = tasks.filter((t) =>
@@ -1066,12 +1074,14 @@ export function runTaskLog(
   const hours = parseDuration(duration);
   if (hours === null) {
     return {
-      ok: false,
-      exitCode: 2,
-      message:
+      ...failure(
+        2,
+        'invalid_argument',
         `Cannot read "${duration}" as a duration.\n` +
-        'Use hours or minutes:\n  kadence task log KAD-1 2h\n  kadence task log KAD-1 90m\n' +
-        '  kadence task log KAD-1 -30m   to correct a mistake',
+          'Use hours or minutes:\n  kadence task log KAD-1 2h\n  kadence task log KAD-1 90m\n' +
+          '  kadence task log KAD-1 -30m   to correct a mistake',
+        { received: duration },
+      ),
     };
   }
 

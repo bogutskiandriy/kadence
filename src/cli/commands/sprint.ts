@@ -6,6 +6,7 @@ import { readAll } from '../../core/store.js';
 import type { ProjectState } from '../../core/projection.js';
 import { resolveContext, isContext, loadState, findTask, type CommandResult, type Context,
   taskNotFound,
+  failure,
 } from './task.js';
 
 /**
@@ -47,13 +48,18 @@ export function runSprintCreate(cwd: string, env: NodeJS.ProcessEnv, name: strin
 
   const trimmed = name.trim();
   if (trimmed.length === 0) {
-    return { ok: false, exitCode: 2, message: 'A sprint needs a name.' };
+    return failure(2, 'invalid_argument', 'A sprint needs a name.', {
+      hint: 'kadence sprint list --json',
+    });
   }
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
 
   if (findSprintByName(state, trimmed) !== undefined) {
-    return { ok: false, exitCode: 2, message: `Sprint "${trimmed}" already exists.` };
+    return failure(2, 'invalid_argument', `Sprint "${trimmed}" already exists.`, {
+      received: trimmed,
+      hint: 'kadence sprint list --json',
+    });
   }
 
   // The first sprint starts immediately; later ones are planned. A PM must be
@@ -98,18 +104,22 @@ export function runSprintAdd(
   if (sprint === undefined) {
     return options.sprint === undefined
       ? {
-          ok: false,
-          exitCode: 1,
-          message: 'No active sprint.\n  kadence sprint create "Sprint 1"',
+          ...failure(1, 'sprint_not_found', 'No active sprint.\n  kadence sprint create "Sprint 1"', {
+            hint: 'kadence sprint list --json',
+          }),
         }
-      : { ok: false, exitCode: 1, message: `No sprint named "${options.sprint}".\n  kadence sprint list` };
+      : failure(1, 'sprint_not_found', `No sprint named "${options.sprint}".\n  kadence sprint list`, {
+          received: options.sprint,
+          hint: 'kadence sprint list --json',
+        });
   }
   if (sprint.status === 'closed') {
-    return {
-      ok: false,
-      exitCode: 1,
-      message: `Sprint "${sprint.name}" is closed — its velocity is not rewritten.`,
-    };
+    return failure(
+      1,
+      'conflicting_state',
+      `Sprint "${sprint.name}" is closed — its velocity is not rewritten.`,
+      { received: sprint.name },
+    );
   }
 
   const task = findTask(state, ref);
@@ -142,9 +152,9 @@ export function runSprintClose(cwd: string, env: NodeJS.ProcessEnv): CommandResu
   const sprint = activeSprint(state);
   if (sprint === undefined) {
     return {
-      ok: false,
-      exitCode: 1,
-      message: 'No active sprint.\n  kadence sprint create "Sprint 1"',
+      ...failure(1, 'sprint_not_found', 'No active sprint.\n  kadence sprint create "Sprint 1"', {
+        hint: 'kadence sprint list --json',
+      }),
     };
   }
 
@@ -266,11 +276,13 @@ export function runSprintStart(
   const open = activeSprint(state);
   if (open !== undefined) {
     return {
-      ok: false,
-      exitCode: 1,
-      message:
+      ...failure(
+        1,
+        'conflicting_state',
         `Sprint "${open.name}" is still active.\n` +
-        'Close it so velocity can be computed:\n  kadence sprint close',
+          'Close it so velocity can be computed:\n  kadence sprint close',
+        { received: open.name },
+      ),
     };
   }
 
@@ -281,16 +293,20 @@ export function runSprintStart(
 
   if (target === undefined) {
     return {
-      ok: false,
-      exitCode: 1,
-      message:
+      ...failure(
+        1,
+        'sprint_not_found',
         name === undefined
           ? 'No planned sprints.\n  kadence sprint create "Sprint 2"'
           : `No sprint named "${name}".\n  kadence sprint list`,
+        { ...(name !== undefined ? { received: name } : {}), hint: 'kadence sprint list --json' },
+      ),
     };
   }
   if (target.status !== 'planned') {
-    return { ok: false, exitCode: 1, message: `Sprint "${target.name}" is already ${target.status}.` };
+    return failure(1, 'conflicting_state', `Sprint "${target.name}" is already ${target.status}.`, {
+      received: target.name,
+    });
   }
 
   write(ctx, 'sprint.started', target.id, {});
@@ -380,9 +396,12 @@ export function runSprintEdit(
   ] as const) {
     if (value !== undefined && value !== '' && !isIsoDate(value)) {
       return {
-        ok: false,
-        exitCode: 2,
-        message: `${field} must be YYYY-MM-DD, got "${value}".\n  kadence sprint edit --start 2026-09-01`,
+        ...failure(
+          2,
+          'invalid_argument',
+          `${field} must be YYYY-MM-DD, got "${value}".\n  kadence sprint edit --start 2026-09-01`,
+          { received: value },
+        ),
       };
     }
   }
@@ -392,25 +411,32 @@ export function runSprintEdit(
 
   if (sprint === undefined) {
     return {
-      ok: false,
-      exitCode: 1,
-      message:
+      ...failure(
+        1,
+        'sprint_not_found',
         name === undefined
           ? 'No active sprint.\n  kadence sprint list'
           : `No sprint named "${name}".\n  kadence sprint list`,
+        { ...(name !== undefined ? { received: name } : {}), hint: 'kadence sprint list --json' },
+      ),
     };
   }
   if (sprint.status === 'closed') {
     return {
-      ok: false,
-      exitCode: 1,
-      message: `Sprint "${sprint.name}" is closed — its record is not rewritten.`,
+      ...failure(
+        1,
+        'conflicting_state',
+        `Sprint "${sprint.name}" is closed — its record is not rewritten.`,
+        { received: sprint.name },
+      ),
     };
   }
   if (edits.name !== undefined && edits.name !== sprint.name) {
     const clash = findSprintByName(state, edits.name);
     if (clash !== undefined) {
-      return { ok: false, exitCode: 2, message: `Sprint "${edits.name}" already exists.` };
+        return failure(2, 'invalid_argument', `Sprint "${edits.name}" already exists.`, {
+        received: edits.name,
+      });
     }
   }
 
@@ -420,9 +446,12 @@ export function runSprintEdit(
   const end = edits.endDate ?? sprint.endDate ?? '';
   if (start !== '' && end !== '' && end < start) {
     return {
-      ok: false,
-      exitCode: 2,
-      message: `The end date (${end}) is before the start date (${start}).`,
+      ...failure(
+        2,
+        'invalid_argument',
+        `The end date (${end}) is before the start date (${start}).`,
+        { received: end },
+      ),
     };
   }
 
@@ -473,12 +502,14 @@ export function runSprintBurndown(
 
   if (sprint === undefined) {
     return {
-      ok: false,
-      exitCode: 1,
-      message:
+      ...failure(
+        1,
+        'sprint_not_found',
         name === undefined
           ? 'No active sprint.\n  kadence sprint list'
           : `No sprint named "${name}".\n  kadence sprint list`,
+        { ...(name !== undefined ? { received: name } : {}), hint: 'kadence sprint list --json' },
+      ),
     };
   }
 

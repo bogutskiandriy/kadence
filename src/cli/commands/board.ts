@@ -6,6 +6,7 @@ import {
   loadState,
   serializeTask,
   parseFields,
+  failure,
   type CommandResult,
 } from './task.js';
 import { append } from '../../core/store.js';
@@ -122,21 +123,25 @@ export function runBoardConfig(
     .filter((s) => s.length > 0);
 
   if (list.length === 0) {
-    return { ok: false, exitCode: 2, message: 'At least one status is required.' };
+    return failure(2, 'invalid_argument', 'At least one status is required.', {
+      received: statuses,
+    });
   }
   if (new Set(list).size !== list.length) {
-    return { ok: false, exitCode: 2, message: 'The same status is listed twice.' };
+    return failure(2, 'invalid_argument', 'The same status is listed twice.', {
+      received: statuses,
+    });
   }
   if (!list.includes(TERMINAL_STATUS)) {
     // Velocity, burndown and sprint reports all key off `done`; without it
     // every analytic in the product silently reports zero.
-    return {
-      ok: false,
-      exitCode: 2,
-      message:
-        `The list must include "${TERMINAL_STATUS}" — velocity and burndown are ` +
+    return failure(
+      2,
+      'invalid_argument',
+      `The list must include "${TERMINAL_STATUS}" — velocity and burndown are ` +
         'computed from it.',
-    };
+      { received: statuses },
+    );
   }
 
   // Tasks sitting in a column that is about to disappear are named up front,

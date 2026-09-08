@@ -1,6 +1,6 @@
 import { append } from '../../core/store.js';
 import { ulid } from '../../core/ulid.js';
-import { resolveContext, isContext, loadState, type CommandResult } from './task.js';
+import { resolveContext, isContext, loadState, failure, type CommandResult } from './task.js';
 
 /**
  * Task templates.
@@ -24,7 +24,9 @@ export function runTemplateSave(
 
   const trimmed = name.trim();
   if (trimmed.length === 0) {
-    return { ok: false, exitCode: 2, message: 'A template needs a name.' };
+    return failure(2, 'invalid_argument', 'A template needs a name.', {
+      hint: 'kadence template list --json',
+    });
   }
 
   const kept: Record<string, unknown> = {};
@@ -32,13 +34,13 @@ export function runTemplateSave(
     if (fields[key] !== undefined) kept[key] = fields[key];
   }
   if (Object.keys(kept).length === 0) {
-    return {
-      ok: false,
-      exitCode: 2,
-      message:
-        'A template needs at least one field.\n' +
+    return failure(
+      2,
+      'invalid_argument',
+      'A template needs at least one field.\n' +
         '  kadence template save bug --type bug --priority high --label triage',
-    };
+      { received: name },
+    );
   }
 
   append(ctx.root, {
@@ -102,7 +104,10 @@ export function runTemplateDelete(
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   if (!state.templates.some((t) => t.name === name)) {
-    return { ok: false, exitCode: 1, message: `No template "${name}".\n  kadence template list` };
+    return failure(1, 'template_not_found', `No template "${name}".\n  kadence template list`, {
+      received: name,
+      hint: 'kadence template list --json',
+    });
   }
 
   append(ctx.root, {
@@ -130,15 +135,15 @@ export function findTemplate(
   const { state } = loadState(ctx.root, ctx.actor);
   const template = state.templates.find((t) => t.name === name);
   if (template === undefined) {
-    const known = state.templates.map((t) => t.name).join(', ');
+    const known = state.templates.map((t) => t.name);
     return {
-      error: {
-        ok: false,
-        exitCode: 1,
-        message:
-          `No template "${name}".` +
-          (known.length > 0 ? `\nAvailable: ${known}` : '\n  kadence template save ...'),
-      },
+      error: failure(
+        1,
+        'template_not_found',
+        `No template "${name}".` +
+          (known.length > 0 ? `\nAvailable: ${known.join(', ')}` : '\n  kadence template save ...'),
+        { received: name, ...(known.length > 0 ? { allowed: known } : {}) },
+      ),
     };
   }
   return { fields: template.fields };

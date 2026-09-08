@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.2.2] — 2026-09-08
+
+Two promises from 0.2.1 that the code did not keep, found by reading the
+published package rather than the source.
+
+### Fixed
+
+- **Most `--json` failures carried no `error.code`.** ADR-009 says every failure
+  has one; thirty-seven paths returned a bare sentence — most of `sprint`, all of
+  `template`, `board config`, and every "unknown action". An agent could tell
+  that something failed and nothing else. The existing tests compared the
+  published code list against the constant, so they could not see that the
+  commands were not using it; a new test now provokes twenty-seven real failures
+  and requires a code from the list on each.
+- **`unknown_status` hinted at a command that does not exist.** It named
+  `kadence board statuses --json`; following it produced a second failure, which
+  itself had no code. The hint is now `kadence board config --json`, which
+  already returns the configured columns, and every hint the CLI can emit is
+  executed by a test that requires it to succeed.
+- **`cac` was a runtime dependency that nothing loaded.** esbuild bundles it, so
+  the only external import in the published output is `blessed` — every install
+  downloaded 52 KB for nothing. Moved to `devDependencies`, with a test that
+  compares what the manifest declares against what the build actually imports.
+  This is the same shape as the 0.1.4 self-dependency bug.
+
+### Added
+
+- Two error codes, additive within `kadence/v1`: `template_not_found`, and
+  `conflicting_state` for arguments that are understood but refused by the
+  current state — a closed sprint, one already started, one still open at close.
+- `received` and `allowed` on the failures where they are knowable, including
+  the action lists behind "unknown action".
+
+### Changed
+
+- The README's cost table said "29 KB, one runtime dependency". That is the
+  entry file. The published package is 37 KB packed, and an install puts 128 KB
+  of kadence and 1.8 MB of blessed on disk; the table now says so.
+
 ## [0.2.1] — 2026-09-08
 
 > Numbered 0.2.1 because 0.2.0 cannot be published under this name: a different
