@@ -192,7 +192,7 @@ either moves both or changes nothing. A typo does not leave half a board.
 
 | | |
 |---|---|
-| Install | 37 KB packed — 128 KB of kadence, plus 1.8 MB of blessed |
+| Install | 38 KB packed — 132 KB of kadence, plus 1.8 MB of blessed |
 | Startup | 80 ms |
 | 10,000 events | 28 ms cold, 7 ms warm |
 | Journal on disk | 1.9 MB |
