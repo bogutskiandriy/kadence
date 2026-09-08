@@ -21,6 +21,7 @@ export const EVENT_TYPES = [
   'task.blocked_by_added',
   'task.blocked_by_removed',
   'task.time_logged',
+  'task.doc_linked',
   'template.saved',
   'template.deleted',
   'board.configured',
@@ -30,6 +31,7 @@ export const EVENT_TYPES = [
   'sprint.closed',
   'sprint.cancelled',
   'sprint.task_added',
+  'decision.recorded',
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -84,6 +86,17 @@ export function validate(input: unknown): string[] {
   if (e['data'] !== undefined && (typeof e['data'] !== 'object' || e['data'] === null)) {
     bad.push('data');
   }
+
+  // The only per-type requirement in the schema, and it earns its place: a
+  // decision without a reason is a changelog line. `why` is the whole point.
+  if (e['type'] === 'decision.recorded') {
+    const data = (e['data'] ?? {}) as Record<string, unknown>;
+    for (const field of ['title', 'why'] as const) {
+      const value = data[field];
+      if (typeof value !== 'string' || value.trim().length === 0) bad.push(`data.${field}`);
+    }
+  }
+
   return bad;
 }
 

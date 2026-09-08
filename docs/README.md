@@ -50,7 +50,8 @@
 | [product/story-map.md](product/story-map.md) | Карта історій, переглянуто 2026-09-08. Дві прогалини закрито, третя стала гострішою |
 | [product/prioritization.md](product/prioritization.md) | Value/Effort, переглянуто 2026-09-08. Що відвантажено, що ні — і чому чотири найцінніші фічі 0.2.1 у плані були відсутні |
 | [../SPEC.md](../SPEC.md) | Технічна специфікація, вісім модулів |
-| [decisions/](decisions/) | Дев'ять ADR, усі підкріплені вимірами |
+| [decisions/](decisions/) | Десять ADR, усі підкріплені вимірами |
+| [decisions/010-decisions-as-events.md](decisions/010-decisions-as-events.md) | Чому заміщення — одна подія, чому `list` за замовчуванням ховає скасоване, і чому документи лише зв'язані |
 | [decisions/009-the-agent-contract.md](decisions/009-the-agent-contract.md) | Контракт для агентів: дві точки входу, коди помилок, `kadence schema --json` |
 | [decisions/007-what-goes-into-git.md](decisions/007-what-goes-into-git.md) | Що комітимо, а що ні. Читати перед додаванням нової теки |
 

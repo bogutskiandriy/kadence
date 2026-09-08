@@ -183,6 +183,23 @@ a tenth of that with the fields an agent actually reads:
 kadence board --json --fields label,status,assignee
 ```
 
+**And the part the code cannot hold — why:**
+
+```bash
+kadence decision add "Use ULIDs" --why "Clocks disagree between machines" \
+  --rejected "Auto-increment: collides across branches" --task KAD-1
+```
+
+When a decision stops being true you supersede it rather than edit it, and that
+is **one event** — the backward link is derived, so the two directions cannot
+fall out of step. In a file-based tool it is two edits, and teams reliably make
+one; that is how a reversed decision keeps looking authoritative.
+`decision list` returns what is still in force, `--all` adds the history, and
+`task show --json` carries the decisions made about that task.
+
+Documents stay plain markdown — `kadence task doc KAD-1 docs/design.md` records
+only the link, which is the part git cannot express.
+
 Bulk works everywhere and is all or nothing: `kadence task move KAD-1,KAD-2 done`
 either moves both or changes nothing. A typo does not leave half a board.
 
@@ -207,7 +224,7 @@ true.
 
 **Verified.** The merge thesis, on real git branches. Performance and size, by
 tests that fail if they regress. That the conflict problem exists in the wild —
-measured, not assumed. 484 tests, including an end-to-end run through the
+measured, not assumed. 538 tests, including an end-to-end run through the
 installed binary.
 
 **Not verified.** That teams and their AI agents actually lose enough context to want
@@ -215,9 +232,8 @@ this. The bet rests on reasoning and on the industry naming the problem out
 loud — not on our own users. That research is
 [designed](docs/research/interview-script.md) and not yet run.
 
-**On the roadmap, not shipped.** `kadence decision` (record why, as its own event
-type) and the optional MCP package — the latter kept as a response to someone who
-cannot use the CLI, not as an inevitability.
+**On the roadmap, not shipped.** The optional MCP package, kept as a response to
+someone who cannot use the CLI rather than as an inevitability.
 
 `kadence context <task>` was dropped: we measured what `task show --json` already
 returns and it is the whole history of one piece of work, 948 bytes, constant.
@@ -250,8 +266,8 @@ revisit it: [docs/decisions/](docs/decisions/).
 
 ```bash
 npm install
-npm test          # 484 tests
-npm run build     # 30 KB bundle
+npm test          # 538 tests
+npm run build     # 35 KB bundle
 ```
 
 `CLAUDE.md` documents the invariants, the boundaries, and the decisions that

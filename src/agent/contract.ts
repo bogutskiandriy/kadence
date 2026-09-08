@@ -79,6 +79,31 @@ project is a lot of description you did not ask for. Narrow it:
 
 \`kadence schema --json\` lists every selectable field.
 
+## Recording why
+
+The journal holds what happened. \`decision\` holds why, which the code and
+\`git log\` never carry:
+
+    kadence decision add "Use ULIDs" --why "Clocks disagree between machines" \\
+      --rejected "Auto-increment: collides across branches" --task KAD-1
+
+\`--why\` is required: without it the record is a changelog line. \`--rejected\` is
+what stops the next agent proposing the thing that was already turned down.
+
+When a decision stops being true, do not edit it — supersede it:
+
+    kadence decision add "Use signed tokens" --why "..." --supersedes DEC-1
+
+One event writes both directions. \`decision list\` then returns only what is
+still in force; pass \`--all\` when you need the history too. **Read the default,
+not \`--all\`** — a reversed reason quoted as current is worse than no memory.
+
+## Documents
+
+\`kadence task doc KAD-1 docs/design.md\` links a document to a task, and
+\`task show --json\` returns the links. kadence does not store the document: it
+stays plain markdown in the repository. The link is the part git cannot express.
+
 ## What not to do
 
 Do not hand-edit files under \`.kadence/events/\`: the journal is appended to,
@@ -102,6 +127,7 @@ Tasks live in \`.kadence/\` as plain files. Read them directly or via the CLI:
     kadence task move KAD-1 done  change state
 
     kadence schema --json          the contract: commands, fields, error codes
+    kadence decision list --json   why the current choices were made
 
 \`--json\` responses carry \`schema: "kadence/v1"\`; stdout is JSON only. A failure
 carries \`error.code\` and, where knowable, \`allowed\`.
@@ -177,6 +203,7 @@ export const ERROR_CODES = [
   'no_git_identity',
   'task_not_found',
   'sprint_not_found',
+  'decision_not_found',
   'unknown_status',
   'unknown_type',
   'unknown_priority',
@@ -194,6 +221,7 @@ const ERROR_MEANINGS: Record<ErrorCode, string> = {
   no_git_identity: 'Git has no user.email, so an event would have no author.',
   task_not_found: 'No task carries that ULID or KAD-N label. Nothing was changed.',
   sprint_not_found: 'No sprint carries that name or id.',
+  decision_not_found: 'No decision carries that ULID or DEC-N label.',
   unknown_status:
     'The status is not one of this project\u2019s columns. They are configurable, so read `allowed`.',
   unknown_type: 'The task type is not one of the four kadence defines.',
@@ -256,6 +284,17 @@ export function buildContract(version: string): Record<string, unknown> {
         },
       },
       board: { required: ['schema', 'ok', 'columns'] },
+      decision: {
+        required: ['id', 'label', 'title', 'why', 'rejected', 'docs', 'supersedes', 'supersededBy'],
+        notes: {
+          why: 'The reason. Required when recording — a decision without one is a changelog line.',
+          supersededBy:
+            'Derived while folding from a later decision carrying `supersedes`. Both directions come from one write, so they cannot fall out of step.',
+          docs: 'Repository-relative paths. kadence does not store the documents, only the link.',
+          listing:
+            '`decision list` hides superseded decisions unless --all is passed: a reversed reason presented as current is worse than no memory.',
+        },
+      },
       error: {
         required: ['code', 'message'],
         optional: ['received', 'allowed', 'hint'],
@@ -299,6 +338,26 @@ export function buildContract(version: string): Record<string, unknown> {
       { name: 'task edit', summary: 'Change fields.', args: ['refs'], json: true },
       { name: 'task log', summary: 'Log hours.', args: ['refs', 'hours'], json: true },
       { name: 'task block', summary: 'Record a blocker.', args: ['ref', 'blocker'], json: true },
+      {
+        name: 'decision add',
+        summary: 'Record why something was chosen, and what was turned down.',
+        args: ['title'],
+        flags: ['--why', '--rejected', '--task', '--supersedes', '--doc'],
+        json: true,
+      },
+      {
+        name: 'decision list',
+        summary: 'Current decisions. Superseded ones need --all.',
+        flags: ['--all', '--task'],
+        json: true,
+      },
+      { name: 'decision show', summary: 'One decision in full.', args: ['ref'], json: true },
+      {
+        name: 'task doc',
+        summary: 'Link a document to a task. The file stays plain markdown in the repo.',
+        args: ['ref', 'path'],
+        json: true,
+      },
       { name: 'sprint status', summary: 'Current sprint progress.', json: true },
       { name: 'sprint create', summary: 'Start a sprint.', args: ['name'], json: true },
       { name: 'sprint close', summary: 'Close it and report velocity.', json: true },

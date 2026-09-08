@@ -84,6 +84,8 @@ export interface Task {
   /** ISO date, no time: a deadline is a day, not a moment. */
   due: string | null;
   comments: Comment[];
+  /** Repository-relative paths to documents that explain this task. */
+  docs: string[];
   /** Estimate comes last: the substance of the task first, its cost after. */
   estimate: number | null;
   /** Hours actually logged against the task, entered by hand. */
@@ -121,8 +123,38 @@ export interface Template {
   author: string;
 }
 
+/**
+ * A recorded decision: what was chosen, why, and what was turned down.
+ *
+ * Superseding is one event, not two edits. A later decision carrying
+ * `supersedes` marks the earlier one here while folding, so both directions are
+ * derived from a single write and cannot fall out of step — the failure that
+ * makes a reversed decision keep looking authoritative in file-based tools
+ * (ADR-010, docs/research/decision-capture-2026-09.md).
+ */
+export interface Decision {
+  /** ULID. Identity; DEC-N is derived during this fold (I7). */
+  id: string;
+  label: string;
+  title: string;
+  why: string;
+  /** The alternative that was turned down, when one was named. */
+  rejected: string | null;
+  /** ULID of the task this decision came out of, when it came out of one. */
+  task: string | null;
+  /** Repository-relative paths to documents that carry the detail. */
+  docs: string[];
+  /** ULID of the decision this one replaces. */
+  supersedes: string | null;
+  /** Derived: ULID of the decision that replaced this one. */
+  supersededBy: string | null;
+  at: string;
+  by: string;
+}
+
 export interface ProjectState {
   tasks: Task[];
+  decisions: Decision[];
   sprints: Sprint[];
   templates: Template[];
   /** Configured columns, or the defaults when a team never changed them. */
@@ -158,11 +190,45 @@ export function project(input: readonly FlowEvent[]): ProjectState {
   const tasks = new Map<string, Task>();
   const sprints = new Map<string, Sprint>();
   const templates = new Map<string, Template>();
+  const decisions = new Map<string, Decision>();
   let statuses: string[] | null = null;
   const rejected: FlowEvent[] = [];
   const deferred: FlowEvent[] = [];
 
   for (const e of events) {
+    // A decision is its own entity and never changes: superseding writes a new
+    // one rather than editing this. Nothing to fold beyond recording it.
+    if (e.type === 'decision.recorded') {
+      const data = e.data ?? {};
+      const text = (key: string): string | null =>
+        typeof data[key] === 'string' && (data[key] as string).length > 0
+          ? (data[key] as string)
+          : null;
+      const title = text('title');
+      const why = text('why');
+      // A malformed decision is skipped, not rejected into `rejected`: the
+      // journal may outlive a schema change, and a half-written record is not
+      // a conflict to report.
+      if (title !== null && why !== null) {
+        decisions.set(e.id, {
+          id: e.id,
+          label: '',
+          title,
+          why,
+          rejected: text('rejected'),
+          task: text('task'),
+          docs: Array.isArray(data['docs'])
+            ? (data['docs'] as unknown[]).filter((d): d is string => typeof d === 'string')
+            : [],
+          supersedes: text('supersedes'),
+          supersededBy: null,
+          at: e.ts,
+          by: e.actor,
+        });
+      }
+      continue;
+    }
+
     // Templates are configuration, not entities: they have no history and the
     // last write simply wins, like any other setting.
     if (e.type === 'template.saved') {
@@ -232,8 +298,32 @@ export function project(input: readonly FlowEvent[]): ProjectState {
     task.blockedBy = task.blockedBy.filter((b) => live.has(b));
   }
 
+  // Same rule as tasks: numbers come from ULID order, so two branches that each
+  // recorded a decision agree after a merge with nobody renumbering (I7).
+  const orderedDecisions = [...decisions.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
+  orderedDecisions.forEach((d, i) => {
+    d.label = `DEC-${i + 1}`;
+  });
+
+  // The second half of superseding, derived rather than written. One event
+  // carried `supersedes`; the backward link appears here, so it cannot be
+  // forgotten the way a second file edit can be.
+  for (const d of orderedDecisions) {
+    if (d.supersedes === null) continue;
+    // A decision may supersede one that is not merged yet. Keep the forward
+    // link and wait: rejecting would make the state depend on merge order (I1).
+    const earlier = decisions.get(d.supersedes);
+    if (earlier !== undefined) earlier.supersededBy = d.id;
+  }
+
+  // A decision outlives the task it came from, but a dangling id helps nobody.
+  for (const d of orderedDecisions) {
+    if (d.task !== null && !live.has(d.task)) d.task = null;
+  }
+
   return {
     tasks: ordered,
+    decisions: orderedDecisions,
     sprints: [...sprints.values()].sort((a, b) => (a.id < b.id ? -1 : 1)),
     statuses: statuses ?? [...DEFAULT_STATUSES],
     orphanStatuses: [
@@ -277,6 +367,7 @@ function apply(
         blockedBy: [],
         due: readText(data['due']),
         comments: [],
+        docs: [],
         estimate: typeof data['estimate'] === 'number' ? data['estimate'] : null,
         loggedHours: 0,
         createdAt: e.ts,
@@ -425,6 +516,13 @@ function apply(
     case 'task.blocked_by_removed': {
       const blocker = readText(data['blocker']);
       if (blocker !== null) task.blockedBy = task.blockedBy.filter((b) => b !== blocker);
+      break;
+    }
+    case 'task.doc_linked': {
+      const path = readText(data['path']);
+      // Linking the same document twice is a no-op rather than a duplicate: two
+      // branches may each have linked it, and both events survive the merge.
+      if (path !== null && !task.docs.includes(path)) task.docs.push(path);
       break;
     }
     case 'task.time_logged': {

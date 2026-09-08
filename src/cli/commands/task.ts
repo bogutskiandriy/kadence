@@ -1,3 +1,4 @@
+import { isAbsolute, join, relative } from 'node:path';
 import { ERROR_CODES, TASK_FIELDS, type ErrorCode } from '../../agent/contract.js';
 import { findRepoRoot, getActorEmail } from '../../core/git.js';
 import { append, dataDir, readAll } from '../../core/store.js';
@@ -521,6 +522,7 @@ function fullTask(t: Task): Record<string, unknown> {
     blockedBy: t.blockedBy,
     due: t.due,
     comments: t.comments,
+    docs: t.docs,
     estimate: t.estimate,
     history: t.history,
   };
@@ -593,12 +595,30 @@ export function runTaskShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): C
     return taskNotFound(ref);
   }
 
+  // The decisions made about this task travel with it. Superseded ones are left
+  // out, for the same reason `decision list` leaves them out: an agent handed a
+  // reversed reason as current is worse than one with no memory (ADR-010).
+  const decisions = state.decisions
+    .filter((d) => d.task === task.id && d.supersededBy === null)
+    .map((d) => ({
+      id: d.id,
+      label: d.label,
+      title: d.title,
+      why: d.why,
+      rejected: d.rejected,
+      docs: d.docs,
+    }));
+
   return {
     ok: true,
     exitCode: 0,
     warnings,
     message: renderTaskDetail(task),
-    data: { schema: 'kadence/v1', ok: true, task: serializeTask(task) },
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      task: { ...serializeTask(task), decisions },
+    },
   };
 }
 
@@ -812,6 +832,67 @@ export function runTaskDelete(cwd: string, env: NodeJS.ProcessEnv, ref: string):
       schema: 'kadence/v1',
       ok: true,
       deleted: tasks.map((t) => ({ id: t.id, label: t.label })),
+    },
+  };
+}
+
+/**
+ * Links a document to a task.
+ *
+ * Not a document store — the file stays plain markdown in the repository and git
+ * keeps versioning it. What git cannot say is that this file explains this task,
+ * and that is the only thing recorded here (Probe D).
+ */
+export function runTaskDoc(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  ref: string,
+  path: string,
+): CommandResult {
+  const ctx = resolveContext(cwd, env);
+  if (!isContext(ctx)) return ctx;
+
+  const trimmed = path.trim();
+  if (trimmed.length === 0) {
+    return failure(2, 'invalid_argument', 'A link needs a path.', {
+      hint: 'kadence task doc KAD-1 docs/design.md',
+    });
+  }
+
+  const { state, warnings } = loadState(ctx.root, ctx.actor);
+  const task = findTask(state, ref);
+  if (task === undefined) return taskNotFound(ref);
+
+  // Relative to the repository root: an absolute path stops meaning anything the
+  // moment the journal reaches another machine.
+  const rel = isAbsolute(trimmed) ? relative(ctx.root, trimmed) : trimmed.replace(/^\.\//, '');
+  // Missing is a warning, not a refusal: the file may arrive in a later commit
+  // or live on another branch.
+  const missing = !existsSync(join(ctx.root, rel));
+
+  append(ctx.root, {
+    id: ulid(),
+    type: 'task.doc_linked',
+    entity: task.id,
+    actor: ctx.actor,
+    ts: new Date().toISOString(),
+    source: ctx.source,
+    data: { path: rel },
+  });
+
+  return {
+    ok: true,
+    exitCode: 0,
+    warnings: [
+      ...warnings,
+      ...(missing ? [`No file at ${rel} — the link is recorded anyway; it may arrive later.`] : []),
+    ],
+    message: `${rel} linked to ${task.label}.`,
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      task: { id: task.id, label: task.label },
+      doc: rel,
     },
   };
 }

@@ -13,11 +13,13 @@ import {
   runTaskParent,
   runTaskBlock,
   runTaskLog,
+  runTaskDoc,
   TASK_STATUSES,
   failure,
   type CommandResult,
 } from './commands/task.js';
 import { buildContract } from '../agent/contract.js';
+import { runDecisionAdd, runDecisionList, runDecisionShow } from './commands/decision.js';
 import { writeSync } from 'node:fs';
 import { editText, canUseEditor } from './editor.js';
 import { runBoard, runBoardConfig } from './commands/board.js';
@@ -164,6 +166,83 @@ function renderContractSummary(contract: Record<string, unknown>): string {
 }
 
 cli
+  .command('decision [action] [arg]', 'Decisions: add | list | show — the why behind the work')
+  .option('--why <text>', 'Why this was chosen. Required — without it this is a changelog line')
+  .option('--rejected <text>', 'The alternative that was turned down')
+  .option('--task <ref>', 'The task this decision came out of')
+  .option('--supersedes <ref>', 'The decision this one replaces')
+  .option('--doc <path>', 'A document that carries the detail; repeat for several')
+  .option('--all', 'Include superseded decisions, hidden by default')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence decision add "Use ULIDs" --why "Clocks disagree between machines"')
+  .example('  kadence decision add "Use Avro" --why "..." --supersedes DEC-1')
+  .example('  kadence decision list --json')
+  .action(
+    (
+      action: string | undefined,
+      arg: string | undefined,
+      options: {
+        why?: string;
+        rejected?: string;
+        task?: string;
+        supersedes?: string;
+        doc?: string | string[];
+        all?: boolean;
+        json?: boolean;
+      },
+    ) => {
+      const json = options.json === true;
+      const cwd = process.cwd();
+      // cac hands a single flag back as a string and repeats as an array.
+      const docs =
+        options.doc === undefined
+          ? undefined
+          : Array.isArray(options.doc)
+            ? options.doc
+            : [options.doc];
+
+      switch (action) {
+        case 'add':
+          if (arg === undefined) {
+            emit(usage('A title is required:\n  kadence decision add "Use ULIDs" --why "..."'), json);
+          }
+          emit(
+            runDecisionAdd(cwd, process.env, arg as string, {
+              ...(options.why !== undefined ? { why: options.why } : {}),
+              ...(options.rejected !== undefined ? { rejected: options.rejected } : {}),
+              ...(options.task !== undefined ? { task: options.task } : {}),
+              ...(options.supersedes !== undefined ? { supersedes: options.supersedes } : {}),
+              ...(docs !== undefined ? { docs } : {}),
+            }),
+            json,
+          );
+          break;
+        case undefined:
+        case 'list':
+          emit(
+            runDecisionList(cwd, process.env, {
+              ...(options.all === true ? { all: true } : {}),
+              ...(options.task !== undefined ? { task: options.task } : {}),
+            }),
+            json,
+          );
+          break;
+        case 'show':
+          if (arg === undefined) {
+            emit(usage('Which decision?\n  kadence decision show DEC-1'), json);
+          }
+          emit(runDecisionShow(cwd, process.env, arg as string), json);
+          break;
+        default:
+          emit(
+            usage(`Unknown action "${action}".\nAvailable: add, list, show`),
+            json,
+          );
+      }
+    },
+  );
+
+cli
   .command('schema', 'The machine-readable --json contract, for agents')
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence schema --json')
@@ -192,7 +271,7 @@ cli
   });
 
 cli
-  .command('task [action] [arg] [value]', 'Tasks: add | list | show | move | assign')
+  .command('task [action] [arg] [value]', 'Tasks: add | list | show | move | assign | doc')
   .option('--title <text>', 'New title (for edit)')
   .option('-d, --description <text>', 'Full description; use quotes for multiple lines')
   .option('--type <type>', `Type: ${TASK_TYPES.join(' | ')}`)
@@ -328,6 +407,17 @@ cli
           );
           break;
         }
+        case 'doc':
+          if (arg === undefined || value === undefined) {
+            emit(
+              usage(
+                'A task and a path are required:\n  kadence task doc KAD-1 docs/design.md',
+              ),
+              json,
+            );
+          }
+          emit(runTaskDoc(cwd, process.env, arg, value), json);
+          break;
         case 'log':
           if (arg === undefined || value === undefined) {
             emit(

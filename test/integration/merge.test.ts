@@ -196,4 +196,61 @@ describe('branch merges', () => {
     // No active sprint — exactly one close happened.
     expect(status.sprint).toBeNull();
   });
+
+  it('two branches each record a decision — both survive, numbered without a human', () => {
+    // The reason log4brains dropped file numbering: numbered ADR files collide
+    // on merge. Numbers here are derived while folding, so both survive and
+    // neither branch had to pick a free number.
+    git('checkout', '-q', '-b', 'alice', 'main');
+    kadence(['decision', 'add', 'Use ULIDs', '--why', 'Clocks disagree.'], 'alice@example.com');
+    git('add', '-A');
+    git('commit', '-qm', 'alice decides');
+    git('checkout', '-q', 'main');
+
+    git('checkout', '-q', '-b', 'bob', 'main');
+    kadence(['decision', 'add', 'Sync core', '--why', 'Async measured slower.'], 'bob@example.com');
+    git('add', '-A');
+    git('commit', '-qm', 'bob decides');
+    git('checkout', '-q', 'main');
+
+    git('config', 'user.email', 'main@example.com');
+    expect([merge('alice'), merge('bob')].filter(Boolean).length).toBe(0);
+
+    const listed = JSON.parse(kadence(['decision', 'list', '--json']).stdout).decisions as {
+      label: string;
+      title: string;
+    }[];
+    expect(listed.map((d) => d.label)).toEqual(['DEC-1', 'DEC-2']);
+    expect(listed.map((d) => d.title).sort()).toEqual(['Sync core', 'Use ULIDs']);
+  });
+
+  it('a decision superseded on one branch reads as superseded after the merge', () => {
+    kadence(['decision', 'add', 'Use Thrift', '--why', 'Fastest measured.']);
+    git('add', '-A');
+    git('commit', '-qm', 'thrift');
+
+    git('checkout', '-q', '-b', 'dana', 'main');
+    kadence(
+      ['decision', 'add', 'Use Avro', '--why', 'Schema evolution.', '--supersedes', 'DEC-1'],
+      'dana@example.com',
+    );
+    git('add', '-A');
+    git('commit', '-qm', 'dana supersedes');
+    git('checkout', '-q', 'main');
+
+    git('config', 'user.email', 'main@example.com');
+    expect(merge('dana')).toBe(false);
+
+    // One event crossed the merge and carried both directions with it.
+    const all = JSON.parse(kadence(['decision', 'list', '--all', '--json']).stdout).decisions as {
+      label: string;
+      supersededBy: string | null;
+    }[];
+    expect(all.find((d) => d.label === 'DEC-1')!.supersededBy).toBe('DEC-2');
+
+    const current = JSON.parse(kadence(['decision', 'list', '--json']).stdout).decisions as {
+      label: string;
+    }[];
+    expect(current.map((d) => d.label)).toEqual(['DEC-2']);
+  });
 });

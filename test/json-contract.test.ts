@@ -83,12 +83,14 @@ describe('the --json contract', () => {
   it('the task list has a stable record shape', () => {
     run(['task', 'add', 'Task', '--estimate', '5']);
     const task = JSON.parse(run(['task', 'list', '--json']).stdout).tasks[0];
-    // Fields are only added — existing consumers keep working.
+    // Fields are only added — existing consumers keep working. The list is
+    // exact on purpose: adding one has to be a deliberate act that shows up
+    // here, not something that leaks out of an unrelated change.
     expect(Object.keys(task).sort()).toEqual(
       [
-        'assignee', 'blockedBy', 'comments', 'description', 'due', 'estimate', 'history',
-        'id', 'label', 'labels', 'loggedHours', 'parent', 'priority', 'reporter', 'sprint',
-        'status', 'title', 'type',
+        'assignee', 'blockedBy', 'comments', 'description', 'docs', 'due', 'estimate',
+        'history', 'id', 'label', 'labels', 'loggedHours', 'parent', 'priority', 'reporter',
+        'sprint', 'status', 'title', 'type',
       ].sort(),
     );
   });

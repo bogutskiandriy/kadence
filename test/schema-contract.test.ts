@@ -128,3 +128,45 @@ describe('the schema cannot drift from the code', () => {
     }
   });
 });
+
+describe('decisions are reachable and published', () => {
+  it('records and reads a decision through the real binary', () => {
+    const add = run(['decision', 'add', 'Use ULIDs', '--why', 'Clocks disagree.', '--json']);
+    expect(add.code, add.stderr).toBe(0);
+    expect(JSON.parse(add.stdout).decision.label).toBe('DEC-1');
+
+    const listed = json(['decision', 'list', '--json']).decisions;
+    expect(listed).toHaveLength(1);
+    expect(listed[0].why).toBe('Clocks disagree.');
+  });
+
+  it('supersedes through the binary, and hides the old one by default', () => {
+    run(['decision', 'add', 'Thrift', '--why', 'fastest', '--json']);
+    run(['decision', 'add', 'Avro', '--why', 'evolution', '--supersedes', 'DEC-1', '--json']);
+
+    expect(json(['decision', 'list', '--json']).decisions.map((d: { label: string }) => d.label))
+      .toEqual(['DEC-2']);
+    expect(json(['decision', 'list', '--all', '--json']).decisions).toHaveLength(2);
+  });
+
+  it('links a document to a task through the binary', () => {
+    run(['task', 'add', 'Fix login']);
+    const r = run(['task', 'doc', 'KAD-1', 'docs/design.md', '--json']);
+
+    expect(r.code, r.stderr).toBe(0);
+    expect(json(['task', 'show', 'KAD-1', '--json']).task.docs).toEqual(['docs/design.md']);
+  });
+
+  it('publishes the decision commands in the contract', () => {
+    const names = json(['schema', '--json']).contract.commands.map((c: { name: string }) => c.name);
+    expect(names).toContain('decision add');
+    expect(names).toContain('decision list');
+    expect(names).toContain('task doc');
+  });
+
+  it('publishes the decision shape, so an agent knows what comes back', () => {
+    const shapes = json(['schema', '--json']).contract.shapes;
+    expect(shapes.decision.required).toContain('why');
+    expect(shapes.decision.required).toContain('supersededBy');
+  });
+});
