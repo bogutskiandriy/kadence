@@ -187,7 +187,7 @@ cli
   .command('init', 'Set up kadence in this repository')
   .example('  kadence init')
   .action(() => {
-    const r = runInit(process.cwd());
+    const r = runInit(process.cwd(), __VERSION__);
     emit({ ok: r.ok, message: r.message, exitCode: r.ok ? 0 : 1 }, false);
   });
 

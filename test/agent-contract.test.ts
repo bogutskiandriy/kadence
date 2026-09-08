@@ -136,3 +136,45 @@ describe('what the instruction files tell an agent', () => {
     expect(text).toMatch(/configured per project|project-configurable/i);
   });
 });
+
+describe('provenance in the files we write into someone else\'s repository', () => {
+  // Context files rot silently: a year on, nobody knows whether the section is
+  // current or where it came from. The practice literature calls for metadata on
+  // any file an agent reads — see docs/research/context-handoff-2026-09.md §1.5.
+  // We write into other people's repositories, so this matters more for us, not
+  // less.
+  it('says what generated the section and how to refresh it', () => {
+    runInit(dir, '9.9.9');
+    for (const file of ['AGENTS.md', 'CLAUDE.md']) {
+      const text = readFileSync(join(dir, file), 'utf8');
+      expect(text, file).toContain('kadence 9.9.9');
+      expect(text, file).toContain('kadence init');
+    }
+  });
+
+  it('marks the standalone agent README too', () => {
+    runInit(dir, '9.9.9');
+    expect(readFileSync(join(dir, '.kadence', 'README.md'), 'utf8')).toContain('kadence 9.9.9');
+  });
+
+  it('carries no date, so a repeat init does not churn the file', () => {
+    // A generated date would rewrite the section every day and fill diffs with
+    // noise. The version changes exactly when the content might have, which is
+    // the freshness signal that costs nothing.
+    runInit(dir, '9.9.9');
+    const first = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
+    runInit(dir, '9.9.9');
+    expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toBe(first);
+    expect(first).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it('replaces the marker when the version changes, without duplicating', () => {
+    runInit(dir, '1.0.0');
+    runInit(dir, '2.0.0');
+    const text = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
+
+    expect(text).toContain('kadence 2.0.0');
+    expect(text).not.toContain('kadence 1.0.0');
+    expect(text.split('<!-- kadence:begin -->').length - 1).toBe(1);
+  });
+});

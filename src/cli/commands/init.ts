@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '../../core/git.js';
 import { eventsDir, dataDir } from '../../core/store.js';
-import { AGENT_README, upsertAgentsSection } from '../../agent/contract.js';
+import { agentReadme, upsertAgentsSection } from '../../agent/contract.js';
 
 const GITIGNORE_ENTRY = '.kadence/state.json';
 
@@ -24,7 +24,11 @@ export interface InitResult {
   root: string | null;
 }
 
-export function runInit(cwd: string): InitResult {
+/**
+ * @param version stamped into the files we write, so a reader a year later knows
+ *   what produced them. Defaults for tests and any caller without a build.
+ */
+export function runInit(cwd: string, version = 'dev'): InitResult {
   const root = findRepoRoot(cwd);
   if (root === null) {
     return {
@@ -44,11 +48,11 @@ export function runInit(cwd: string): InitResult {
 
   // Never overwrite the README: the user may have added their own rules.
   const readme = join(dataDir(root), 'README.md');
-  if (!existsSync(readme)) writeFileSync(readme, AGENT_README, 'utf8');
+  if (!existsSync(readme)) writeFileSync(readme, agentReadme(version), 'utf8');
 
   // Two files, not one: AGENTS.md is the cross-tool convention, and Claude Code
   // reads CLAUDE.md instead of it (ADR-009).
-  for (const name of INSTRUCTION_FILES) ensureInstructionFile(root, name);
+  for (const name of INSTRUCTION_FILES) ensureInstructionFile(root, name, version);
 
   return {
     ok: true,
@@ -76,9 +80,9 @@ function ensureGitignore(root: string): void {
 }
 
 /** Extends an instruction file without touching what a human wrote. */
-function ensureInstructionFile(root: string, name: string): void {
+function ensureInstructionFile(root: string, name: string, version: string): void {
   const path = join(root, name);
   const existing = existsSync(path) ? readFileSync(path, 'utf8') : null;
-  const next = upsertAgentsSection(existing);
+  const next = upsertAgentsSection(existing, version);
   if (next !== existing) writeFileSync(path, next, 'utf8');
 }
