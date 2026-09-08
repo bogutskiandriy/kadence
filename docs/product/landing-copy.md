@@ -164,7 +164,7 @@ KADENCE_SOURCE=agent kadence task move KAD-1 in_progress
 > That teams and their AI agents actually lose enough context to want this. The bet rests on reasoning and on the industry naming the problem out loud — not on our own users.
 
 **On the roadmap, not shipped**
-> `kadence context <task>` — the whole history of one piece of work, formatted for an AI agent's context window. `kadence decision` — record why, as its own event type. The optional MCP package. Today that history is reachable through `task show --json`, which is where the idea came from.
+> `kadence decision` — record why, as its own event type. The optional MCP package, kept as a response to someone who cannot use the CLI rather than an inevitability. `kadence context <task>` was dropped: `task show --json` already returns the whole history of one piece of work in 948 bytes, constant regardless of project size, and the only thing left to add was a format nobody has asked for.
 
 **Known limits** — без змін.
 

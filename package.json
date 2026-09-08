@@ -1,7 +1,7 @@
 {
   "name": "kadence",
   "version": "0.1.5",
-  "description": "Tasks, sprints and velocity as plain files inside your git repository",
+  "description": "Your team and your AI agents work from the same context: tasks, their full history and time as plain files in your git repository",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -44,6 +44,7 @@
     "tui",
     "project-management",
     "ai-agents",
+    "shared-context",
     "event-sourcing",
     "offline"
   ],
