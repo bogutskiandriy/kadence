@@ -10,6 +10,7 @@
 | [product/positioning.md](product/positioning.md) | Формулювання за Moore. Категорія — не «трекер» |
 | [product/lean-canvas.md](product/lean-canvas.md) | Бізнес-модель. Несправедливої переваги немає — і це записано прямо |
 | [product/north-star.md](product/north-star.md) | Метрика фази валідації. Не зірки |
+| [product/roadmap.md](product/roadmap.md) | **Now/Next/Later.** У Now один пункт, і це не фіча |
 | [product/discovery-2026-09.md](product/discovery-2026-09.md) | **Стан дискавері.** Що доведено, що ні, і що прибрати з роадмапу |
 
 ## 2. Дослідження
@@ -43,7 +44,7 @@
 
 | Документ | Що всередині |
 |---|---|
-| [product/story-map.md](product/story-map.md) | Карта історій. Наша сила проявляється рідко, слабкість — щодня |
+| [product/story-map.md](product/story-map.md) | Карта історій, переглянуто 2026-09-08. Дві прогалини закрито, третя стала гострішою |
 | [product/prioritization.md](product/prioritization.md) | Value/Effort, переглянуто 2026-09-08. Що відвантажено, що ні — і чому чотири найцінніші фічі 0.2.1 у плані були відсутні |
 | [../SPEC.md](../SPEC.md) | Технічна специфікація, вісім модулів |
 | [decisions/](decisions/) | Дев'ять ADR, усі підкріплені вимірами |
