@@ -1,6 +1,11 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.0] — 2026-09-08
+
+The journal held what happened. It now holds **why** — and the reasoning cannot
+quietly go stale, because superseding a decision is one event rather than two
+edits somebody has to remember to make. Reasoning in
+[ADR-010](docs/decisions/010-decisions-as-events.md).
 
 ### Added
 
@@ -31,6 +36,12 @@
 
 - `task show --json` now carries `decisions` and `docs`; both are always arrays,
   so an agent never has to branch on their absence.
+
+  A decision that supersedes another **inherits the task** it was about, unless
+  you name a different one. Without that, superseding quietly stripped a task of
+  its reasoning — the old decision dropped out of `task show` and the
+  replacement had never been attached. Found by installing the package and using
+  it, with 538 tests green.
 
 
 - The files `init` writes into your repository now say what produced them:

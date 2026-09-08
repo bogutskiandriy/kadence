@@ -76,6 +76,12 @@ export function runDecisionAdd(
     const earlier = findDecision(state, fields.supersedes);
     if (earlier === undefined) return decisionNotFound(fields.supersedes);
     supersedesId = earlier.id;
+
+    // A replacement is about the same work unless it says otherwise. Without
+    // this, superseding silently strips a task of its reasoning: the old
+    // decision drops out of `task show` and the new one was never attached.
+    // Found by installing the package and using it, with the suite green.
+    if (taskId === undefined && earlier.task !== null) taskId = earlier.task;
   }
 
   // Paths are stored relative to the repository root: an absolute path breaks

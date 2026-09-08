@@ -92,3 +92,36 @@ describe('a task carries the decisions made about it', () => {
     expect(shown()['decisions']).toEqual([]);
   });
 });
+
+describe('superseding must not detach the reasoning from the work', () => {
+  // Found by installing the tarball and using it, not by the suite: superseding
+  // a decision left the task with no decisions at all, because the replacement
+  // did not repeat --task. Losing the why is the one outcome this feature
+  // exists to prevent.
+  it('the replacement inherits the task the superseded decision was about', () => {
+    runDecisionAdd(dir, env, 'Use Thrift', { why: 'fastest', task: 'KAD-1' });
+    runDecisionAdd(dir, env, 'Use Avro', { why: 'schema evolution', supersedes: 'DEC-1' });
+
+    const decisions = shown()['decisions'] as { label: string }[];
+    expect(decisions.map((d) => d.label)).toEqual(['DEC-2']);
+  });
+
+  it('an explicit task on the replacement wins over the inherited one', () => {
+    runTaskAdd(dir, env, 'Another');
+    runDecisionAdd(dir, env, 'About the first', { why: 'w', task: 'KAD-1' });
+    runDecisionAdd(dir, env, 'Moved elsewhere', {
+      why: 'w',
+      task: 'KAD-2',
+      supersedes: 'DEC-1',
+    });
+
+    expect(shown()['decisions']).toEqual([]);
+  });
+
+  it('does not invent a task when the superseded decision had none', () => {
+    runDecisionAdd(dir, env, 'Project-wide', { why: 'w' });
+    runDecisionAdd(dir, env, 'Still project-wide', { why: 'w', supersedes: 'DEC-1' });
+
+    expect(shown()['decisions']).toEqual([]);
+  });
+});
