@@ -218,6 +218,8 @@ None of these was derivable from evidence; each changes what gets built. The own
 
 Asked plainly on 2026-09-08. The plain answer: **as software it already lives; as a product it has not yet earned the right to.** The difference is a person we do not control depending on it.
 
+**Desk discovery the same day** ([discovery-verdict-2026-09.md](../research/discovery-verdict-2026-09.md)) narrowed the answer to one sentence: *the product makes sense as the plain-file, append-only, zero-dependency journal for repositories where more than one human or more than one agent vendor works — and as nothing else.* The users of the category leader asked for exactly that shape, with reaction counts, and lost it. Three things it is **not**: a velocity product (zero requests across 1,076 open Beads issues and all of Backlog.md's), a "memory for agents" product (six projects above 5,000 stars own that axis), or a solo-developer tool (vendor memory now covers the single person on the single machine).
+
 ### The case for
 
 - The category was validated by someone else's money and attention: Beads at 26.8k stars, a hosted-memory market charging $19–249 a month.
@@ -238,7 +240,7 @@ Asked plainly on 2026-09-08. The plain answer: **as software it already lives; a
 |---|---|---|---|
 | Probe B was never run; we kept shipping mechanics to a segment we never spoke to | **Tiger** | Six days, four features, zero conversations | **Blocking.** Owner: the owner. Decision date: 2026-09-22 — either five conversations booked or the reason written down |
 | Nobody found it: one star, a name that belongs to someone else, no channel with a tested conversion | **Tiger** | Lean canvas §5 had channel tests; none has run | Fast-follow: run the README→`init` and one-post tests within 30 days of Probe B |
-| Beads shipped a plain-file mode and the differentiation collapsed to "append-only" | **Tiger** | Their Rust port froze SQLite+JSONL; demand is visible in their issues | Track. Mitigation is speed to G1, not code |
+| Beads shipped a plain-file mode and the differentiation collapsed to "append-only" | **Tiger** | Their Rust port froze SQLite+JSONL (1,075 stars); a markdown-backend RFC with a working branch sits in their tracker; `decisions.md` appeared on 2026-09-08 | Track. Mitigation is speed to G1, not code — the shape is being rediscovered monthly |
 | The author's attention moved to the next project | **Tiger** | Portfolio of 28 repositories on the same account, most idle | Track. Kill criteria below are the mitigation |
 | No MCP, so agents could not use it | Paper tiger | Probe C: ~700 tokens a session; Beads' users call a CLI | — |
 | No web UI, so PMs would not adopt it | Paper tiger | Positioning: PMs work through agents; the TUI exists | — |

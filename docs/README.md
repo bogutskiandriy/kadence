@@ -36,6 +36,7 @@
 | [research/probe-c-agent-cost.md](research/probe-c-agent-cost.md) | **✅ Виконано.** Відповідь про задачу — 948 байт незалежно від розміру проєкту; журнал росте до 528 КБ. Спростував наш власний аргумент про MCP |
 | [research/agent-readability-2026-09.md](research/agent-readability-2026-09.md) | **Читати перед зміною агентського контракту.** Як агенти читають репозиторій. Claude Code не читає `AGENTS.md` — а `init` пише тільки його |
 | [research/ecosystem-and-monetization-2026-09.md](research/ecosystem-and-monetization-2026-09.md) | Докази для дороги до 1.0: Beads як головний конкурент, ринок памʼяті для агентів, ETH Zurich про контекстні файли, METR про швидкість, дистрибуція, моделі доходу |
+| [research/discovery-verdict-2026-09.md](research/discovery-verdict-2026-09.md) | **Вердикт дискавері.** Продукт має сенс як один продукт і як три інші ні. Скарги користувачів Beads і Backlog.md з реакціями, нуль запитів на velocity, розмір сегмента знизу вгору |
 
 ## 4. Проєктування
 

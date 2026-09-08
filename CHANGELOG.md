@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.1] — 2026-09-08
+
+A patch, and the reason to take it is the fix: anyone already on 0.3.0 has a
+state cache that can serve records folded by the previous build. The added field
+is additive within `kadence/v1`, which the contract permits at any version.
 
 ### Added
 
