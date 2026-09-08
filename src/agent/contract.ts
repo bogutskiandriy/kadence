@@ -285,12 +285,17 @@ export function buildContract(version: string): Record<string, unknown> {
       },
       board: { required: ['schema', 'ok', 'columns'] },
       decision: {
-        required: ['id', 'label', 'title', 'why', 'rejected', 'docs', 'supersedes', 'supersededBy'],
+        required: [
+          'id', 'label', 'title', 'why', 'rejected', 'docs', 'supersedes', 'supersededBy',
+          'source',
+        ],
         notes: {
           why: 'The reason. Required when recording — a decision without one is a changelog line.',
           supersededBy:
             'Derived while folding from a later decision carrying `supersedes`. Both directions come from one write, so they cannot fall out of step.',
           docs: 'Repository-relative paths. kadence does not store the documents, only the link.',
+          source:
+            '"human" or "agent", from KADENCE_SOURCE at the time of writing. Never guessed: without the variable an event counts as human.',
           listing:
             '`decision list` hides superseded decisions unless --all is passed: a reversed reason presented as current is worse than no memory.',
         },

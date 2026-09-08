@@ -228,6 +228,7 @@ function serializeDecision(d: Decision, state: ProjectState): Record<string, unk
     superseded: d.supersededBy !== null,
     at: d.at,
     by: d.by,
+    source: d.source,
   };
 }
 
@@ -241,7 +242,10 @@ function renderDecisions(decisions: readonly Decision[], state: ProjectState): s
   return decisions
     .map((d) => {
       const note = d.supersededBy === null ? '' : ` (superseded by ${labelOf(state, d.supersededBy)})`;
-      return `${d.label}  ${d.title}${note}`;
+      // Only the agent case is marked: in a repository written mostly by people,
+      // labelling every human record is noise that hides the exception.
+      const who = d.source === 'agent' ? ' [agent]' : '';
+      return `${d.label}  ${d.title}${note}${who}`;
     })
     .join('\n');
 }
@@ -260,6 +264,7 @@ function renderDecision(d: Decision, state: ProjectState): string {
   if (d.rejected !== null) lines.push(`Rejected: ${d.rejected}`);
   if (d.task !== null) lines.push(`Task:     ${labelOf(state, d.task)}`);
   if (d.docs.length > 0) lines.push(`Docs:     ${d.docs.join(', ')}`);
+  lines.push(`By:       ${d.by}${d.source === 'agent' ? ' (agent)' : ''}`);
   if (d.supersedes !== null) lines.push(`Replaces: ${labelOf(state, d.supersedes)}`);
   return lines.join('\n');
 }

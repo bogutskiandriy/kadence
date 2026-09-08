@@ -241,3 +241,40 @@ describe('the advantage has to be visible, not merely true', () => {
     expect(r.message).toMatch(/one event|single event/i);
   });
 });
+
+describe('who wrote the decision — human or agent', () => {
+  // The product refuses to guess the source when writing an event. That refusal
+  // only means something if the source is visible where the record is read:
+  // otherwise the journal knows and the contract does not.
+  it('reports a human decision as human', () => {
+    record('A human call', 'reasoned in a meeting');
+    const [d] = list() as unknown as { source: string }[];
+    expect(d!.source).toBe('human');
+  });
+
+  it('reports an agent decision as agent', () => {
+    const agentEnv = { KADENCE_SOURCE: 'agent' } as NodeJS.ProcessEnv;
+    runDecisionAdd(dir, agentEnv, 'An agent call', { why: 'measured' });
+
+    const [d] = list() as unknown as { source: string }[];
+    expect(d!.source).toBe('agent');
+  });
+
+  it('carries the source through decision show as well', () => {
+    const agentEnv = { KADENCE_SOURCE: 'agent' } as NodeJS.ProcessEnv;
+    runDecisionAdd(dir, agentEnv, 'An agent call', { why: 'measured' });
+
+    const shown = runDecisionShow(dir, env, 'DEC-1').data!['decision'] as { source: string };
+    expect(shown.source).toBe('agent');
+  });
+
+  it('distinguishes the two in one listing, which is the whole point', () => {
+    record('Human decided', 'w');
+    runDecisionAdd(dir, { KADENCE_SOURCE: 'agent' } as NodeJS.ProcessEnv, 'Agent decided', {
+      why: 'w',
+    });
+
+    const sources = (list() as unknown as { source: string }[]).map((d) => d.source);
+    expect(sources).toEqual(['human', 'agent']);
+  });
+});

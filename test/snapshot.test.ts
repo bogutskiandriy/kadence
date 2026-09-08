@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createUlid } from '../src/core/ulid.js';
 import { append } from '../src/core/store.js';
-import { loadOrBuild, snapshotPath } from '../src/core/snapshot.js';
+import { loadOrBuild, snapshotPath, SNAPSHOT_VERSION } from '../src/core/snapshot.js';
+import { project } from '../src/core/projection.js';
 import type { FlowEvent } from '../src/core/event.js';
 
 let root: string;
@@ -120,5 +121,57 @@ describe('loadOrBuild', () => {
     const cold = loadOrBuild(root).state.tasks.map((t) => t.label);
     const warm = loadOrBuild(root).state.tasks.map((t) => t.label);
     expect(warm).toEqual(cold);
+  });
+});
+
+describe('the cache must not serve a shape from an older version of the code', () => {
+  /**
+   * Found by using the product: after `Decision` gained a `source` field, an
+   * existing `.kadence/state.json` kept serving decisions without it. Invariant
+   * I6 says deleting the cache changes nothing — true, and the inverse is what
+   * bites: *keeping* it changes everything when the projected shape evolves.
+   *
+   * The lists are the **internal** projected shape, not the published one — that
+   * is what the cache stores, and the two differ (`createdAt` and `updatedAt`
+   * never reach `--json`).
+   *
+   * These lists are a change detector on purpose. If you add a field to a
+   * projected record, this test fails, and the fix is to update the list **and
+   * bump SNAPSHOT_VERSION** — which is the moment you would otherwise forget
+   * that every existing user has a stale cache.
+   */
+  const PROJECTED_SHAPE = {
+    version: 'kadence-snapshot/2',
+    task: [
+      'id', 'label', 'title', 'description', 'type', 'priority', 'status', 'labels',
+      'assignee', 'reporter', 'sprint', 'parent', 'blockedBy', 'due', 'comments', 'docs',
+      'estimate', 'loggedHours', 'history', 'createdAt', 'updatedAt',
+    ],
+    decision: [
+      'id', 'label', 'title', 'why', 'rejected', 'task', 'docs', 'supersedes',
+      'supersededBy', 'at', 'by', 'source',
+    ],
+  };
+
+  it('the snapshot version matches the shape recorded here', () => {
+    expect(SNAPSHOT_VERSION).toBe(PROJECTED_SHAPE.version);
+  });
+
+  it('a projected task has exactly the recorded fields', () => {
+    const id = gen();
+    const state = project([
+      { id, type: 'task.created', entity: id, actor: 'a@b.c', ts: '2026-09-08T10:00:00.000Z',
+        source: 'human', data: { title: 'T' } },
+    ]);
+    expect(Object.keys(state.tasks[0]!).sort()).toEqual([...PROJECTED_SHAPE.task].sort());
+  });
+
+  it('a projected decision has exactly the recorded fields', () => {
+    const id = gen();
+    const state = project([
+      { id, type: 'decision.recorded', entity: id, actor: 'a@b.c', ts: '2026-09-08T10:00:00.000Z',
+        source: 'agent', data: { title: 'D', why: 'w' } },
+    ]);
+    expect(Object.keys(state.decisions[0]!).sort()).toEqual([...PROJECTED_SHAPE.decision].sort());
   });
 });

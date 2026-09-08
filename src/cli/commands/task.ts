@@ -607,6 +607,7 @@ export function runTaskShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): C
       why: d.why,
       rejected: d.rejected,
       docs: d.docs,
+      source: d.source,
     }));
 
   return {

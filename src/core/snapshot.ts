@@ -14,7 +14,18 @@ import { project, type ProjectState } from './projection.js';
  * from the journal" comes up, the answer is always "rebuild it".
  */
 
-const SNAPSHOT_VERSION = 'kadence-snapshot/1';
+/**
+ * Bumped whenever a projected record gains or loses a field.
+ *
+ * The cache is derived and safe to delete (I6) — but keeping a stale one is not
+ * safe, because it serves a shape folded by an older version of the code. After
+ * `Decision` gained `source`, existing caches kept returning decisions without
+ * it, and every consumer branching on that field saw undefined.
+ *
+ * `test/snapshot.test.ts` pins this constant to the field lists, so changing a
+ * shape without bumping it fails the build.
+ */
+export const SNAPSHOT_VERSION = 'kadence-snapshot/2';
 
 interface Snapshot {
   version: string;

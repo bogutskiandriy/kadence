@@ -150,6 +150,14 @@ export interface Decision {
   supersededBy: string | null;
   at: string;
   by: string;
+  /**
+   * Who wrote it, as recorded on the event.
+   *
+   * kadence refuses to guess this when writing. That refusal only means
+   * something if the source survives to the point of reading — otherwise the
+   * journal knows and the contract does not (ADR-010).
+   */
+  source: 'human' | 'agent';
 }
 
 export interface ProjectState {
@@ -224,6 +232,7 @@ export function project(input: readonly FlowEvent[]): ProjectState {
           supersededBy: null,
           at: e.ts,
           by: e.actor,
+          source: e.source,
         });
       }
       continue;

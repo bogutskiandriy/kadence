@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `decision list` and `decision show` now report **who wrote the record** —
+  `source: "human" | "agent"`, from `KADENCE_SOURCE` at the time of writing.
+  kadence has always refused to guess this when writing an event; that refusal
+  only means something if the source survives to the point of reading. Human
+  output marks only agent-written records, because labelling every human one in
+  a repository written mostly by people hides the exception.
+
+### Fixed
+
+- **The state cache could serve a shape folded by an older version of kadence.**
+  `.kadence/state.json` carries a version, and it was not bumped when a projected
+  record gained a field — so after an upgrade the cache kept returning records
+  without the new field, and any consumer branching on it saw `undefined`.
+  Invariant I6 says deleting the cache changes nothing, which is true; what bites
+  is *keeping* it. The version is now pinned to the projected shape by a test, so
+  adding a field without invalidating the cache fails the build.
+
+  Found by using the product on itself: three decisions recorded minutes earlier
+  refused to show their source.
+
 ## [0.3.0] — 2026-09-08
 
 The journal held what happened. It now holds **why** — and the reasoning cannot

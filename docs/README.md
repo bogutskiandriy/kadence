@@ -11,6 +11,7 @@
 | [product/lean-canvas.md](product/lean-canvas.md) | Бізнес-модель. Несправедливої переваги немає — і це записано прямо |
 | [product/north-star.md](product/north-star.md) | Метрика фази валідації. Не зірки |
 | [product/roadmap.md](product/roadmap.md) | **Now/Next/Later.** У Now один пункт, і це не фіча |
+| [product/roadmap-to-1.0.md](product/roadmap-to-1.0.md) | **Дорога до 1.0.** Куди йдемо, сім гейтів для `1.0.0`, екосистема, гроші, чесна відповідь про прискорення. Англійською |
 | [product/discovery-2026-09.md](product/discovery-2026-09.md) | **Стан дискавері.** Що доведено, що ні, і що прибрати з роадмапу |
 
 ## 2. Дослідження
@@ -34,6 +35,7 @@
 | [research/probe-d-docs-linkage.md](research/probe-d-docs-linkage.md) | **✅ Виконано.** Зв'язок документа із задачею економить не пошук, а відсіювання: 34× на п'яти випадках |
 | [research/probe-c-agent-cost.md](research/probe-c-agent-cost.md) | **✅ Виконано.** Відповідь про задачу — 948 байт незалежно від розміру проєкту; журнал росте до 528 КБ. Спростував наш власний аргумент про MCP |
 | [research/agent-readability-2026-09.md](research/agent-readability-2026-09.md) | **Читати перед зміною агентського контракту.** Як агенти читають репозиторій. Claude Code не читає `AGENTS.md` — а `init` пише тільки його |
+| [research/ecosystem-and-monetization-2026-09.md](research/ecosystem-and-monetization-2026-09.md) | Докази для дороги до 1.0: Beads як головний конкурент, ринок памʼяті для агентів, ETH Zurich про контекстні файли, METR про швидкість, дистрибуція, моделі доходу |
 
 ## 4. Проєктування
 
