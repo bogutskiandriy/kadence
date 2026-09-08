@@ -1,50 +1,54 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] — 2026-09-08
+
+The agent contract, made real. `schema: "kadence/v1"` used to be a version
+string that nothing checked; now the contract is published, the failures are
+machine-readable, and the responses can be narrowed to what an agent actually
+reads. Reasoning in [ADR-009](docs/decisions/009-the-agent-contract.md),
+measurements in [Probe C](docs/research/probe-c-agent-cost.md).
 
 ### Added
 
 - `kadence schema --json` — the machine-readable contract behind
   `schema: "kadence/v1"`: every command, the fields you can rely on, and every
-  error code. Works outside a repository, because an agent asks what the tool
+  error code. It works outside a repository, because an agent asks what the tool
   does before it has a project to ask about.
 - Failed `--json` calls now carry `error.code` from a closed list, plus
   `received`, `allowed` and `hint` where each is knowable. `allowed` matters
   most for statuses: they are configured per project, so an agent cannot learn
-  the valid set from documentation.
+  the valid set from documentation. There is deliberately no `retryable` field —
+  with no network and no lock, the same input always fails the same way.
 - `--fields` on `board --json` and `task list --json`, so an agent can ask for
-  the columns it reads instead of every description. A 1000-task board was
-  803 KB — larger than the journal it was folded from. An unknown name fails
-  with `unknown_field` and the list of what exists; the selectable fields are
-  published in `kadence schema --json`.
-- `init` writes the kadence section into `CLAUDE.md` as well as `AGENTS.md`.
-  Claude Code does not read `AGENTS.md`, so a repository carrying only the
-  latter was invisible to the largest agent audience. Human-written text in
-  either file is left untouched, and a repeat `init` does not duplicate.
-
-### Fixed
-
-- **Any `--json` response larger than the pipe buffer was truncated mid-string.**
-  `process.exit()` does not wait for an asynchronous write to drain, and writing
-  to a pipe — how every agent reads us — is asynchronous, while writing to a file
-  is not. A 200-task board produced 131 072 bytes and a parse error; the same
-  command redirected to a file was valid. Output is now written synchronously.
-  Found by Probe C with 418 tests passing.
+  the columns it reads instead of every description. On a 200-task board that is
+  130,799 bytes down to 11,015. An unknown name fails with `unknown_field` and
+  the list of what exists.
 
 ### Changed
 
-- `resolveRefs` returns a full `CommandResult` instead of an error string,
-  removing seven copies of the same error-construction line.
+- **`init` now writes the kadence section into `CLAUDE.md` as well as
+  `AGENTS.md`.** Claude Code does not read `AGENTS.md`, so a repository carrying
+  only the latter was invisible to the largest agent audience — the README's
+  promise that "the AI agent finds it on its own" was not true for them. Text a
+  human wrote in either file is left untouched, and a repeat `init` does not
+  duplicate the section. If you do not want the file, delete it; nothing else
+  depends on it.
 
-### Removed
+### Fixed
 
-- `kadence context <task>` is off the roadmap. `task show --json` already returns
-  the whole history of one piece of work in 948 bytes, constant regardless of
-  project size; the remaining difference was formatting nobody has asked for.
-  See [Probe C](docs/research/probe-c-agent-cost.md).
+- **Any `--json` response larger than the pipe buffer was truncated
+  mid-string.** `process.exit()` does not wait for an asynchronous write to
+  drain, and writing to a pipe — how every agent reads us — is asynchronous,
+  while writing to a file is not. A 200-task board produced 131,072 bytes and a
+  parse error; the same command redirected to a file was valid. Output is now
+  written synchronously.
 
-All three follow [ADR-009](docs/decisions/009-the-agent-contract.md) and the
-research in `docs/research/agent-readability-2026-09.md`.
+### Note on the roadmap
+
+`kadence context <task>` will not be built. `task show --json` already returns
+the whole history of one piece of work in 948 bytes, and that number does not
+grow with the project — the only thing left to add was a format nobody has
+asked for.
 
 ## [0.1.5] — 2026-09-03
 
