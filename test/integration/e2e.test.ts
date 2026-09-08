@@ -60,6 +60,9 @@ describe('a team uses kadence for a sprint', () => {
     expect(report['carriedOver']).toEqual(['KAD-4']);
   });
 
+  // Twenty-odd process spawns, so it needs a budget: the default 5 s is enough on
+  // an idle machine and not on a busy one, and a timeout here reads like a
+  // product failure when it is only contention.
   it('every command a user can reach exits cleanly', () => {
     run('init');
     run('task', 'add', 'Task', '--estimate', '3');
@@ -75,6 +78,9 @@ describe('a team uses kadence for a sprint', () => {
       ['board'], ['board', 'config'],
       ['sprint', 'status'], ['sprint', 'list'], ['sprint', 'burndown'],
       ['template', 'save', 'bug', '--type', 'bug'], ['template', 'list'],
+      ['schema'], ['schema', '--json'],
+      ['board', '--json', '--fields', 'label,status'],
+      ['task', 'list', '--json', '--fields', 'id,label'],
       ['--help'], ['--version'],
     ];
 
@@ -82,7 +88,7 @@ describe('a team uses kadence for a sprint', () => {
       const r = run(...args);
       expect(r.code, `${args.join(' ')} exited ${r.code}: ${r.err}`).toBe(0);
     }
-  });
+  }, 30_000);
 
   it('survives three people editing one task on separate branches', () => {
     run('init');

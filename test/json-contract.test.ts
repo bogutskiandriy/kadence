@@ -211,28 +211,42 @@ describe('large responses survive the pipe', () => {
   // reads it. process.exit() does not wait for an asynchronous write to drain,
   // and a pipe write is asynchronous while a file write is not. The suite missed
   // it because every fixture until now was small.
-  it('a board bigger than the pipe buffer still parses', () => {
-    const filler = 'x'.repeat(6000);
-    for (let i = 0; i < 25; i++) {
-      run(['task', 'add', `Task ${i}`, '-d', filler]);
+  // Eight fat tasks rather than twenty-five thin ones: the response has to clear
+  // the pipe buffer, and every task costs a process spawn. The first version of
+  // this test spawned 25 and timed out on a loaded machine.
+  const TASKS = 8;
+  const FILLER = 'x'.repeat(20_000);
+
+  function buildFatBoard(): void {
+    for (let i = 0; i < TASKS; i++) {
+      run(['task', 'add', `Task ${i}`, '-d', FILLER]);
     }
+  }
 
-    const r = run(['board', '--json']);
-    expect(r.stdout.length).toBeGreaterThan(131072);
-    expect(() => JSON.parse(r.stdout)).not.toThrow();
-  });
+  it(
+    'a board bigger than the pipe buffer still parses',
+    () => {
+      buildFatBoard();
 
-  it('and reports every task it was given', () => {
-    const filler = 'x'.repeat(6000);
-    for (let i = 0; i < 25; i++) {
-      run(['task', 'add', `Task ${i}`, '-d', filler]);
-    }
+      const r = run(['board', '--json']);
+      expect(r.stdout.length).toBeGreaterThan(131072);
+      expect(() => JSON.parse(r.stdout)).not.toThrow();
+    },
+    30_000,
+  );
 
-    const board = JSON.parse(run(['board', '--json']).stdout);
-    const count = Object.values(board.columns as Record<string, unknown[]>).reduce(
-      (n, column) => n + column.length,
-      0,
-    );
-    expect(count).toBe(25);
-  });
+  it(
+    'and reports every task it was given',
+    () => {
+      buildFatBoard();
+
+      const board = JSON.parse(run(['board', '--json']).stdout);
+      const count = Object.values(board.columns as Record<string, unknown[]>).reduce(
+        (n, column) => n + column.length,
+        0,
+      );
+      expect(count).toBe(TASKS);
+    },
+    30_000,
+  );
 });
