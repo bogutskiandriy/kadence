@@ -1,6 +1,6 @@
 # Where discovery actually stands — and what to change in the product
 
-- **Date:** 2026-09-07
+- **Date:** 2026-09-07 (ADR count refreshed 2026-09-09; every other row re-checked and unchanged)
 - **Inputs:** [Probe A](../research/probe-a-results.md),
   [Probe C](../research/probe-c-agent-cost.md),
   [agent-readability research](../research/agent-readability-2026-09.md),
@@ -21,7 +21,7 @@ The standard discovery cycle runs in six phases. Ours looks like this:
 | 3. Conduct research — talk to customers | **Not started** | zero interviews |
 | 4. Synthesize insights | **Done from desk research** | competitive snapshot, assumptions map, agent-readability research |
 | 5. Generate & validate solutions | **Done, twice** | Probe A (merge conflicts), Probe C (agent cost) |
-| 6. Decide & document | **Continuous** | nine ADRs |
+| 6. Decide & document | **Continuous** | ten ADRs |
 
 Phase 3 is the only gap, and it has been the only gap since 2026-09-02.
 

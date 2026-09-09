@@ -7,7 +7,7 @@ constraints or it does not belong here.
 ## Read first
 
 - `SPEC.md` — modules, acceptance criteria, boundaries
-- `docs/decisions/` — six ADRs, each recording what was **measured** and what
+- `docs/decisions/` — ten ADRs, each recording what was **measured** and what
   would make us revisit it
 - `docs/review-stage-2.md` — debt deliberately left, with reasoning
 - `tasks/todo.md` — what shipped and why, milestone by milestone
@@ -100,7 +100,7 @@ would drift.
 ## Commands
 
 ```bash
-npm test           # 428 tests
+npm test           # 548 tests
 npm run typecheck
 npm run build      # single bundle, blessed stays external
 ```
