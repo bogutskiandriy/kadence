@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.3.2] — 2026-09-09
+
+Nothing in the package changed. `src/`, `scripts/`, `package.json` and the
+lockfile are identical to 0.3.1 — the diff across all four is empty — so the code
+you get is the code you already have, and there is no behavioural reason to take
+this one.
+
+What changed is the pipeline that produces it. From here on the tarball is built
+in a job that does not execute dependency install scripts and that pins every
+action it runs to a commit rather than a tag.
+
+### Security
+
+- **Dependency lifecycle scripts no longer run in CI or on release.** `npm ci`
+  passes `--ignore-scripts` in both workflows. A postinstall runs with the full
+  rights of the job, which is the primary npm supply-chain vector. Exactly one
+  dependency here declares one — esbuild — and in 0.28 the platform binary
+  arrives through optionalDependencies, so the script has nothing left to do.
+  Measured rather than assumed: clean install, 35 KB bundle, full suite green on
+  Node 20 and 22.
+- **Both workflows pin `actions/checkout` and `actions/setup-node` to commit
+  SHAs**, with the version in a trailing comment. A tag is mutable: `@v4` is
+  whatever its owner last moved it to, and it runs with the job's permissions.
+
+Publishing is unaffected: `--ignore-scripts` governs installing dependencies, not
+this package's own lifecycle, so `prepublishOnly` still gates every release on
+typecheck, tests and build.
+
 ## [0.3.1] — 2026-09-08
 
 A patch, and the reason to take it is the fix: anyone already on 0.3.0 has a
