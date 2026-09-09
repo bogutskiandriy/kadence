@@ -35,7 +35,7 @@
 | # | Версія | Назва | Що є наприкінці | Гейти |
 |---|---|---|---|---|
 | **14** | 0.3.x | Розмови | `probe-b-results.md` написано; CI ставить пакет чотирма менеджерами; інструмент North Star пише в файл | G1 (інструмент), G2 (половина), G4 (половина) |
-| **15** | 0.4 | Гілка | `task list --branch` і фільтр у TUI; `board --json --summary` не росте з історією | G5 (частина) |
+| **15** | 0.4 | Гілка, агентний цикл і критерії | `ready`, `prime` + хук, claim, `note`; `--branch`; критерії приймання + DoD, milestones, `stats`, completion; `--summary`; три експерименти: статичний експорт, `@kadence/github`, `doc add`. Три зрізи, кожен відвантажується як 0.4.x | G5 (частина) |
 | **16** | 0.5 | Екосистема | Homebrew tap; довідка згенерована з `--help` і `schema`; Probe E виміряно; стаття опублікована; скіл-пакет | G2 (друга половина), G6 |
 | **17** | 0.6 | Двері всередину | Імпорт із Backlog.md і Beads; MCP, якщо з'явився тригер | — |
 | **18** | 0.7 | Контракт і розмір | Корпус фікстур усіх 0.x; політика застарівання; `doctor`; Windows CI; бінарник виміряно | G3, G4, G5, G7 (тест довжини) |
@@ -106,11 +106,45 @@
 
 ---
 
-## Milestone 15 — Гілка (0.4) · умовний
+## Milestone 15 — Гілка, агентний цикл і критерії (0.4)
 
-Якщо Probe B каже «контекст не губиться» — T55–T57 зникають, T58 лишається.
+**Переглянуто 2026-09-09.** Власник вирішив узяти фічі сусідів, які проходять фільтр «дає хоч трохи цінності», переробити їх по-нашому і будувати **зараз, до Probe B**. Обґрунтування, вердикти по кожній і три експерименти замість трьох «ні» — у [feature-adoption-2026-09.md](../docs/product/feature-adoption-2026-09.md). Це вдруге за два дні гейт не витримав; записано там чесно. Дата Probe B не рухається: 22 вересня.
 
-### Продукт
+Milestone став великим: 17 задач. Тому він поділений на три зрізи з чекпоінтами, і **будь-який префікс відвантажується як 0.4.x**. Порядок за цінністю для агента, потім для людини, потім експерименти.
+
+### Зріз A — агентний цикл (0.4.0)
+
+- [ ] **T80. `kadence ready`** · XS
+  - AC: відкриті задачі без живих блокерів і без чужого claim (T82), сортування: пріоритет → вік; `--assignee me`; `--json` віддає вузький список (`label`, `title`, `priority`, `estimate`, `claimedBy`)
+  - AC: нове поле в `schema --json`; perf-кейс у `perf.test.ts` (10k подій ≤ 200 мс)
+  - AC: TUI: фільтр `r` показує лише ready (паритет)
+  - Файли: `src/core/query.ts`, `src/cli/commands/ready.ts`, `src/tui/keys.ts`, `test/ready.test.ts`
+- [ ] **T81. `kadence prime` і хук старту сесії** · S
+  - AC: ≤ 40 рядків і ≤ 3 KB під тестом (та сама дисципліна, що T75): активний спринт і дні до кінця, мої claimed/in_progress, кількість ready, чинні рішення (лише назви), останні п'ять нотаток (T83), чотири команди «як дізнатися більше»
+  - AC: `--json` та сама структура; поза репозиторієм — код помилки з підказкою `kadence init`
+  - AC: `kadence init --hooks` дописує `SessionStart`-хук у `.claude/settings.json` **лише за прапорцем**, upsert без руйнування чужих хуків; без прапорця `init` файл не чіпає. Формат хука перевірити в документації Claude Code перед кодом, не з пам'яті
+  - AC: секція в `AGENTS.md`/`CLAUDE.md` отримує один рядок «run `kadence prime` first», і не довшає більше ніж на нього
+  - Файли: `src/cli/commands/prime.ts`, `src/cli/commands/init.ts`, `src/agent/contract.ts`, `test/prime.test.ts`, `test/init.test.ts`
+- [ ] **T82. Claim для паралельних агентів** · M · **ADR-011 до коду**
+  - AC: ADR-011 записує семантику: `task.claimed {by, source}` / `task.released`; при згортанні тримає найраніший живий claim за ULID; пізніший claim іншого актора **зберігається** і задача позначається `contested` з обома іменами; `move done` або `release` знімає claim; жодного локу
+  - AC: `task claim KAD-1`, `task release KAD-1`, `task claim` без аргументу бере перший ready (як `bd ready` + claim одним кроком)
+  - AC: повідомлення при claim прямо каже: «інша машина могла зробити claim до вашого push; злиття це покаже»
+  - AC: інтеграційний тест на реальному git: дві гілки, два claim, після злиття один тримає, другий contested, у всіх порядках злиття (I1)
+  - AC: TUI: маркер на картці, `contested` окремим кольором; `ready` виключає чужі claim
+  - Файли: `docs/decisions/011-claims-as-events.md`, `src/core/event.ts`, `src/core/projection.ts`, `src/cli/commands/task.ts`, `test/claim.test.ts`, `test/integration/claim.test.ts`
+- [ ] **T83. `kadence note`** · S
+  - AC: `note "text" [--task KAD-1]` → `note.recorded`; `note list`; показується в `prime` (останні п'ять) і в `task show`
+  - AC: **не** рішення: без `--why`, без `supersedes`, без номера; довідка каже, коли брати `decision`
+  - AC: тест, що `decision list` нотаток не показує
+  - Файли: `src/cli/commands/note.ts`, `src/core/projection.ts`, `test/note.test.ts`
+
+### Checkpoint 16a — після T83
+
+- [ ] `kadence prime` у цьому репозиторії читається за 10 секунд і каже, що робити далі
+- [ ] Два агенти на двох гілках: claim → злиття → contested видно в `board` і в TUI
+- [ ] Час команд перевиміряний після дотику до `core/`
+
+### Зріз B — гілка і людина (0.4.1)
 
 - [ ] **T55. Перевірити, що `--branch` — не `--search` під іншою назвою** · XS · до коду
   - AC: одна сторінка в `docs/research/branch-context-2026-xx.md`: визначення «задача належить гілці» = її події додані на гілці відносно бази (`git log <base>..HEAD -- .kadence/events`); виміряний розмір відповіді проти `board --json` на цьому репозиторії
@@ -125,21 +159,63 @@
   - AC: клавіша `b` перемикає «лише поточна гілка» / «усі»; стан видно в заголовку борду
   - AC: маршрутизація клавіші — у `src/tui/keys.ts` з тестом; сам борд перевіряється руками (`kadence ui`), і це записано в чек-лист T77
   - Файли: `src/tui/keys.ts`, `src/tui/board.ts`, `test/keys.test.ts`
-
-### Техніка
-
-- [ ] **T58. `board --json --summary`** · S · безумовна
+- [ ] **T84. Критерії приймання** · M
+  - AC: `task ac add KAD-1 "text"`, `task ac check KAD-1 2`, `task ac uncheck KAD-1 2`, `task ac list KAD-1` → `task.criterion_added` / `_checked` / `_unchecked`; номер критерію — позиція при згортанні (як `KAD-N`), не зберігається
+  - AC: `task move KAD-1 done` з невідміченими критеріями **попереджає і виконує**; `board` і `task show` позначають задачу
+  - AC: `task show --json` віддає `criteria: [{n, text, checked, checkedBy}]`, завжди масив
+  - AC: TUI: чек-лист у картці, пробіл перемикає, кожне перемикання — та сама функція, що й CLI
+  - Файли: `src/core/event.ts`, `src/core/projection.ts`, `src/cli/commands/task.ts`, `src/tui/board.ts`, `test/criteria.test.ts`
+- [ ] **T85. Definition of Done** · S · залежить від T84
+  - AC: `board config --dod "tests green,docs updated"` → `board.configured` з полем `dod`; нові задачі отримують ці критерії при `task add`; `--no-dod` пропускає
+  - AC: зміна DoD не чіпає наявні задачі — критерії вже в їхньому журналі
+  - Файли: `src/cli/commands/board.ts`, `src/cli/commands/task.ts`, `test/dod.test.ts`
+- [ ] **T86. Milestones** · M
+  - AC: `milestone create "1.0" [--due]`, `milestone add KAD-1 --milestone 1.0`, `milestone list`, `milestone close` → події `milestone.created` / `milestone.task_added` / `milestone.closed`; у задачі не більше одного milestone, поле поруч зі `sprint`
+  - AC: прогрес = done-поінти / усі; `milestone list --json`; TUI: фільтр `M`
+  - AC: інтеграційний тест: два milestone з двох гілок, номери після злиття різні (I7)
+  - Файли: `src/core/event.ts`, `src/core/projection.ts`, `src/cli/commands/milestone.ts`, `test/milestone.test.ts`
+- [ ] **T87. `kadence stats` і `completion install`** · S
+  - AC: `stats`: лічильники за статусом і виконавцем, відкриті блокери, contested, velocity останніх трьох спринтів; `--json`
+  - AC: `completion install [--shell zsh|bash|fish]` пише скрипт у стандартне місце оболонки і каже, що зробив; без TTY — друкує скрипт у stdout
+  - Файли: `src/cli/commands/stats.ts`, `src/cli/commands/completion.ts`, `test/stats.test.ts`
+- [ ] **T58. `board --json --summary`** · S
   - AC: прапорець віддає стан колонок без `history` і `comments`; розмір на 1000 задач ≤ 10% від повного (Probe C, finding 4: 803 KB → ціль ≤ 80 KB)
   - AC: **не змінює** відповідь без прапорця — контракт лише додається; `--summary` описаний у `schema --json` і в секції для агентів в `AGENTS.md`/`CLAUDE.md`
   - AC: тест у `perf.test.ts`, що розмір `--summary` не росте з кількістю подій у задачі
   - Файли: `src/cli/commands/board.ts`, `src/agent/contract.ts`, `test/json-contract.test.ts`, `test/perf.test.ts`
 
-### Checkpoint 16
+### Checkpoint 16b — після T58
 
 - [ ] `task list --branch` у репозиторії з двома гілками віддає різні списки; після merge — однаковий
+- [ ] Задача з DoD пройшла шлях add → ac check → move done у CLI і в TUI
 - [ ] `board --json --summary` на фікстурі 1000 задач ≤ 80 KB
-- [ ] `kadence ui` запущено руками; `b` працює
-- [ ] Час команд перевиміряний після дотику до `core/`
+- [ ] `kadence ui` запущено руками: `r`, `b`, `M`, пробіл на критерії
+- [ ] Час команд перевиміряний; числа в `facts.json` сайту оновлені
+
+### Зріз C — три експерименти (0.4.2)
+
+Кожен має умову зупинки, записану в [feature-adoption-2026-09.md](../docs/product/feature-adoption-2026-09.md) до коду.
+
+- [ ] **T88. Статичний експорт борду** · M · замість веб-UI
+  - AC: `board export --html [file]` пише один самодостатній HTML: борд, спринт, burndown, чинні рішення, milestones; без скриптів із мережі, без сервера; відкривається з диска
+  - AC: `board export --md [file]` — Markdown-версія для README; `--readme` оновлює секцію між маркерами, як `init` робить в `AGENTS.md`
+  - AC: жодного процесу, який живе довше за команду; тест, що HTML не містить `http` окрім посилань на задачі
+  - Файли: `src/cli/commands/board.ts`, `src/export/html.ts`, `src/export/markdown.ts`, `test/export.test.ts`
+- [ ] **T89. `@kadence/github` — односторонній експорт в Issues** · M · окремий пакет
+  - AC: ADR-012 до коду: мережа існує лише в цьому пакеті, і лише через `gh`; ядро не робить запитів і не залежить від пакета
+  - AC: `kadence-github publish KAD-1[,KAD-2]` створює або оновлює issue через `gh issue`; маркер `<!-- kadence:KAD-1 -->` у тілі робить повтор ідемпотентним; **ніколи не читає назад** і довідка це каже
+  - AC: без `gh` — зрозуміла помилка з посиланням на встановлення
+  - Файли: `packages/github/` (окремий `package.json`), `docs/decisions/012-network-only-in-packages.md`
+- [ ] **T90. `task doc add` — створити і зв'язати** · S
+  - AC: `task doc add KAD-1 docs/design.md` створює файл із шаблону (заголовок, посилання на задачу) **і** пише `task.doc_linked` одним викликом; наявний файл не перезаписує
+  - AC: `task doc` без `add` працює як раніше
+  - Файли: `src/cli/commands/task.ts`, `test/task-doc.test.ts`
+
+### Checkpoint 16c — фінал 0.4
+
+- [ ] Кожна нова подія й поле є в `schema --json`; `schema-contract.test.ts` зелений без правки очікуваного списку
+- [ ] Умови зупинки трьох експериментів перевірені на пілотах Probe B і результат записаний у `feature-adoption-2026-09.md`
+- [ ] Співвідношення `note` до `decision` у цьому репозиторії записане: якщо нотатки витіснили рішення — це сигнал, не успіх
 
 ---
 
@@ -293,6 +369,7 @@
 | Ризик | Вплив | Пом'якшення |
 |---|---|---|
 | Probe B не проводиться знову — найімовірніший спосіб провалити план | **високий** | Дата 22 вересня і T50 з двома прийнятними результатами: «заброньовано» або «записано, чому ні». Мовчання — не результат |
+| Milestone 15 має 17 задач при 4–8 годинах на тиждень поза кодом — це квартал, а не спринт, і він поглине час Probe B | **високий** | Три зрізи, кожен відвантажується окремо як 0.4.x; зріз A (чотири задачі) перший, бо найдешевший і найцінніший для агента; години на розмови рахуються окремо від годин на код |
 | Співрозмовники з власного кола кажуть те, що хочемо почути | середній | Половина списку T50 — люди поза колом (Probe A, сайт). Скрипт за Mom Test; контр-метрика «ми назвали першими = 0» |
 | `task list --branch` виявиться `--search` під іншою назвою | середній | T55 до коду з порогом 2× |
 | Windows відкриє клас помилок у `store.ts` (rename, EOL) | середній | T73 у 0.7, до `rc`; відомі чотири ризики названі в AC |

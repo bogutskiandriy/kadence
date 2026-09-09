@@ -95,8 +95,8 @@ Two ecosystem items ride along **because they cost hours and add no bet:**
 
 Conditional on Probe B. If the answer is "no context loss", the first two items vanish; the rest stay because they serve the narrower product ([positioning](positioning.md) plans for it).
 
-**`0.4` — the answer, and the branch.**
-**Enable** a developer switching branches, and the agent alongside, **to** see everything tied to the current branch in one call **so that** switching costs no manual reconstruction. `context --branch`, only after checking it is not `task list --search` under another name. Metric: response size against `board --json` on the same repository (Probe C's template).
+**`0.4` — the agent's loop, the human's proof, and the branch.** *(Rescoped 2026-09-09 by the owner; reasoning and per-feature verdicts in [feature-adoption-2026-09.md](feature-adoption-2026-09.md). This is the second time a feature set goes ahead of Probe B; it is recorded as such, and the 22 September date stands.)*
+**Enable** an agent starting a session **to** learn what to do next and claim it in two calls, and a human **to** see what "done" was measured against, **so that** neither re-derives the state of the work. `ready`, `prime` with an opt-in session hook, `claim` with contested-not-rejected merges, `note`; acceptance criteria with a Definition of Done; milestones; `stats` and shell completion; `task list --branch` after checking it is not `--search` renamed; `board --json --summary`. Three former "no"s become experiments with kill conditions: a static HTML/Markdown export instead of a web UI, a separate one-way `@kadence/github` package instead of sync, create-and-link instead of storing documents. Seventeen tasks in three shippable slices, [plan Milestone 15](../../tasks/plan-to-1.0.md).
 
 **`0.5` — the ecosystem.**
 **Enable** a team that has never heard of us **to** go from a search result to a working board in under five minutes without reading the repository **so that** Probe B's successors come from outside our network.
@@ -181,11 +181,11 @@ Carried from [roadmap.md](roadmap.md) and extended.
 | What | Why |
 |---|---|
 | A hosted core, an account, telemetry | The promise. Also the only differentiation the memory-layer market has left us |
-| Two-way sync with GitHub Issues or Jira | The most requested thing there will be, and the fastest way to become a mediocre bridge |
-| Web UI | Contradicts "no server"; the TUI is the second surface |
+| **Two-way** sync with GitHub Issues or Jira | The fastest way to become a mediocre bridge. *Since 2026-09-09:* a **one-way publish** is an experiment in a separate package that shells out to `gh`; the core still makes no request, and nothing is ever read back ([feature-adoption](feature-adoption-2026-09.md)) |
+| A web **server** | Contradicts "no server". *Since 2026-09-09:* a **static HTML/Markdown export** is an experiment — a file, no process, no port |
 | Manual time tracking | Time is derived from events; a timer contradicts the idea |
 | `delegated` / `automated` context levels | Need a daemon ([context-handoff §1.2](../research/context-handoff-2026-09.md)) |
-| A `kadence doc` that stores documents | Git already does; we link ([Probe D](../research/probe-d-docs-linkage.md)) |
+| A `kadence doc` that **stores** documents | Git already does; we link ([Probe D](../research/probe-d-docs-linkage.md)). *Since 2026-09-09:* `task doc add` creates the file from a template and links it in one command — still only the link is kept |
 | `llms.txt` | 10% adoption, no correlation with citations ([§6](../research/agent-readability-2026-09.md)) |
 | Editor extensions | A third surface for a solo developer |
 | Competing with Spec Kit on specifications | It writes the spec; we remember what happened to it |

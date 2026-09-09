@@ -12,7 +12,9 @@
 | [product/north-star.md](product/north-star.md) | Метрика фази валідації. Не зірки |
 | [product/roadmap.md](product/roadmap.md) | **Now/Next/Later.** У Now один пункт, і це не фіча |
 | [product/roadmap-to-1.0.md](product/roadmap-to-1.0.md) | **Дорога до 1.0.** Куди йдемо, сім гейтів для `1.0.0`, екосистема, гроші, чесна відповідь про прискорення. Англійською |
+| [product/feature-adoption-2026-09.md](product/feature-adoption-2026-09.md) | **Що беремо в сусідів і як.** Вердикт по кожній фічі Beads і Backlog.md, «по-нашому» через події, три експерименти замість трьох «ні». Англійською |
 | [product/discovery-2026-09.md](product/discovery-2026-09.md) | **Стан дискавері.** Що доведено, що ні, і що прибрати з роадмапу |
+| [product/gtm-first-users.md](product/gtm-first-users.md) | **GTM: перші користувачі.** ICP, beachhead, мотив, сім каналів із порогами, меседжі за персонами, метрики без телеметрії, 12 тижнів по 4–8 годин. Англійською |
 
 ## 2. Дослідження
 
