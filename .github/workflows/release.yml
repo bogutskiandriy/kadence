@@ -20,19 +20,24 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to a commit SHA rather than the mutable `v4` tag; the comment
+      # carries the version. See the same note in ci.yml.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # A manual run checks out the tag it was given; a tag push already
           # has it.
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
           cache: npm
 
-      - run: npm ci
+      # --ignore-scripts blocks dependency lifecycle scripts only. This
+      # package's own prepublishOnly still runs on publish below, which is
+      # what keeps a red suite from shipping. See the note in ci.yml.
+      - run: npm ci --ignore-scripts
 
       # prepublishOnly runs typecheck, tests and build; publishing cannot
       # happen on a red suite.
