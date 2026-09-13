@@ -410,8 +410,8 @@ Milestone став великим: 17 задач. Тому він поділен
 - [ ] **T61. Чек-лист релізу** · XS
   - AC: `docs/RELEASING.md`: версія → CHANGELOG → тег → `release.yml` → перевірити `facts.json` проти `npm view` → tap оновлено → довідка на сайті показує нову версію → TUI пройдено руками (список кроків із T77)
   - AC: посилання на нього з CLAUDE.md розділу «Commands»
-- [ ] **T62. Домен `kadence.tools`** · XS · власник
-  - AC: DNS на Vercel; редирект із `kadence-site.vercel.app`; `facts.json` не змінюється
+- [ ] **T62. Домен `kadence.guru`** · XS · власник · ✅ куплено й підключено 2026-09-13
+  - AC: DNS на Vercel; `facts.json` не змінюється. Куплено `kadence.guru`, не `kadence.tools`; старий хост `kadence-site.vercel.app` віддає 404, посилання на нього замінені
 - [ ] **T66. Записати демо** · XS
   - AC: `public/demo.webm` існує; `facts.json` → `demoSeconds` має реальне значення; команда перезапису з `demo/` працює
 

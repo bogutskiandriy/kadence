@@ -23,7 +23,7 @@ Named at the top because they are unproven, as the skill requires.
 | Published version | `kadence@0.3.0` | npm |
 | GitHub | 1 star · 0 forks · 0 issues · 0 watchers | `gh api` 2026-09-08 |
 | npm downloads, last 30 days | 102 — with zero known users, so **this is the bot floor**, not a signal | api.npmjs.org |
-| Site | live at kadence-site.vercel.app; `facts.json` sources every number; "Book thirty minutes" CTA exists | ADR-008 |
+| Site | live at kadence.guru (the vercel.app host was retired on 2026-09-13); `facts.json` sources every number; "Book thirty minutes" CTA exists | ADR-008 |
 | Probe B | scripted 2026-09-02, rewritten 2026-09-08, **not run** | interview-script.md |
 | Price | $0, MIT, forever; no gated format; sponsorship only at 1.0 | roadmap-to-1.0 §5 |
 | Telemetry | none, ever — the North Star is observable only through public repositories and people who tell us | north-star.md |
