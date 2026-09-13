@@ -59,6 +59,37 @@ describe('readyTasks', () => {
     expect(readyTasks(state.tasks).map((t) => t.title)).toEqual(['Open']);
   });
 
+  it('leaves out work that has already started — ready means ready to start', () => {
+    const fresh = makeTask('Fresh');
+    const started = makeTask('Started');
+    const reviewing = makeTask('In review');
+    const state = project([
+      fresh,
+      started,
+      reviewing,
+      about(started, 'task.moved', { to: 'in_progress' }),
+      about(reviewing, 'task.moved', { to: 'in_review' }),
+    ]);
+    expect(readyTasks(state.tasks).map((t) => t.title)).toEqual(['Fresh']);
+  });
+
+  it('leaves out a task parked in the blocked column, blocker links or not', () => {
+    const fresh = makeTask('Fresh');
+    const parked = makeTask('Parked');
+    const state = project([fresh, parked, about(parked, 'task.moved', { to: 'blocked' })]);
+    expect(readyTasks(state.tasks).map((t) => t.title)).toEqual(['Fresh']);
+  });
+
+  it('offers a task again once it is moved back to a column work can start from', () => {
+    const parked = makeTask('Parked');
+    const state = project([
+      parked,
+      about(parked, 'task.moved', { to: 'in_review' }),
+      about(parked, 'task.moved', { to: 'todo' }),
+    ]);
+    expect(readyTasks(state.tasks).map((t) => t.title)).toEqual(['Parked']);
+  });
+
   it('leaves out a task whose blocker is still open', () => {
     const blocker = makeTask('Blocker');
     const blocked = makeTask('Blocked');

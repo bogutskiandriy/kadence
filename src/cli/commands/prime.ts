@@ -87,7 +87,11 @@ export function runPrime(
   // The newest first: "what am I working on" is answered by the most recent
   // thing taken, not the oldest one still open.
   const ours = [...allMine].reverse().slice(0, MINE_LIMIT);
-  const ready = readyTasks(state.tasks, { viewer: ctx.actor });
+  const ready = readyTasks(state.tasks, {
+    viewer: ctx.actor,
+    statuses: state.statuses,
+    started: state.started,
+  });
   const attention = attentionReport(state, today, ATTENTION_IDLE_DAYS).rows;
   const shownAttention = attention.slice(0, ATTENTION_LIMIT);
   // Titles only. The reason behind a decision is what makes it long, and it is

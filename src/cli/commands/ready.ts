@@ -55,8 +55,12 @@ export function runReady(
   if (!isContext(ctx)) return ctx;
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
+  // The board's own column order and started boundary: a team that renamed
+  // its columns gets a `ready` that means what its board means.
+  const board = { statuses: state.statuses, started: state.started };
   const found = readyTasks(state.tasks, {
     viewer: ctx.actor,
+    ...board,
     ...(options.assignee === undefined ? {} : { assignee: options.assignee }),
   });
   const limited = options.limit !== undefined && options.limit > 0 ? found.slice(0, options.limit) : found;
@@ -68,7 +72,7 @@ export function runReady(
       warnings,
       // An empty list is the same output whether the board is empty, blocked
       // or somebody else's. Those are three different next steps.
-      message: describeNothingReady(state.tasks, ctx.actor, options.assignee),
+      message: describeNothingReady(state.tasks, ctx.actor, options.assignee, board),
       data: { schema: 'kadence/v1', ok: true, tasks: [] },
     };
   }

@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.4.1] — 2026-09-13
+
+`0.4.0` was tagged and never published: these three were found by using it
+before it reached anyone, so `0.4.1` is the first published 0.4. Nothing below
+changes the shape of an event or renames a field in `kadence/v1`.
+
+### Fixed
+
+- **The fold dropped who wrote a comment or a history line.** Every event
+  carries `source` — `"human"` or `"agent"`, from `KADENCE_SOURCE` — and it is
+  validated on read, but the projection kept it only on decisions and notes. So
+  `task show` printed an agent's comment exactly like a person's, and
+  `task show --json` gave an agent no way to tell them apart: `actor` is the git
+  identity, which a person and their agent share. The one surface the product's
+  headline is about could not show the thing it claims. Comments and history
+  entries now carry `source`, `task show` marks an agent's line `[agent]` the
+  way `decision list` already did, and a note shows the mark it always knew.
+  The snapshot shape test now records nested records too — it is what should
+  have failed when `source` reached the event and not the comment. Cache version
+  bumped to `kadence-snapshot/11`.
+- **`kadence ready` offered work that had already started.** The filter knew
+  about finished, blocked-by and claimed-by-others, and nothing about the board:
+  a task sitting in `in_review`, or parked in the `blocked` column, was listed
+  first with `kadence task claim KAD-1` printed under it. An agent following
+  `prime → ready → claim` took work somebody was reviewing. Ready now means
+  ready to *start* — anything in the started column or past it is left out,
+  using the board's own boundary, so a team that renames its columns keeps a
+  `ready` that means what its board means. When that is why the list is empty,
+  the message says so: `Nothing ready (2 already started)`.
+- **The performance fixture moved all 500 tasks into `in_progress`**, so the
+  `ready` guardrail was timing a filter over an empty answer and asserting only
+  that it was fast. Every third move parks a task back in `todo` now; the
+  guardrail times a real result.
+
 ## [0.4.0] — 2026-09-13
 
 Planned as slices 0.4.0 through 0.4.4 and published as one minor release.

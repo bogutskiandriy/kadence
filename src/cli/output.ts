@@ -77,6 +77,16 @@ export function renderTaskTable(tasks: readonly Task[], colors: boolean): string
 }
 
 /**
+ * The mark an agent's line carries, and a person's does not.
+ *
+ * Same shape as `decision list` and `note list` already use, for the same
+ * reason: a human author is the default, and a default needs no label.
+ */
+function sourceMark(source: 'human' | 'agent'): string {
+  return source === 'agent' ? ' [agent]' : '';
+}
+
+/**
  * The conflict-free merge notice.
  *
  * Without it the product's main advantage happens invisibly: the user never
@@ -254,7 +264,7 @@ export function renderTaskDetail(t: Task, notes: readonly Note[] = []): string {
   if (t.comments.length > 0) {
     lines.push('', `  Comments (${t.comments.length}):`);
     for (const c of t.comments) {
-      lines.push(`    ${c.author} · ${c.ts.slice(0, 10)}`);
+      lines.push(`    ${c.author}${sourceMark(c.source)} · ${c.ts.slice(0, 10)}`);
       // Indent every line so a multi-line comment stays visually attached.
       for (const line of c.text.split('\n')) lines.push(`      ${line}`);
     }
@@ -269,7 +279,7 @@ export function renderTaskDetail(t: Task, notes: readonly Note[] = []): string {
   if (notes.length > 0) {
     lines.push('', `  Notes (${notes.length}):`);
     for (const n of notes) {
-      lines.push(`    ${n.by} \u00b7 ${n.at.slice(0, 10)}`);
+      lines.push(`    ${n.by}${sourceMark(n.source)} \u00b7 ${n.at.slice(0, 10)}`);
       for (const line of n.text.split('\n')) lines.push(`      ${line}`);
     }
   }
@@ -278,7 +288,9 @@ export function renderTaskDetail(t: Task, notes: readonly Note[] = []): string {
     lines.push('', `  History (${t.history.length}):`);
     for (const h of t.history) {
       const detail = h.type === 'task.moved' ? ` → ${String(h.data['to'])}` : '';
-      lines.push(`    ${h.ts.slice(0, 16).replace('T', ' ')}  ${h.actor}  ${h.type}${detail}`);
+      lines.push(
+        `    ${h.ts.slice(0, 16).replace('T', ' ')}  ${h.actor}${sourceMark(h.source)}  ${h.type}${detail}`,
+      );
     }
   }
   return lines.join('\n');

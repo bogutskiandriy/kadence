@@ -1,5 +1,11 @@
 import type { Task, TaskStatus, TaskType, Priority } from './projection.js';
-import { TERMINAL_STATUS, CANCELLED_STATUS } from './projection.js';
+import {
+  TERMINAL_STATUS,
+  CANCELLED_STATUS,
+  DEFAULT_STATUSES,
+  DEFAULT_STARTED,
+} from './projection.js';
+import { beforeStarted } from './flow.js';
 
 /**
  * Filtering, search and sorting over a folded state.
@@ -140,6 +146,21 @@ export interface ReadyOptions {
   viewer?: string | null;
   /** An address, `me` for the viewer, or `none` for unassigned work. */
   assignee?: string;
+  /** The board's column order. Defaults to the standard board. */
+  statuses?: readonly string[];
+  /** The column at which work counts as started. Defaults to the standard board. */
+  started?: string;
+}
+
+/**
+ * The statuses work can still be started from, for this team's board.
+ *
+ * `null` when the started column is not on the board at all — the same answer
+ * `beforeStarted` gives, and for the same reason: with no board order to
+ * reason from, claiming to know what has begun would be a guess.
+ */
+function startableStatuses(options: ReadyOptions): ReadonlySet<string> | null {
+  return beforeStarted(options.statuses ?? DEFAULT_STATUSES, options.started ?? DEFAULT_STARTED);
 }
 
 /** A task nobody is waiting on any more: finished, or never going to happen. */
@@ -150,10 +171,17 @@ export function isFinished(task: Task): boolean {
 /**
  * The work that can start right now.
  *
- * Three exclusions, each with a reason a person would give out loud: the task
- * is finished, something it waits on is not, or somebody else is on it. A
- * contested task stays in — two people claimed it, and that needs a human to
- * look, not a filter to hide.
+ * Four exclusions, each with a reason a person would give out loud: the task
+ * is finished, it has already started, something it waits on is not done, or
+ * somebody else is on it. A contested task stays in — two people claimed it,
+ * and that needs a human to look, not a filter to hide.
+ *
+ * The second one was missing until 2026-09-13, and it cost more than it looks:
+ * a task sitting in `in_review` was offered first and the command printed
+ * `kadence task claim KAD-1` under it, so an agent following `prime → ready →
+ * claim` took work somebody was reviewing. Started is the board's own boundary,
+ * the one every flow measure already uses, so a team that renames its columns
+ * keeps a `ready` that means what its board means.
  */
 export function readyTasks(tasks: readonly Task[], options: ReadyOptions = {}): Task[] {
   const viewer = options.viewer ?? null;
@@ -163,8 +191,14 @@ export function readyTasks(tasks: readonly Task[], options: ReadyOptions = {}): 
   const wanted =
     options.assignee === 'me' ? viewer : (options.assignee ?? null);
 
+  const startable = startableStatuses(options);
+
   const open = tasks.filter((task) => {
     if (isFinished(task)) return false;
+    // Ready means ready to *start*. Anything in the started column or past it
+    // has begun — including the blocked column, which is exactly where work
+    // that cannot continue is parked.
+    if (startable !== null && !startable.has(task.status)) return false;
     // `blockedBy` only ever names live tasks — the fold prunes ids whose task
     // was deleted — so an id that is not finished is genuinely still blocking.
     if (task.blockedBy.some((id) => !finished.has(id))) return false;
@@ -195,6 +229,7 @@ export function describeNothingReady(
   tasks: readonly Task[],
   viewer: string | null,
   assignee?: string,
+  options: ReadyOptions = {},
 ): string {
   if (tasks.length === 0) {
     return 'No tasks yet.\nCreate the first one:\n  kadence task add "title"';
@@ -203,12 +238,18 @@ export function describeNothingReady(
   if (open.length === 0) return 'Nothing ready: every task is done or cancelled.';
 
   const finished = new Set(tasks.filter(isFinished).map((t) => t.id));
+  const startable = startableStatuses(options);
+  const inFlight =
+    startable === null ? 0 : open.filter((t) => !startable.has(t.status)).length;
   const blocked = open.filter((t) => t.blockedBy.some((id) => !finished.has(id))).length;
   const claimed = open.filter(
     (t) => t.claimedBy !== null && t.claimedBy !== viewer && t.contestedBy.length === 0,
   ).length;
 
   const reasons: string[] = [];
+  // In flight first: it is the most common reason a busy board offers nothing,
+  // and the one a person is least likely to guess from an empty list.
+  if (inFlight > 0) reasons.push(`${inFlight} already started`);
   if (blocked > 0) reasons.push(`${blocked} blocked`);
   if (claimed > 0) reasons.push(`${claimed} claimed by someone else`);
   // Naming the filter matters most when it is the filter that emptied the

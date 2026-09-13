@@ -1202,7 +1202,8 @@ export function runTaskClaim(
     // and a fleet of agents would do it on every poll. Naming the task is
     // still allowed: contesting on purpose is a choice, not an accident.
     const options_ = options.assignee === undefined ? {} : { assignee: options.assignee };
-    const ready = readyTasks(state.tasks, { viewer: ctx.actor, ...options_ });
+    const board = { statuses: state.statuses, started: state.started };
+    const ready = readyTasks(state.tasks, { viewer: ctx.actor, ...board, ...options_ });
     task = ready.find((t) => t.claimedBy === null || t.claimedBy === ctx.actor);
     if (task === undefined) {
       // `describeNothingReady` speaks for `ready`, where a contested task does
@@ -1222,7 +1223,7 @@ export function runTaskClaim(
           { hint: `kadence task claim ${held[0]!.label}` },
         );
       }
-      return failure(1, 'nothing_ready', describeNothingReady(state.tasks, ctx.actor, options.assignee), {
+      return failure(1, 'nothing_ready', describeNothingReady(state.tasks, ctx.actor, options.assignee, board), {
         hint: 'kadence task list',
       });
     }

@@ -141,7 +141,7 @@ describe('the cache must not serve a shape from an older version of the code', (
    * that every existing user has a stale cache.
    */
   const PROJECTED_SHAPE = {
-    version: 'kadence-snapshot/10',
+    version: 'kadence-snapshot/11',
     task: [
       'id', 'label', 'title', 'description', 'type', 'priority', 'status', 'labels',
       'assignee', 'reporter', 'sprint', 'milestone', 'parent', 'blockedBy', 'due', 'claimedBy',
@@ -153,6 +153,11 @@ describe('the cache must not serve a shape from an older version of the code', (
       'supersededBy', 'at', 'by', 'source',
     ],
     note: ['id', 'text', 'task', 'at', 'by', 'source'],
+    // Nested records are shape too. `source` reached the event and the note
+    // long before it reached these two, and nothing here failed when it did
+    // not — so the lists now go one level down.
+    comment: ['id', 'author', 'ts', 'text', 'source'],
+    historyEntry: ['id', 'type', 'actor', 'ts', 'source', 'data'],
     milestone: [
       'id', 'label', 'name', 'due', 'status', 'closedBy', 'taskIds',
       'donePoints', 'totalPoints', 'doneTasks', 'totalTasks',
@@ -181,6 +186,26 @@ describe('the cache must not serve a shape from an older version of the code', (
 
   it('the project state has exactly the recorded top-level keys', () => {
     expect(Object.keys(project([])).sort()).toEqual([...PROJECTED_SHAPE.state].sort());
+  });
+
+  it('a projected comment has exactly the recorded fields', () => {
+    const id = gen();
+    const state = project([
+      { id, type: 'task.created', entity: id, actor: 'a@b.c', ts: '2026-09-08T10:00:00.000Z',
+        source: 'human', data: { title: 'T' } },
+      { id: gen(), type: 'task.commented', entity: id, actor: 'a@b.c', ts: '2026-09-08T10:01:00.000Z',
+        source: 'agent', data: { text: 'C' } },
+    ]);
+    expect(Object.keys(state.tasks[0]!.comments[0]!).sort()).toEqual([...PROJECTED_SHAPE.comment].sort());
+  });
+
+  it('a projected history entry has exactly the recorded fields', () => {
+    const id = gen();
+    const state = project([
+      { id, type: 'task.created', entity: id, actor: 'a@b.c', ts: '2026-09-08T10:00:00.000Z',
+        source: 'human', data: { title: 'T' } },
+    ]);
+    expect(Object.keys(state.tasks[0]!.history[0]!).sort()).toEqual([...PROJECTED_SHAPE.historyEntry].sort());
   });
 
   it('a projected milestone has exactly the recorded fields', () => {

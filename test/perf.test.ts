@@ -49,7 +49,13 @@ beforeAll(() => {
       actor: 'perf@example.com',
       ts: new Date(1_756_800_000_000 + i * 1000).toISOString(),
       source: 'human',
-      data: isCreate ? { title: `Task ${i}`, estimate: (i % 8) + 1 } : { to: 'in_progress' },
+      // Not every move to the same column: a journal where all 500 tasks end
+      // in progress makes `ready` return nothing, and a filter measured over an
+      // empty list measures nothing. Every third move parks a task back in
+      // `todo`, so the guardrail below times a real answer.
+      data: isCreate
+        ? { title: `Task ${i}`, estimate: (i % 8) + 1 }
+        : { to: i % 3 === 0 ? 'todo' : 'in_progress' },
     };
 
     const dir = join(eventsDir(root), e.ts.slice(0, 7));

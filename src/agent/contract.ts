@@ -304,7 +304,9 @@ export function buildContract(version: string): Record<string, unknown> {
         selectable: [...TASK_FIELDS],
         notes: {
           id: 'ULID. The identity of the task; KAD-N is a label derived while folding and is never stored.',
-          history: 'Present in `task show` only — the events that produced this state.',
+          history: 'Present in `task show` only \u2014 the events that produced this state. Each entry carries `source`.',
+          comments:
+            'Each comment carries `source`: "human" or "agent", from KADENCE_SOURCE at the time of writing. `actor` is the git identity, which a person and their agent share \u2014 `source` is the only field that separates them.',
           required:
             'What a full response carries. With --fields you get exactly what you asked for and nothing else.',
         },
@@ -431,7 +433,7 @@ export function buildContract(version: string): Record<string, unknown> {
       {
         name: 'ready',
         summary:
-          'What can be started now: open, unblocked, not claimed by anyone else. Priority first, then age.',
+          'What can be started now: not yet started, unblocked, not claimed by anyone else. Priority first, then age. Work already in the started column or past it is left out \u2014 it has begun, so it cannot be started.',
         flags: ['--json', '--assignee', '--limit'],
         json: true,
       },

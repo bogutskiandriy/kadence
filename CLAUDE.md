@@ -100,7 +100,7 @@ would drift.
 ## Commands
 
 ```bash
-npm test           # 883 tests
+npm test           # 898 tests
 npm run typecheck
 npm run build      # single bundle, blessed stays external
 ```

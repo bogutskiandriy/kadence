@@ -63,6 +63,8 @@ export interface Comment {
   author: string;
   ts: string;
   text: string;
+  /** Which side wrote it, from the event. Never guessed: no variable means human. */
+  source: 'human' | 'agent';
 }
 
 export interface HistoryEntry {
@@ -70,6 +72,15 @@ export interface HistoryEntry {
   type: string;
   actor: string;
   ts: string;
+  /**
+   * Which side wrote the event this entry came from.
+   *
+   * `actor` is the git identity, and a person and their agent share it — so
+   * without this the one line an agent wrote reads exactly like the nine a
+   * human did, and "your team and your agents write to the same journal"
+   * cannot be seen in the place it happens.
+   */
+  source: 'human' | 'agent';
   data: Record<string, unknown>;
 }
 
@@ -883,7 +894,7 @@ function apply(
     case 'task.commented': {
       const text = readText(data['text']);
       if (text !== null) {
-        task.comments.push({ id: e.id, author: e.actor, ts: e.ts, text });
+        task.comments.push({ id: e.id, author: e.actor, ts: e.ts, text, source: e.source });
       }
       break;
     }
@@ -991,7 +1002,14 @@ function foldClaims(task: Task): void {
 }
 
 function record(task: Task, e: FlowEvent): void {
-  task.history.push({ id: e.id, type: e.type, actor: e.actor, ts: e.ts, data: e.data ?? {} });
+  task.history.push({
+    id: e.id,
+    type: e.type,
+    actor: e.actor,
+    ts: e.ts,
+    source: e.source,
+    data: e.data ?? {},
+  });
   if (e.ts > task.updatedAt) task.updatedAt = e.ts;
 }
 

@@ -189,7 +189,13 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
     // The same function `kadence ready` calls: the board must not grow its own
     // idea of what "ready" means.
     const ready = readyOnly
-      ? new Set(readyTasks(state.tasks, { viewer: callbacks.actor }).map((t) => t.id))
+      ? new Set(
+          readyTasks(state.tasks, {
+            viewer: callbacks.actor,
+            statuses: state.statuses,
+            started: state.started,
+          }).map((t) => t.id),
+        )
       : null;
     // The same rule the CLI uses: created on the branch, or any event about it
     // arrived there.
