@@ -1,4 +1,5 @@
 import type { ProjectState, Task } from './projection.js';
+import { startedAt, finishedAt } from './flow.js';
 
 /**
  * Sprint analytics.
@@ -46,7 +47,9 @@ export function sprintReport(state: ProjectState, sprintId: string): SprintRepor
   const velocity = sum(done.map((t) => t.estimate ?? 0));
   const unestimated = done.filter((t) => t.estimate === null);
 
-  const hours = done.map(workHours).filter((h): h is number => h !== null);
+  const hours = done
+    .map((t) => workHours(t, state))
+    .filter((h): h is number => h !== null);
   const actualHours = hours.length > 0 ? sum(hours) : null;
 
   // Points without time, or time without points, give no ratio.
@@ -76,17 +79,15 @@ export function sprintReport(state: ProjectState, sprintId: string): SprintRepor
  * The first one specifically: a task may have been sent back for rework, and
  * then the real duration is the whole span, not the last attempt.
  */
-function workHours(task: Task): number | null {
-  const started = task.history.find(
-    (h) => h.type === 'task.moved' && h.data['to'] === 'in_progress',
-  );
-  const finished = [...task.history]
-    .reverse()
-    .find((h) => h.type === 'task.moved' && h.data['to'] === 'done');
+function workHours(task: Task, state: ProjectState): number | null {
+  // The same crossing `report flow` uses, not an exact match on one column: a
+  // task that went todo → review → done has been worked on, and two commands
+  // must not disagree about that.
+  const startedTs = startedAt(task, state.started, state.statuses, state.startedChanges);
+  const finishedTs = finishedAt(task);
+  if (startedTs === null || finishedTs === null) return null;
 
-  if (started === undefined || finished === undefined) return null;
-
-  const ms = Date.parse(finished.ts) - Date.parse(started.ts);
+  const ms = Date.parse(finishedTs) - Date.parse(startedTs);
   return ms > 0 ? ms / 3_600_000 : null;
 }
 

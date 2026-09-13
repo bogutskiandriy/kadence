@@ -161,3 +161,77 @@ describe('a team uses kadence for a sprint', () => {
     expect(r.code).toBe(0);
   });
 });
+
+describe('a reviewer asks what a branch is about', () => {
+  it('answers through the real binary, and refuses honestly when it cannot', () => {
+    const git = (...args: string[]): void => {
+      execFileSync('git', args, { cwd: dir, stdio: 'ignore' });
+    };
+
+    expect(run('init').code).toBe(0);
+    run('task', 'add', 'Work that predates the branch');
+    run('task', 'add', 'Other work on main');
+    git('add', '-A');
+    git('commit', '-qm', 'main work');
+
+    git('checkout', '-q', '-b', 'feature/login');
+    run('task', 'add', 'Login form');
+    run('task', 'move', 'KAD-1', 'in_progress');
+    git('add', '-A');
+    git('commit', '-qm', 'branch work');
+
+    const all = json('task', 'list');
+    expect((all['tasks'] as unknown[]).length).toBe(3);
+    expect(all['branch']).toBeUndefined();
+
+    const scoped = json('task', 'list', '--branch');
+    expect(scoped['branch']).toEqual({ name: 'feature/login', base: 'main' });
+    const titles = (scoped['tasks'] as Array<{ title: string }>).map((t) => t.title).sort();
+    // Created on the branch, and touched on the branch. Not the untouched one.
+    expect(titles).toEqual(['Login form', 'Work that predates the branch']);
+
+    // A base that does not exist fails by name rather than reporting no work.
+    const bad = run('task', 'list', '--branch', '--base', 'no-such-branch', '--json');
+    expect(bad.code).toBe(2);
+    expect((JSON.parse(bad.out) as { error: { received: string } }).error.received).toBe(
+      'no-such-branch',
+    );
+
+    // Detached HEAD is the one state where the question has no answer. Exit 1,
+    // not 2: the argument was fine, the repository state is what refuses.
+    git('checkout', '-q', '--detach');
+    const detached = run('task', 'list', '--branch');
+    expect(detached.code).toBe(1);
+    expect(detached.err).toMatch(/detached/i);
+  });
+});
+
+describe('a milestone named like a number', () => {
+  it('keeps its name through the option parser', () => {
+    // cac converts a flag value that looks numeric, so `--milestone 1.0`
+    // arrives as the number 1 and the digits after the dot are gone before any
+    // command sees them. Unit tests pass strings directly and cannot catch
+    // this; only the real binary can.
+    expect(run('init').code).toBe(0);
+    run('milestone', 'create', '1.0', '--due', '2026-12-01');
+    run('task', 'add', 'Login form', '--estimate', '3');
+
+    const added = run('milestone', 'add', 'KAD-1', '--milestone', '1.0', '--json');
+    expect(added.code).toBe(0);
+    expect(
+      (JSON.parse(added.out) as { milestone: { name: string } }).milestone.name,
+    ).toBe('1.0');
+
+    // The `--flag=value` form goes through a different branch of the parser.
+    run('task', 'add', 'Signup form', '--estimate', '5');
+    expect(run('milestone', 'add', 'KAD-2', '--milestone=1.0').code).toBe(0);
+
+    const list = JSON.parse(run('milestone', 'list', '--json').out) as {
+      milestones: Array<{ name: string; totalTasks: number; due: string | null }>;
+    };
+    expect(list.milestones[0]!.name).toBe('1.0');
+    expect(list.milestones[0]!.due).toBe('2026-12-01');
+    expect(list.milestones[0]!.totalTasks).toBe(2);
+  });
+});
+

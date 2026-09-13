@@ -20,8 +20,15 @@ export const EVENT_TYPES = [
   'task.parent_set',
   'task.blocked_by_added',
   'task.blocked_by_removed',
+  'task.label_added',
+  'task.label_removed',
   'task.time_logged',
   'task.doc_linked',
+  'task.claimed',
+  'task.released',
+  'task.criterion_added',
+  'task.criterion_checked',
+  'task.criterion_unchecked',
   'template.saved',
   'template.deleted',
   'board.configured',
@@ -31,7 +38,11 @@ export const EVENT_TYPES = [
   'sprint.closed',
   'sprint.cancelled',
   'sprint.task_added',
+  'milestone.created',
+  'milestone.task_added',
+  'milestone.closed',
   'decision.recorded',
+  'note.recorded',
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];

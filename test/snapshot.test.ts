@@ -141,15 +141,28 @@ describe('the cache must not serve a shape from an older version of the code', (
    * that every existing user has a stale cache.
    */
   const PROJECTED_SHAPE = {
-    version: 'kadence-snapshot/2',
+    version: 'kadence-snapshot/10',
     task: [
       'id', 'label', 'title', 'description', 'type', 'priority', 'status', 'labels',
-      'assignee', 'reporter', 'sprint', 'parent', 'blockedBy', 'due', 'comments', 'docs',
+      'assignee', 'reporter', 'sprint', 'milestone', 'parent', 'blockedBy', 'due', 'claimedBy',
+      'claimedAt', 'claimedEventId', 'contestedBy', 'criteria', 'comments', 'docs',
       'estimate', 'loggedHours', 'history', 'createdAt', 'updatedAt',
     ],
     decision: [
       'id', 'label', 'title', 'why', 'rejected', 'task', 'docs', 'supersedes',
       'supersededBy', 'at', 'by', 'source',
+    ],
+    note: ['id', 'text', 'task', 'at', 'by', 'source'],
+    milestone: [
+      'id', 'label', 'name', 'due', 'status', 'closedBy', 'taskIds',
+      'donePoints', 'totalPoints', 'doneTasks', 'totalTasks',
+    ],
+    // The state itself, not just the records in it: a new top-level array is
+    // as much a shape change as a new field, and the 0.3.1 bug was a shape
+    // change nobody bumped the version for.
+    state: [
+      'tasks', 'decisions', 'milestones', 'notes', 'sprints', 'templates', 'statuses', 'dod', 'started', 'startedChanges',
+      'orphanStatuses', 'cycles', 'pending', 'rejected',
     ],
   };
 
@@ -164,6 +177,28 @@ describe('the cache must not serve a shape from an older version of the code', (
         source: 'human', data: { title: 'T' } },
     ]);
     expect(Object.keys(state.tasks[0]!).sort()).toEqual([...PROJECTED_SHAPE.task].sort());
+  });
+
+  it('the project state has exactly the recorded top-level keys', () => {
+    expect(Object.keys(project([])).sort()).toEqual([...PROJECTED_SHAPE.state].sort());
+  });
+
+  it('a projected milestone has exactly the recorded fields', () => {
+    const id = gen();
+    const state = project([
+      { id, type: 'milestone.created', entity: id, actor: 'a@b.c', ts: '2026-09-08T10:00:00.000Z',
+        source: 'human', data: { name: '1.0' } },
+    ]);
+    expect(Object.keys(state.milestones[0]!).sort()).toEqual([...PROJECTED_SHAPE.milestone].sort());
+  });
+
+  it('a projected note has exactly the recorded fields', () => {
+    const id = gen();
+    const state = project([
+      { id, type: 'note.recorded', entity: id, actor: 'a@b.c', ts: '2026-09-08T10:00:00.000Z',
+        source: 'human', data: { text: 'Learned something' } },
+    ]);
+    expect(Object.keys(state.notes[0]!).sort()).toEqual([...PROJECTED_SHAPE.note].sort());
   });
 
   it('a projected decision has exactly the recorded fields', () => {

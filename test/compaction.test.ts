@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createUlid } from '../src/core/ulid.js';
@@ -36,6 +36,26 @@ describe('compact', () => {
     const r = compact(root, '2026-09');
     expect(r.archivedMonths).toEqual(['2026-01']);
     expect(existsSync(join(archiveDir(root), '2026-01.json'))).toBe(true);
+  });
+
+  it('leaves a month alone when its archive cannot be read', () => {
+    // The archive is the only copy of everything compacted before. Reading it
+    // as "no archive yet" and then deleting the month directory would replace
+    // it with just the new batch — a silent loss in a journal whose whole
+    // promise is that nothing is lost.
+    append(root, at('2026-01'));
+    append(root, at('2026-09'));
+    mkdirSync(archiveDir(root), { recursive: true });
+    const target = join(archiveDir(root), '2026-01.json');
+    writeFileSync(target, '[{"id":"01AAA', 'utf8'); // truncated mid-write
+
+    const r = compact(root, '2026-09');
+
+    expect(r.skipped).toEqual([target]);
+    expect(r.archivedMonths).toEqual([]);
+    // Both the damaged archive and the month it would have swallowed survive.
+    expect(readFileSync(target, 'utf8')).toBe('[{"id":"01AAA');
+    expect(existsSync(join(eventsDir(root), '2026-01'))).toBe(true);
   });
 
   it('loses no events', () => {

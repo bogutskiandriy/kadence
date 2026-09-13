@@ -164,3 +164,85 @@ describe('project — KAD-N numbering', () => {
     expect(after).toBe(before);
   });
 });
+
+describe('project — a create that merges with a higher ULID', () => {
+  // Clock skew (I2) makes this reachable rather than theoretical: a delta
+  // written on a lagging machine carries a lower ULID than the `task.created`
+  // from a leading one. The ULID decides, whichever file is read first.
+  const TASK = '01CCCCCCCCCCCCCCCCCCCCCCCC';
+  const low = '01AAAAAAAAAAAAAAAAAAAAAAAA';
+  const create = '01BBBBBBBBBBBBBBBBBBBBBBBB';
+  const high = '01DDDDDDDDDDDDDDDDDDDDDDDD';
+
+  function at(id: string, type: EventType, data: Record<string, unknown> = {}): FlowEvent {
+    return { ...ev(type, TASK, data), id };
+  }
+
+  function createdAt(id: string, data: Record<string, unknown> = {}): FlowEvent {
+    return { ...ev('task.created', TASK, { title: 'Skewed', ...data }), id };
+  }
+
+  it('the later label event wins, though the create merged between them', () => {
+    const events = [
+      at(low, 'task.label_removed', { label: 'impact-critical' }),
+      createdAt(create),
+      at(high, 'task.label_added', { label: 'impact-critical' }),
+    ];
+    expect(project(events).tasks[0]!.labels).toEqual(['impact-critical']);
+  });
+
+  it('the later move wins, so status never contradicts its own history', () => {
+    const events = [
+      createdAt(create),
+      at(high, 'task.moved', { to: 'done' }),
+      at(low, 'task.moved', { to: 'in_progress' }),
+    ];
+    const task = project(events).tasks[0]!;
+    expect(task.status).toBe('done');
+    // The pair is the actual defect: a status the history disagrees with makes
+    // the task finish-less in flow reports and stuck in every ready query.
+    expect(task.history.at(-1)!.data['to']).toBe(task.status);
+  });
+
+  it('the later milestone wins, so points are counted against the right one', () => {
+    const first = '01EEEEEEEEEEEEEEEEEEEEEEEE';
+    const second = '01FFFFFFFFFFFFFFFFFFFFFFFF';
+    const events = [
+      { ...ev('milestone.created', first, { name: 'First' }), id: first, entity: first },
+      { ...ev('milestone.created', second, { name: 'Second' }), id: second, entity: second },
+      { ...ev('milestone.task_added', first, { task: TASK }), id: low },
+      createdAt(create),
+      { ...ev('milestone.task_added', second, { task: TASK }), id: high },
+    ];
+    expect(project(events).tasks[0]!.milestone).toBe(second);
+  });
+
+  it('a delete below the create no longer outlives it — the ULID decides', () => {
+    // A behaviour change, and a deliberate one. Before the two-phase fold the
+    // delete was replayed after the main loop and won whatever its id; now the
+    // same rule applies to it as to every other event. Reachable only through
+    // clock skew (I2): you can delete only a task you can already see.
+    const events = [at(low, 'task.deleted'), createdAt(create)];
+    const state = project(events);
+    expect(state.tasks).toHaveLength(1);
+    expect(state.pending).toHaveLength(0);
+  });
+
+  it('a delete above the create still removes the task', () => {
+    const state = project([createdAt(low), at(create, 'task.deleted')]);
+    expect(state.tasks).toHaveLength(0);
+  });
+
+  it('I1: the answer does not depend on the order the files are read in', () => {
+    const events = [
+      at(low, 'task.label_removed', { label: 'impact-critical' }),
+      createdAt(create),
+      at(high, 'task.label_added', { label: 'impact-critical' }),
+      at('01CZZZZZZZZZZZZZZZZZZZZZZZ', 'task.moved', { to: 'in_progress' }),
+    ];
+    const reference = JSON.stringify(project(events).tasks);
+    for (let seed = 1; seed <= 50; seed++) {
+      expect(JSON.stringify(project(shuffle(events, seed)).tasks)).toBe(reference);
+    }
+  });
+});

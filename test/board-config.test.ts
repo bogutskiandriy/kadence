@@ -20,39 +20,39 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe('board config', () => {
   it('shows the default columns before anything is configured', () => {
-    const r = runBoardConfig(dir, env, undefined);
+    const r = runBoardConfig(dir, env, undefined, undefined, undefined);
     expect(r.message).toContain('backlog');
     expect(r.message).toContain('in_progress');
   });
 
   it('replaces the columns with a custom set', () => {
-    const r = runBoardConfig(dir, env, 'todo,doing,review,done');
+    const r = runBoardConfig(dir, env, 'todo,doing,review,done', undefined);
     expect(r.ok).toBe(true);
     expect(r.data!['statuses']).toEqual(['todo', 'doing', 'review', 'done']);
   });
 
   it('normalises spacing and case', () => {
-    const r = runBoardConfig(dir, env, ' To Do , Doing , DONE ');
+    const r = runBoardConfig(dir, env, ' To Do , Doing , DONE ', undefined);
     expect(r.data!['statuses']).toEqual(['to_do', 'doing', 'done']);
   });
 
   it('requires done — every analytic is computed from it', () => {
-    const r = runBoardConfig(dir, env, 'todo,doing,shipped');
+    const r = runBoardConfig(dir, env, 'todo,doing,shipped', undefined);
     expect(r.exitCode).toBe(2);
     expect(r.message).toMatch(/velocity and burndown/i);
   });
 
   it('rejects duplicates', () => {
-    expect(runBoardConfig(dir, env, 'todo,todo,done').exitCode).toBe(2);
+    expect(runBoardConfig(dir, env, 'todo,todo,done', undefined).exitCode).toBe(2);
   });
 
   it('rejects an empty list', () => {
-    expect(runBoardConfig(dir, env, ' , , ').exitCode).toBe(2);
+    expect(runBoardConfig(dir, env, ' , , ', undefined).exitCode).toBe(2);
   });
 
   it('accepts moves into the new columns and refuses the old ones', () => {
     runTaskAdd(dir, env, 'Task', {});
-    runBoardConfig(dir, env, 'todo,doing,done');
+    runBoardConfig(dir, env, 'todo,doing,done', undefined);
 
     expect(runTaskMove(dir, env, 'KAD-1', 'doing').ok).toBe(true);
     const r = runTaskMove(dir, env, 'KAD-1', 'in_review');
@@ -67,7 +67,7 @@ describe('statuses removed while tasks sit in them', () => {
     // Hiding the task would lose work silently.
     runTaskAdd(dir, env, 'Stranded', {});
     runTaskMove(dir, env, 'KAD-1', 'in_review');
-    runBoardConfig(dir, env, 'todo,doing,done');
+    runBoardConfig(dir, env, 'todo,doing,done', undefined);
 
     const board = runBoard(dir, env, {});
     expect(board.message).toContain('Stranded');
@@ -77,7 +77,7 @@ describe('statuses removed while tasks sit in them', () => {
   it('warns about columns that are not in the configuration', () => {
     runTaskAdd(dir, env, 'Stranded', {});
     runTaskMove(dir, env, 'KAD-1', 'in_review');
-    runBoardConfig(dir, env, 'todo,doing,done');
+    runBoardConfig(dir, env, 'todo,doing,done', undefined);
 
     expect(runBoard(dir, env, {}).warnings?.join(' ')).toMatch(/not in the board configuration/i);
   });
@@ -85,7 +85,7 @@ describe('statuses removed while tasks sit in them', () => {
   it('names the stranded tasks at the moment of reconfiguration', () => {
     runTaskAdd(dir, env, 'Stranded', {});
     runTaskMove(dir, env, 'KAD-1', 'in_review');
-    const r = runBoardConfig(dir, env, 'todo,doing,done');
+    const r = runBoardConfig(dir, env, 'todo,doing,done', undefined);
     expect(r.message).toMatch(/remain in removed columns/i);
     expect(r.message).toContain('in_review');
   });
@@ -93,7 +93,7 @@ describe('statuses removed while tasks sit in them', () => {
   it('still lists them through task list', () => {
     runTaskAdd(dir, env, 'Stranded', {});
     runTaskMove(dir, env, 'KAD-1', 'in_review');
-    runBoardConfig(dir, env, 'todo,doing,done');
+    runBoardConfig(dir, env, 'todo,doing,done', undefined);
     expect((runTaskList(dir, env, {}).data!['tasks'] as unknown[])).toHaveLength(1);
   });
 });

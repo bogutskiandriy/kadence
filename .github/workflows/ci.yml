@@ -54,12 +54,55 @@ jobs:
       - name: The fast path must not load the UI layer
         # The whole point of the dynamic import: `kadence task add` never pays
         # for blessed. A regression here is invisible until someone measures.
+        #
+        # Every built file except the UI chunks. Reading dist/cli.js alone was
+        # the bug: the build splits, so a static import from the core lands in
+        # a shared chunk that the entry point never mentions.
         run: |
-          if grep -q "blessed" dist/cli.js; then
-            echo "blessed leaked into the main bundle"
-            exit 1
-          fi
-          echo "main bundle is clean"
+          leaked=0
+          for file in $(find dist -name '*.js' ! -name 'board-*' ! -name 'ui-*'); do
+            if grep -q "blessed" "$file"; then
+              echo "blessed leaked into $file, which every command loads"
+              leaked=1
+            fi
+          done
+          [ "$leaked" -eq 0 ] || exit 1
+          echo "the fast path is clean"
+
+      - name: The core must not reach the network
+        # The product's first constraint, asserted on the artefact people run
+        # rather than on the source. The network lives in @kadence/github and
+        # nowhere else (ADR-012).
+        #
+        # `fetch(` heads the list because since Node 18 it is global: a call to
+        # it needs no import, so every import-shaped pattern below misses it.
+        # And the scan covers the chunks, not just the entry point —
+        # node:child_process from src/core/git.ts already lives in one, so an
+        # import here was invisible to a grep of dist/cli.js.
+        run: |
+          found=0
+          for forbidden in "fetch(" "node:http" "node:https" "node:http2" "node:net" \
+                           "node:tls" "node:dns" "node:dgram" "XMLHttpRequest" \
+                           "WebSocket" "node-fetch" "undici" "axios"; do
+            for file in $(find dist -name '*.js'); do
+              if grep -qF "$forbidden" "$file"; then
+                echo "$forbidden reached $file"
+                found=1
+              fi
+            done
+          done
+          [ "$found" -eq 0 ] || exit 1
+          echo "the core makes no network calls"
+
+      # The package ships its own binary, so it needs its own gates. Without
+      # this, its entry point had no type coverage at all: nothing imports it,
+      # so the root tsconfig never saw it.
+      - name: Types (@kadence/github)
+        run: npx tsc --noEmit -p packages/github/tsconfig.json
+
+      - name: Build (@kadence/github)
+        working-directory: packages/github
+        run: node scripts/build.mjs
 
       - name: Package
         run: npm pack --dry-run

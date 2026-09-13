@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -82,6 +82,72 @@ describe('card rendering', () => {
   });
 });
 
+/**
+ * The board's key table, read out of the source.
+ *
+ * blessed hands one keystroke to whoever checks for it first, so a second
+ * binding for the same character is dead code that looks alive — and the
+ * footer and help dialog go on advertising it. That is how `k` shipped as
+ * "claim" while it moved the cursor up; nothing in the suite noticed, because
+ * nothing in the suite reads the routing table. This does.
+ */
+describe('board key routing', () => {
+  const source = readFileSync(resolve('src/tui/board.ts'), 'utf8');
+  const start = source.indexOf('function handleBoardKey');
+  // Search forward from the handler: the same comment text appears earlier in
+  // the file, and slicing to the first match silently produced an empty table.
+  const handler = source.slice(start, source.indexOf('/** Hands the terminal to $EDITOR', start));
+  // Only conditionals bind a key. `ch === ']' ? 1 : -1` inside a branch body
+  // reads the same character but does not claim it.
+  const bound = handler
+    .split('\n')
+    .filter((line) => line.includes('if ('))
+    .flatMap((line) => [...line.matchAll(/ch === '(.)'/g)].map((m) => m[1]!));
+
+  it('reads a non-empty routing table', () => {
+    // Guards the test itself: a slice that finds nothing would pass every
+    // assertion below by vacuum.
+    expect(bound.length).toBeGreaterThan(10);
+  });
+
+  it('binds each character exactly once', () => {
+    const seen = new Map<string, number>();
+    for (const key of bound) seen.set(key, (seen.get(key) ?? 0) + 1);
+    const duplicates = [...seen.entries()].filter(([, n]) => n > 1).map(([key]) => key);
+    expect(duplicates).toEqual([]);
+  });
+
+  it('every key the footer advertises is actually bound', () => {
+    // A hint for a key nothing handles is worse than no hint: the reader
+    // presses it, nothing happens, and they stop trusting the footer.
+    for (const hint of KEY_HINTS.split('  ')) {
+      const key = hint.trim().split(' ')[0]!;
+      if (key.length !== 1 || !/[A-Za-z]/.test(key)) continue;
+      expect(bound, `footer advertises "${hint.trim()}"`).toContain(key);
+    }
+  });
+
+  it('binds each character exactly once inside the card dialog too', () => {
+    // The dialog is where the previous cursor bug lived, and the board-level
+    // slice above does not reach it. A duplicate here would ship unseen.
+    const dialogStart = source.indexOf('function onDetailKey');
+    const dialog = source.slice(dialogStart, source.indexOf('\n    }', dialogStart));
+    expect(dialog.length).toBeGreaterThan(100);
+    const keys = dialog
+      .split('\n')
+      .filter((line) => line.includes('if ('))
+      .flatMap((line) => [...line.matchAll(/ch === '(.)'/g)].map((m) => m[1]!));
+    const seen = new Map<string, number>();
+    for (const key of keys) seen.set(key, (seen.get(key) ?? 0) + 1);
+    expect([...seen.entries()].filter(([, n]) => n > 1).map(([k]) => k)).toEqual([]);
+  });
+
+  it('claim and the ready filter are reachable', () => {
+    expect(bound).toContain('C');
+    expect(bound).toContain('R');
+  });
+});
+
 describe('ui entry point', () => {
   let dir: string;
   const CLI = resolve('dist/cli.js');
@@ -105,7 +171,28 @@ describe('ui entry point', () => {
   it('keeps blessed out of the main bundle', () => {
     // The whole point of the dynamic import: fast commands must not pay for
     // a library they never touch.
-    expect(readFileSync(CLI, 'utf8')).not.toContain('blessed');
+    //
+    // Every built file except the UI chunks, not just the entry point. The
+    // build splits, so a static import from the core would land in a shared
+    // chunk and leave `dist/cli.js` looking clean while every command paid
+    // for it — the check would pass for the wrong reason.
+    const dist = resolve('dist');
+    const files: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = resolve(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (entry.name.endsWith('.js')) files.push(full);
+      }
+    };
+    walk(dist);
+    // The UI chunks are where blessed belongs; they are loaded on `ui` alone.
+    const fast = files.filter((f) => !/\/(?:board|ui)-[^/]*\.js$/.test(f));
+    expect(fast.length, 'the fast path is more than one file').toBeGreaterThan(1);
+
+    for (const file of fast) {
+      expect(readFileSync(file, 'utf8'), `${file} must not load blessed`).not.toContain('blessed');
+    }
   });
 
   it('lists ui in the help output', () => {

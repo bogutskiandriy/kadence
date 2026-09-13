@@ -1,0 +1,21 @@
+{
+  "name": "@kadence/github",
+  "version": "0.1.0",
+  "description": "Publish kadence tasks to GitHub Issues, one way, through the gh CLI",
+  "type": "module",
+  "bin": {
+    "kadence-github": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

@@ -88,8 +88,9 @@ describe('the --json contract', () => {
     // here, not something that leaks out of an unrelated change.
     expect(Object.keys(task).sort()).toEqual(
       [
-        'assignee', 'blockedBy', 'comments', 'description', 'docs', 'due', 'estimate',
-        'history', 'id', 'label', 'labels', 'loggedHours', 'parent', 'priority', 'reporter',
+        'assignee', 'blockedBy', 'claimedBy', 'comments', 'contestedBy', 'criteria',
+        'description', 'docs', 'due', 'estimate', 'history', 'id', 'label', 'labels',
+        'loggedHours', 'milestone', 'openCriteria', 'parent', 'priority', 'reporter',
         'sprint', 'status', 'title', 'type',
       ].sort(),
     );

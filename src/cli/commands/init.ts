@@ -28,7 +28,17 @@ export interface InitResult {
  * @param version stamped into the files we write, so a reader a year later knows
  *   what produced them. Defaults for tests and any caller without a build.
  */
-export function runInit(cwd: string, version = 'dev'): InitResult {
+export interface InitOptions {
+  /**
+   * Write a SessionStart hook into `.claude/settings.json`.
+   *
+   * Off by default and only ever on by name: that file is the user's, it is
+   * committed to their repository, and something else's hooks live in it.
+   */
+  hooks?: boolean;
+}
+
+export function runInit(cwd: string, version = 'dev', options: InitOptions = {}): InitResult {
   const root = findRepoRoot(cwd);
   if (root === null) {
     return {
@@ -54,17 +64,92 @@ export function runInit(cwd: string, version = 'dev'): InitResult {
   // reads CLAUDE.md instead of it (ADR-009).
   for (const name of INSTRUCTION_FILES) ensureInstructionFile(root, name, version);
 
+  const hookNote = options.hooks === true ? `\n\n${installSessionHook(root)}` : '';
+
   return {
     ok: true,
     alreadyInitialized: already,
     root,
     message: already
-      ? 'kadence is already initialised.'
+      ? `kadence is already initialised.${hookNote}`
       : 'kadence is ready.\n\n' +
         '  kadence task add "first task"\n' +
         '  kadence board\n\n' +
-        'Files were created but not committed — that call is yours.',
+        'Files were created but not committed — that call is yours.' +
+        hookNote,
   };
+}
+
+/** The command the hook runs, and the one line that identifies it as ours. */
+const HOOK_COMMAND = 'kadence prime';
+/**
+ * `startup` and not the omitted matcher, which would fire on resume, clear,
+ * compact and fork as well — four more copies of the same preamble in one
+ * session.
+ */
+const HOOK_MATCHER = 'startup';
+
+interface HookEntry {
+  type?: string;
+  command?: string;
+  timeout?: number;
+}
+interface HookGroup {
+  matcher?: string;
+  hooks?: HookEntry[];
+}
+
+/**
+ * Adds a SessionStart hook to `.claude/settings.json`, keeping everything else.
+ *
+ * Upsert, not write: hooks of other events, other matchers and other commands
+ * all survive, and running this twice leaves one hook. The format was read from
+ * the Claude Code documentation rather than remembered.
+ */
+function installSessionHook(root: string): string {
+  const dir = join(root, '.claude');
+  const path = join(dir, 'settings.json');
+
+  let settings: Record<string, unknown> = {};
+  if (existsSync(path)) {
+    const raw = readFileSync(path, 'utf8');
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('not an object');
+      }
+      settings = parsed as Record<string, unknown>;
+    } catch {
+      // Never rewrite a file we could not read. A settings file that fails to
+      // parse is usually mid-edit, and replacing it would lose the edit.
+      return `${path} is not valid JSON, so the hook was not added. Fix it and run:\n  kadence init --hooks`;
+    }
+  }
+
+  const hooks = (settings['hooks'] ?? {}) as Record<string, unknown>;
+  const sessionStart = Array.isArray(hooks['SessionStart'])
+    ? (hooks['SessionStart'] as HookGroup[])
+    : [];
+
+  const already = sessionStart.some((group) =>
+    (group.hooks ?? []).some((entry) => entry.command === HOOK_COMMAND),
+  );
+  if (already) return `The SessionStart hook is already in ${path}.`;
+
+  let group = sessionStart.find((g) => g.matcher === HOOK_MATCHER);
+  if (group === undefined) {
+    group = { matcher: HOOK_MATCHER, hooks: [] };
+    sessionStart.push(group);
+  }
+  if (!Array.isArray(group.hooks)) group.hooks = [];
+  group.hooks.push({ type: 'command', command: HOOK_COMMAND, timeout: 60 });
+
+  hooks['SessionStart'] = sessionStart;
+  settings['hooks'] = hooks;
+
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  return `Added a SessionStart hook to ${path}: every session now starts with \`${HOOK_COMMAND}\`.`;
 }
 
 /** state.json is a derived cache and must never reach git (ADR-005). */

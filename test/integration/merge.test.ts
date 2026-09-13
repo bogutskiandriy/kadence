@@ -30,6 +30,10 @@ function tasks(): Array<{ label: string; title: string; status: string; history:
   return JSON.parse(kadence(['task', 'list', '--json']).stdout).tasks;
 }
 
+function labelsOf(label: string): string[] {
+  return JSON.parse(kadence(['task', 'show', label, '--json']).stdout).task.labels;
+}
+
 /** Merges a branch and reports whether it conflicted — we ask git, not guess. */
 function merge(branch: string): boolean {
   const r = spawnSync('git', ['merge', '--no-edit', branch], { cwd: repo, encoding: 'utf8' });
@@ -83,6 +87,105 @@ describe('branch merges', () => {
     expect(authors).toEqual(
       expect.arrayContaining(['alice@example.com', 'bob@example.com', 'carol@example.com']),
     );
+  });
+
+  it('two branches label the same task — both labels survive the merge', () => {
+    // The one field where "every intent preserved" was not true. A label set is
+    // a set, and replacing it wholesale makes the later writer the only writer:
+    // git merges the two events happily, and one person's label is gone with no
+    // conflict, no warning and nothing in the output to notice.
+    kadence(['task', 'add', 'Shared task', '--label', 'area-auth']);
+    git('add', '-A');
+    git('commit', '-qm', 'task created');
+
+    for (const [who, label] of [
+      ['x', 'impact-critical'],
+      ['y', 'area-payments'],
+    ] as const) {
+      git('checkout', '-q', '-b', who, 'main');
+      kadence(['task', 'edit', 'KAD-1', '--add-label', label], `${who}@example.com`);
+      git('add', '-A');
+      git('commit', '-qm', `${who}: ${label}`);
+      git('checkout', '-q', 'main');
+    }
+
+    git('config', 'user.email', 'main@example.com');
+    expect(['x', 'y'].filter(merge).length).toBe(0);
+
+    const labels = labelsOf('KAD-1');
+    expect(labels).toEqual(expect.arrayContaining(['area-auth', 'impact-critical', 'area-payments']));
+  });
+
+  it('read-modify-write from two branches keeps both labels too', () => {
+    // The original bug, in the shape it was found: neither branch says "add",
+    // both pass the whole set the way an agent that read it first would. The
+    // event still records only the difference, so nothing is lost.
+    kadence(['task', 'add', 'Shared task', '--label', 'area-auth']);
+    git('add', '-A');
+    git('commit', '-qm', 'task created');
+
+    for (const [who, label] of [
+      ['x', 'impact-critical'],
+      ['y', 'area-payments'],
+    ] as const) {
+      git('checkout', '-q', '-b', who, 'main');
+      kadence(['task', 'edit', 'KAD-1', '--label', 'area-auth', '--label', label], `${who}@example.com`);
+      git('add', '-A');
+      git('commit', '-qm', `${who}: ${label}`);
+      git('checkout', '-q', 'main');
+    }
+
+    git('config', 'user.email', 'main@example.com');
+    expect(['x', 'y'].filter(merge).length).toBe(0);
+
+    expect(labelsOf('KAD-1').sort()).toEqual(['area-auth', 'area-payments', 'impact-critical']);
+  });
+
+  it('a label removed on one branch stays removed after a merge with an unrelated add', () => {
+    // The other direction, and the reason a union at fold time is not the fix:
+    // removing has to survive too, or a label can never be taken off.
+    kadence(['task', 'add', 'Shared task', '--label', 'area-auth', '--label', 'stale']);
+    git('add', '-A');
+    git('commit', '-qm', 'task created');
+
+    git('checkout', '-q', '-b', 'remover', 'main');
+    kadence(['task', 'edit', 'KAD-1', '--remove-label', 'stale'], 'remover@example.com');
+    git('add', '-A');
+    git('commit', '-qm', 'remove stale');
+    git('checkout', '-q', 'main');
+
+    git('checkout', '-q', '-b', 'adder', 'main');
+    kadence(['task', 'edit', 'KAD-1', '--add-label', 'impact-high'], 'adder@example.com');
+    git('add', '-A');
+    git('commit', '-qm', 'add impact-high');
+    git('checkout', '-q', 'main');
+
+    git('config', 'user.email', 'main@example.com');
+    expect(['remover', 'adder'].filter(merge).length).toBe(0);
+
+    expect(labelsOf('KAD-1').sort()).toEqual(['area-auth', 'impact-high']);
+  });
+
+  it('the set is the same whichever order the branches are merged in (I1)', () => {
+    kadence(['task', 'add', 'Shared task', '--label', 'area-auth']);
+    git('add', '-A');
+    git('commit', '-qm', 'task created');
+
+    for (const [who, flag, label] of [
+      ['x', '--add-label', 'impact-critical'],
+      ['y', '--remove-label', 'area-auth'],
+    ] as const) {
+      git('checkout', '-q', '-b', who, 'main');
+      kadence(['task', 'edit', 'KAD-1', flag, label], `${who}@example.com`);
+      git('add', '-A');
+      git('commit', '-qm', who);
+      git('checkout', '-q', 'main');
+    }
+
+    git('config', 'user.email', 'main@example.com');
+    merge('y');
+    merge('x');
+    expect(labelsOf('KAD-1')).toEqual(['impact-critical']);
   });
 
   it('three branches create tasks independently — different numbers, no collision', () => {
@@ -254,3 +357,63 @@ describe('branch merges', () => {
     expect(current.map((d) => d.label)).toEqual(['DEC-2']);
   });
 });
+
+describe('milestones from two branches', () => {
+  it('merge without conflict and end up with different numbers', () => {
+    // Invariant I7 applied to a new entity: identity is the ULID, MS-N is
+    // derived while folding. Two people can each create a milestone offline
+    // and neither has to renumber when the branches meet.
+    kadence(['milestone', 'create', 'Launch'], 'main@example.com');
+    git('add', '-A');
+    git('commit', '-qm', 'first milestone');
+
+    for (const who of ['alice', 'bob'] as const) {
+      git('checkout', '-q', '-b', who, 'main');
+      kadence(['milestone', 'create', `${who} target`], `${who}@example.com`);
+      kadence(['task', 'add', `${who} work`, '--estimate', '3']);
+      git('add', '-A');
+      git('commit', '-qm', `${who} milestone`);
+      git('checkout', '-q', 'main');
+    }
+
+    expect(merge('alice')).toBe(false);
+    expect(merge('bob')).toBe(false);
+
+    const list = JSON.parse(kadence(['milestone', 'list', '--json']).stdout).milestones as Array<{
+      label: string;
+      name: string;
+    }>;
+    expect(list).toHaveLength(3);
+    // Every label distinct, and assigned by ULID order rather than by who
+    // merged first.
+    expect(new Set(list.map((m) => m.label)).size).toBe(3);
+    expect(list.map((m) => m.label)).toEqual(['MS-1', 'MS-2', 'MS-3']);
+    expect(list[0]!.name).toBe('Launch');
+  });
+
+  it('a task keeps exactly one milestone when two branches assign different ones', () => {
+    kadence(['task', 'add', 'Shared work', '--estimate', '5'], 'main@example.com');
+    kadence(['milestone', 'create', 'One']);
+    kadence(['milestone', 'create', 'Two']);
+    git('add', '-A');
+    git('commit', '-qm', 'setup');
+
+    for (const [who, target] of [['alice', 'One'], ['bob', 'Two']] as const) {
+      git('checkout', '-q', '-b', who, 'main');
+      kadence(['milestone', 'add', 'KAD-1', '--milestone', target], `${who}@example.com`);
+      git('add', '-A');
+      git('commit', '-qm', `${who} assigns`);
+      git('checkout', '-q', 'main');
+    }
+
+    expect(merge('alice')).toBe(false);
+    expect(merge('bob')).toBe(false);
+
+    const milestones = JSON.parse(kadence(['milestone', 'list', '--json']).stdout)
+      .milestones as Array<{ label: string; totalTasks: number }>;
+    // The later assignment by ULID holds, and the task appears in one group —
+    // never in both, which a list rebuilt per event would have allowed.
+    expect(milestones.reduce((n, m) => n + m.totalTasks, 0)).toBe(1);
+  });
+});
+

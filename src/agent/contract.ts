@@ -21,6 +21,9 @@ the CLI. No server required.
 
 ## Commands
 
+    kadence prime                        start here — the live state, in 40 lines
+    kadence ready --json                 what can be started right now
+    kadence task claim KAD-42           take it; no argument takes the top of ready
     kadence board --json                 the whole board
     kadence task list --json             all tasks
     kadence task show KAD-42 --json     one task with its history
@@ -28,6 +31,7 @@ the CLI. No server required.
     kadence task move KAD-42 in_progress
     kadence task assign KAD-42 you@example.com
     kadence sprint status --json         current sprint progress
+    kadence note "text" --task KAD-42   something learned; a choice is a decision
 
 ## JSON contract
 
@@ -122,7 +126,9 @@ ${provenance(version)}
 
 Tasks live in \`.kadence/\` as plain files. Read them directly or via the CLI:
 
-    kadence board --json           the whole board
+    kadence prime                  start here: sprint, your work, what is ready
+    kadence board --json --summary the board's state, without the history
+    kadence board --json           the whole board, history included
     kadence task list --json       all tasks
     kadence task move KAD-1 done  change state
 
@@ -181,10 +187,15 @@ export const TASK_FIELDS = [
   'assignee',
   'reporter',
   'sprint',
+  'milestone',
   'loggedHours',
   'parent',
   'blockedBy',
   'due',
+  'claimedBy',
+  'contestedBy',
+  'criteria',
+  'openCriteria',
   'comments',
   'estimate',
   'history',
@@ -211,6 +222,8 @@ export const ERROR_CODES = [
   'invalid_argument',
   'template_not_found',
   'conflicting_state',
+  'nothing_ready',
+  'milestone_not_found',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -231,6 +244,9 @@ const ERROR_MEANINGS: Record<ErrorCode, string> = {
   template_not_found: 'No template carries that name.',
   conflicting_state:
     'The arguments were understood, but the current state does not allow it \u2014 a closed sprint, or one already started.',
+  milestone_not_found: 'No milestone carries that name, MS-N label or ULID.',
+  nothing_ready:
+    'Nothing can be started right now: the board is empty, or every open task is blocked or claimed by someone else. The message says which.',
 };
 
 /**
@@ -274,6 +290,16 @@ export function buildContract(version: string): Record<string, unknown> {
           'assignee',
           'blockedBy',
           'loggedHours',
+          // Claim state is what a second agent branches on before starting
+          // work, so it is a promise and not merely something we happen to
+          // emit. `contestedBy` is always an array, empty when nobody else
+          // claimed it — an agent should never have to test for null.
+          'claimedBy',
+          'contestedBy',
+          // Promoted on 2026-09-11, once labels stopped being lossy (ADR-013).
+          // A team's own vocabulary lives here and nothing else carries it, so
+          // an agent that reads a task has to be able to rely on it.
+          'labels',
         ],
         selectable: [...TASK_FIELDS],
         notes: {
@@ -283,7 +309,83 @@ export function buildContract(version: string): Record<string, unknown> {
             'What a full response carries. With --fields you get exactly what you asked for and nothing else.',
         },
       },
-      board: { required: ['schema', 'ok', 'columns'] },
+      board: {
+        required: ['schema', 'ok', 'columns'],
+        notes: {
+          columns:
+            'With --summary each task carries only the state fields, never `history` or `comments`. The response without the flag is unchanged \u2014 the contract only ever gains.',
+        },
+      },
+      ready: {
+        required: ['label', 'title', 'priority', 'estimate', 'labels', 'claimedBy', 'contestedBy'],
+        notes: {
+          contestedBy:
+            'Always an array. Non-empty means two people claimed the task and it is in this list on purpose — it needs a person, not a filter.',
+          labels:
+            'Always an array, empty when there are none. Free-form: kadence attaches no meaning to any label. A team that marks blast radius — impact-critical and the like — decides from this how carefully to work; the mapping from a label to how an agent behaves is the team\u2019s, never ours.',
+          priority:
+            'Urgency, from a fixed vocabulary: low, normal, high, urgent. Not blast radius \u2014 that is a label, and the two are different questions.',
+        },
+      },
+      milestone: {
+        required: ['label', 'name', 'due', 'status', 'doneTasks', 'totalTasks', 'donePoints', 'totalPoints'],
+        notes: {
+          label: 'MS-N, derived from ULID order during the fold, exactly like KAD-N. It can change when a branch merges.',
+          donePoints: 'Progress is measured in points, the same unit as velocity and burndown.',
+        },
+      },
+      criterion: {
+        required: ['n', 'text', 'checked', 'checkedBy'],
+        notes: {
+          n: 'A position in the folded list, assigned like KAD-N and never stored. It can change when a branch merges.',
+          checkedBy: 'Who checked it, or null. Cleared when it is unchecked.',
+        },
+      },
+      branch: {
+        required: ['name', 'base'],
+        notes: {
+          name: 'Present on a `task list --branch` response only. A task belongs to the branch when it was created there or any event about it arrived there; nothing is stored, the answer comes from git at read time.',
+        },
+      },
+      note: {
+        required: ['id', 'text', 'task', 'at', 'by', 'source'],
+        notes: {
+          task: 'The KAD-N label, or null. A note is not a decision: there is no `why` and no number.',
+        },
+      },
+      flow: {
+        required: [
+          'schema', 'ok', 'report', 'window', 'started', 'unit', 'wip', 'finished',
+          'perWeek', 'cycleTime', 'leadTime', 'responseTime', 'sle', 'aging', 'blocked', 'notes',
+        ],
+        notes: {
+          cycleTime: 'null, or {n, p50, p85, p95} in calendar days. Percentiles only \u2014 there is no mean, on purpose.',
+          started: 'The column work counts as started at. A cycle time quoted without it is a number about the default, not the team.',
+          window: 'UTC dates, inclusive at both ends. `--since 1` is the current UTC day.',
+        },
+      },
+      cfd: {
+        required: ['schema', 'ok', 'report', 'window', 'statuses', 'days'],
+        notes: {
+          days: 'One row per day of the window, each with a count per column at the end of that UTC day. A move backwards subtracts.',
+        },
+      },
+      attention: {
+        required: ['schema', 'ok', 'report', 'threshold', 'started', 'asOf', 'rows', 'notes'],
+        notes: {
+          rows: 'One row per task, however many signals it carries. `signals[].kind` is one of stalled, unowned, stale_claim, dead_blocker.',
+          threshold: 'Days of silence before work counts as stalled, and the age a claim must reach. From `--since`; the default is 7, not the 30 a window report uses.',
+          asOf: 'The UTC day the question was asked. This report is the one answer that changes without the journal changing.',
+        },
+      },
+      prime: {
+        required: ['sprint', 'mine', 'mineTotal', 'ready', 'attention', 'attentionTotal', 'decisions', 'notes', 'commands'],
+        notes: {
+          mine: 'Capped; `mineTotal` is the real count.',
+          ready: 'A count, not a list. `kadence ready --json` returns the list.',
+          attention: 'Work in flight that nobody is moving, at most three, `attentionTotal` is the real count. Empty when there is nothing \u2014 and then the human output says nothing at all. `kadence report attention --json` returns the rest.',
+        },
+      },
       decision: {
         required: [
           'id', 'label', 'title', 'why', 'rejected', 'docs', 'supersedes', 'supersededBy',
@@ -315,14 +417,37 @@ export function buildContract(version: string): Record<string, unknown> {
       {
         name: 'board',
         summary:
-          'The whole board, grouped by column. Every task in full — pass --fields on a large project.',
-        flags: ['--json', '--fields'],
+          'The whole board, grouped by column. Every task in full \u2014 pass --summary for the state without history and comments, which is what makes a large board big.',
+        flags: ['--json', '--fields', '--summary'],
         json: true,
       },
       {
+        name: 'prime',
+        summary:
+          'The session preamble: active sprint, your claimed work, how many tasks are ready, decisions in force, recent notes. Capped at 40 lines.',
+        flags: ['--json'],
+        json: true,
+      },
+      {
+        name: 'ready',
+        summary:
+          'What can be started now: open, unblocked, not claimed by anyone else. Priority first, then age.',
+        flags: ['--json', '--assignee', '--limit'],
+        json: true,
+      },
+      {
+        name: 'task claim',
+        summary:
+          'Take a task, or the top of `ready` with no argument. No lock: a second claim is recorded and reported as contested.',
+        args: ['ref'],
+        json: true,
+      },
+      { name: 'task release', summary: 'Give a claimed task back.', args: ['ref'], json: true },
+      {
         name: 'task list',
-        summary: 'All tasks, filterable.',
-        flags: ['--json', '--fields'],
+        summary:
+          'All tasks, filterable. `--branch` narrows to the work the current branch introduced, measured against `--base` (main by default).',
+        flags: ['--json', '--fields', '--branch', '--base'],
         json: true,
       },
       {
@@ -340,9 +465,37 @@ export function buildContract(version: string): Record<string, unknown> {
       },
       { name: 'task assign', summary: 'Assign or unassign.', args: ['refs', 'who'], json: true },
       { name: 'task comment', summary: 'Append a comment.', args: ['ref', 'text'], json: true },
-      { name: 'task edit', summary: 'Change fields.', args: ['refs'], json: true },
+      {
+        name: 'task edit',
+        summary:
+          'Change fields. Labels move as deltas: --add-label and --remove-label change one and leave the rest, --label makes the set exactly what you pass. Prefer the first two \u2014 a whole set passed from two branches is two people’s intent, and only the difference is recorded (ADR-013).',
+        args: ['refs'],
+        flags: ['--title', '--description', '--type', '--priority', '--due', '--estimate', '--label', '--add-label', '--remove-label', '--json'],
+        json: true,
+      },
       { name: 'task log', summary: 'Log hours.', args: ['refs', 'hours'], json: true },
       { name: 'task block', summary: 'Record a blocker.', args: ['ref', 'blocker'], json: true },
+      {
+        name: 'task ac',
+        summary:
+          'Acceptance criteria: `add <ref> "text"`, `check <ref> <n>`, `uncheck <ref> <n>`, `list <ref>`. The number is a position in the folded list, never stored. Moving to done with unchecked criteria warns and proceeds.',
+        args: ['action', 'ref', 'value'],
+        json: true,
+      },
+      {
+        name: 'note',
+        summary:
+          'Record something learned that was never a choice. For a choice with a rejected alternative, use `decision add`.',
+        args: ['text'],
+        flags: ['--task', '--json'],
+        json: true,
+      },
+      {
+        name: 'note list',
+        summary: 'Notes, newest first.',
+        flags: ['--task', '--limit', '--json'],
+        json: true,
+      },
       {
         name: 'decision add',
         summary: 'Record why something was chosen, and what was turned down.',
@@ -359,8 +512,84 @@ export function buildContract(version: string): Record<string, unknown> {
       { name: 'decision show', summary: 'One decision in full.', args: ['ref'], json: true },
       {
         name: 'task doc',
-        summary: 'Link a document to a task. The file stays plain markdown in the repo.',
+        summary:
+          'Link a document to a task; `task doc add <ref> <path>` creates it from a small template and links it in one call. The file stays plain markdown in the repo and is never overwritten.',
         args: ['ref', 'path'],
+        json: true,
+      },
+      {
+        name: 'report flow',
+        summary:
+          'WIP, throughput per week, cycle / lead / response time as p50 p85 p95 in calendar days, aging work against p85, created vs resolved, blocked days. Names the window and the started boundary it used.',
+        flags: ['--since', '--json'],
+        json: true,
+      },
+      {
+        name: 'report cfd',
+        summary: 'Cumulative flow: tasks per column at the end of each day in the window.',
+        flags: ['--since', '--json'],
+        json: true,
+      },
+      {
+        name: 'report attention',
+        summary:
+          'Work past the started boundary that nobody is moving: stalled, unowned, held by a stale claim, or blocked by something already done. `--since` is days of silence, default 7.',
+        flags: ['--since', '--json'],
+        json: true,
+      },
+      {
+        name: 'compact',
+        summary:
+          'Fold months older than --keep-months into one archive file each. Same events, faster cold start; an archived month is one file, so compact on one branch and merge before compacting on another.',
+        flags: ['--keep-months', '--dry-run', '--json'],
+        json: true,
+      },
+      {
+        name: 'stats',
+        summary:
+          'Counts by status and assignee, open blockers, contested claims, and the velocity of the last three closed sprints.',
+        flags: ['--json'],
+        json: true,
+      },
+      {
+        name: 'milestone list',
+        summary:
+          'Milestones with progress in points. Grouping by outcome, where an epic groups by structure and a sprint by time. Closed ones need --all.',
+        flags: ['--all', '--json'],
+        json: true,
+      },
+      {
+        name: 'milestone create',
+        summary: 'Create one. A task carries at most one milestone, as a field beside `sprint`.',
+        args: ['name'],
+        flags: ['--due', '--json'],
+        json: true,
+      },
+      {
+        name: 'milestone add',
+        summary: 'Put a task in a milestone; it leaves the one it was in.',
+        args: ['ref'],
+        flags: ['--milestone', '--json'],
+        json: true,
+      },
+      {
+        name: 'milestone close',
+        summary: 'Close it. A statement about the calendar, not about the work: open tasks stay open and are named.',
+        args: ['ref'],
+        json: true,
+      },
+      {
+        name: 'board export',
+        summary:
+          'Write a snapshot: `--html` for one self-contained file that opens from disk, `--md` for a README or a pull request. No server and no network; nothing outlives the command.',
+        flags: ['--html', '--md', '--readme', '--file', '--json'],
+        json: true,
+      },
+      {
+        name: 'board config',
+        summary:
+          'Read or set the columns, the started boundary and the definition of done. `--started` names the column cycle time and actual hours count from; `--dod` criteria are copied into each new task, never referenced.',
+        flags: ['--statuses', '--started', '--dod', '--json'],
         json: true,
       },
       { name: 'sprint status', summary: 'Current sprint progress.', json: true },

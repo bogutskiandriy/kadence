@@ -100,6 +100,31 @@ describe('the schema cannot drift from the code', () => {
     }
   });
 
+  it('every required ready field is present in a real ready list', () => {
+    run(['task', 'add', 'Task', '--estimate', '3', '--label', 'impact-high']);
+    const required = json(['schema', '--json']).contract.shapes.ready.required;
+    const [task] = json(['ready', '--json']).tasks as Record<string, unknown>[];
+
+    for (const field of required as string[]) {
+      expect(Object.keys(task!), `ready must carry ${field}`).toContain(field);
+    }
+  });
+
+  it('every required flow and cfd field is present in a real report', () => {
+    // The task, board and error shapes were checked against live output; these
+    // two were checked by nobody, so the list matched the type by inspection.
+    run(['task', 'add', 'Something']);
+    run(['task', 'move', 'KAD-1', 'in_progress']);
+    const shapes = json(['schema', '--json']).contract.shapes;
+
+    for (const report of ['flow', 'cfd', 'attention']) {
+      const body = json(['report', report, '--json']);
+      for (const field of shapes[report].required as string[]) {
+        expect(Object.keys(body), `report ${report} must carry ${field}`).toContain(field);
+      }
+    }
+  });
+
   it('every required board field is present in a real board', () => {
     const required = json(['schema', '--json']).contract.shapes.board.required;
     const board = json(['board', '--json']);
@@ -118,15 +143,24 @@ describe('the schema cannot drift from the code', () => {
     }
   });
 
-  it('every command it names can actually be run', () => {
-    // A schema that documents a command nobody implemented is worse than none:
-    // the agent trusts it. Exit code 2 is "bad arguments" — which is what a
-    // missing command looks like to cac.
-    for (const command of json(['schema', '--json']).contract.commands as { name: string }[]) {
-      const r = run([...command.name.split(' '), '--help']);
-      expect(r.code, `${command.name} --help`).not.toBe(2);
-    }
-  });
+  // One spawned process per command in the contract, so the cost grows with
+  // every command we add — it was already three seconds of a five-second
+  // default before `report attention` joined. The explicit timeout is the same
+  // reasoning as the fork-pool cap in `vitest.config.ts`: a busy machine
+  // turning this into "Test timed out" reports a product failure that is not one.
+  it(
+    'every command it names can actually be run',
+    () => {
+      // A schema that documents a command nobody implemented is worse than none:
+      // the agent trusts it. Exit code 2 is "bad arguments" — which is what a
+      // missing command looks like to cac.
+      for (const command of json(['schema', '--json']).contract.commands as { name: string }[]) {
+        const r = run([...command.name.split(' '), '--help']);
+        expect(r.code, `${command.name} --help`).not.toBe(2);
+      }
+    },
+    60_000,
+  );
 });
 
 describe('decisions are reachable and published', () => {

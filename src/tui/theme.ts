@@ -78,6 +78,16 @@ export function renderCard(task: Task, width: number): string {
 
   const marks: string[] = [];
   if (task.blockedBy.length > 0) marks.push(tag('⊘', 'red'));
+  // Two people claimed it: a colour of its own, because this is the one
+  // conflict that names people rather than values (ADR-011).
+  if (task.contestedBy.length > 0) marks.push(tag('⚑', 'magenta'));
+  else if (task.claimedBy !== null) marks.push(tag('✓', 'green'));
+  const openCriteria = task.criteria.filter((c) => !c.checked).length;
+  if (openCriteria > 0) {
+    marks.push(tag(`${task.criteria.length - openCriteria}/${task.criteria.length}`, 'yellow'));
+  } else if (task.criteria.length > 0) {
+    marks.push(tag('☑', 'green'));
+  }
   if (task.comments.length > 0) marks.push(tag('💬', 'gray'));
   if (task.due !== null) {
     const overdue = task.due < new Date().toISOString().slice(0, 10);
@@ -145,6 +155,10 @@ export const KEY_HINTS = [
   'n new',
   's sprint',
   '/ filter',
+  'R ready',
+  'b branch',
+  'M milestone',
+  'C claim',
   '? help',
   'q quit (Ctrl-C forces)',
 ].join('  ');

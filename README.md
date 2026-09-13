@@ -76,7 +76,15 @@ journal is append-only, one file per event.
 keeps every step, so «how did we get here» has an answer.
 
 State is still there when you want it — it is folded from the journal on read,
-which is why the board can never drift from reality.
+which is why the board can never drift from the journal. No one maintains a
+column by hand, so no column can be stale in the way a task file can.
+
+**What that does not buy you.** A journal records what was written to it. If a
+piece of work stops being touched, the board stays perfectly accurate and
+perfectly uninformative about it — the same way `git log` is honest about a
+branch nobody pushed to. kadence removes the drift between what is shown and
+what was recorded. It cannot remove the drift between what was recorded and
+what is actually happening; that still takes someone looking.
 
 ---
 
@@ -104,10 +112,68 @@ kadence init
 
 kadence sprint create "Sprint 14"
 kadence task add "Fix login" -d "Broken since 2.3" --type bug --priority high --estimate 3
+kadence task ac add KAD-1 "tests green"
 kadence task comment KAD-1 "Session cookie is fine — the redirect drops it."
 kadence task move KAD-1 done
 kadence sprint close
 ```
+
+**When several people — or several agents — work the same board:**
+
+```bash
+kadence ready                  # open, unblocked, nobody else's
+kadence task claim             # take the top of that list, in one step
+kadence task release KAD-1
+```
+
+There is no lock, and the message says so. Two machines can each claim before
+either pushes; the merge keeps both claims and the task reads `contested` with
+both names. Refusing the second one would make the owner depend on which branch
+merged first, and that is the property the whole design rests on.
+
+**Grouping, and the evidence behind "done":**
+
+```bash
+kadence milestone create "1.0" --due 2026-12-01
+kadence milestone add KAD-1 --milestone 1.0
+kadence board config --dod "tests green,docs updated"   # every new task starts with these
+kadence task ac check KAD-1 1
+```
+
+Moving a task to `done` with unchecked criteria **warns and carries on**. The
+checklist is evidence, not a gate: what `done` costs is the team's call, not the
+tool's.
+
+**A snapshot somebody can open, without running anything:**
+
+```bash
+kadence board export --html      # one self-contained file: no server, no network
+kadence board export --md --readme
+```
+
+**When someone asks how long things take** — the answer is a fold over the same
+journal, in the Kanban Guide's own terms:
+
+```bash
+kadence board config --started doing   # the column cycle time counts from, if it is not in_progress
+kadence report flow                    # p50 / p85 / p95 in calendar days, WIP, aging work, blocked days
+kadence report cfd                     # tasks per column, per day
+```
+
+No averages, on purpose. Every line names the window and the column it measured
+from. Velocity is not the pitch here and neither is cycle time; they are what the
+journal happens to know.
+
+**And what the branch you are on is actually about:**
+
+```bash
+kadence task list --branch
+```
+
+Nothing is stored for that: which tasks belong to a branch lives in git's
+history and is read when you ask. It narrows the answer between three and
+twenty times, [measured](docs/research/branch-context-2026-09.md) on real board
+sizes.
 
 **The board, when you want to look at it:**
 
@@ -119,7 +185,7 @@ $ kadence ui
 | ^# KAD-1 Auth epic  || . KAD-4 Tokens @dev||!! KAD-7 Crash   [] || v KAD-2 Export     |
 |  * KAD-3 Login form ||                    ||                    || v KAD-5 Docs       |
 +---------------------++--------------------++--------------------++--------------------+
- arrows move  enter details  m status  a assign  e edit  s sprint  / filter  q quit
+ arrows move  enter details  m status  a assign  e edit  s sprint  R ready  b branch  q quit
 ```
 
 Keyboard, mouse, drag between columns, every field editable in place. It calls
@@ -148,6 +214,18 @@ from state changes the team already made.
 
 Files first. Every command speaks `--json`, every response carries
 `schema: "kadence/v1"`, stdout is JSON and nothing else, warnings go to stderr.
+
+Start a session with one command:
+
+```bash
+kadence prime          # active sprint, your work, what is ready, decisions in force
+kadence ready --json   # five fields per task, not the whole record
+```
+
+`prime` is held to forty lines and three kilobytes by a test, because it is paid
+for on every turn that follows. `kadence init --hooks` will add it as a
+`SessionStart` hook — only with the flag, because `.claude/settings.json` is
+yours.
 
 ```bash
 kadence board --json
@@ -209,11 +287,11 @@ either moves both or changes nothing. A typo does not leave half a board.
 
 | | |
 |---|---|
-| Install | 38 KB packed — 132 KB of kadence, plus 1.8 MB of blessed |
-| Startup | 80 ms |
-| 10,000 events | 28 ms cold, 7 ms warm |
-| Journal on disk | 1.9 MB |
-| One task, as an agent reads it | 948 bytes — the same at 10 tasks or 1,000 |
+| Install | 76 KB packed — 233 KB of kadence, plus 1.8 MB of blessed |
+| Startup | 65 ms |
+| 10,000 events | 21 ms cold with a compacted archive, 12 ms warm — 199 ms cold if every event is still a separate file |
+| Journal on disk | under 5 MB |
+| One task, as an agent reads it | 982 bytes, or 304 with `--summary` — the same however long the task has been worked on |
 
 These are tests. They fail the build on regression, which is why they are still
 true.
@@ -256,8 +334,9 @@ unit-tested.
 ```
 
 Every command appends one event. State is folded from the journal on read, so
-the board cannot drift from reality. Two branches writing at once produce two
-different files, and git merges them without a conflict by construction.
+the board cannot drift from the journal — nothing is maintained by hand. Two
+branches writing at once produce two different files, and git merges them
+without a conflict by construction.
 
 Design decisions, each recording what was measured and what would make us
 revisit it: [docs/decisions/](docs/decisions/).

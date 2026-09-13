@@ -1,4 +1,5 @@
 import type { Task, TaskStatus, TaskType, Priority } from './projection.js';
+import { TERMINAL_STATUS, CANCELLED_STATUS } from './projection.js';
 
 /**
  * Filtering, search and sorting over a folded state.
@@ -132,6 +133,89 @@ export function describeEmptyResult(filters: TaskFilters): string {
     return 'No tasks yet.\nCreate the first one:\n  kadence task add "title"';
   }
   return `No tasks match ${active.join(' and ')}.\nTry fewer filters:\n  kadence task list`;
+}
+
+export interface ReadyOptions {
+  /** Whose claim counts as "mine". Absent means every claim is somebody else's. */
+  viewer?: string | null;
+  /** An address, `me` for the viewer, or `none` for unassigned work. */
+  assignee?: string;
+}
+
+/** A task nobody is waiting on any more: finished, or never going to happen. */
+export function isFinished(task: Task): boolean {
+  return task.status === TERMINAL_STATUS || task.status === CANCELLED_STATUS;
+}
+
+/**
+ * The work that can start right now.
+ *
+ * Three exclusions, each with a reason a person would give out loud: the task
+ * is finished, something it waits on is not, or somebody else is on it. A
+ * contested task stays in — two people claimed it, and that needs a human to
+ * look, not a filter to hide.
+ */
+export function readyTasks(tasks: readonly Task[], options: ReadyOptions = {}): Task[] {
+  const viewer = options.viewer ?? null;
+  const finished = new Set(tasks.filter(isFinished).map((t) => t.id));
+  // `me` with nobody viewing cannot mean anyone, and matching the literal
+  // string would quietly return an empty list for a reason nobody could see.
+  const wanted =
+    options.assignee === 'me' ? viewer : (options.assignee ?? null);
+
+  const open = tasks.filter((task) => {
+    if (isFinished(task)) return false;
+    // `blockedBy` only ever names live tasks — the fold prunes ids whose task
+    // was deleted — so an id that is not finished is genuinely still blocking.
+    if (task.blockedBy.some((id) => !finished.has(id))) return false;
+    if (task.claimedBy !== null && task.claimedBy !== viewer && task.contestedBy.length === 0) {
+      return false;
+    }
+    if (wanted !== null) {
+      if (wanted === 'none') return task.assignee === null;
+      if (task.assignee !== wanted) return false;
+    }
+    return true;
+  });
+
+  // Priority first, then age. Age breaks the tie because the oldest untouched
+  // task is the one most likely to be forgotten.
+  return open.sort(
+    (a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || (a.id < b.id ? -1 : 1),
+  );
+}
+
+/**
+ * Why a board with tasks on it still offers nothing to start.
+ *
+ * An empty list is the same output whether the work is done, blocked or
+ * somebody else's, and those are three different next steps.
+ */
+export function describeNothingReady(
+  tasks: readonly Task[],
+  viewer: string | null,
+  assignee?: string,
+): string {
+  if (tasks.length === 0) {
+    return 'No tasks yet.\nCreate the first one:\n  kadence task add "title"';
+  }
+  const open = tasks.filter((t) => !isFinished(t));
+  if (open.length === 0) return 'Nothing ready: every task is done or cancelled.';
+
+  const finished = new Set(tasks.filter(isFinished).map((t) => t.id));
+  const blocked = open.filter((t) => t.blockedBy.some((id) => !finished.has(id))).length;
+  const claimed = open.filter(
+    (t) => t.claimedBy !== null && t.claimedBy !== viewer && t.contestedBy.length === 0,
+  ).length;
+
+  const reasons: string[] = [];
+  if (blocked > 0) reasons.push(`${blocked} blocked`);
+  if (claimed > 0) reasons.push(`${claimed} claimed by someone else`);
+  // Naming the filter matters most when it is the filter that emptied the
+  // list: without it a busy board reports "nothing ready" and no reason.
+  if (assignee !== undefined) reasons.push(`filtered to assignee=${assignee}`);
+  const tail = reasons.length > 0 ? ` (${reasons.join(', ')})` : '';
+  return `Nothing ready${tail}.\nSee the whole board:\n  kadence task list`;
 }
 
 /** Valid values, exported so the CLI can list them in error messages. */

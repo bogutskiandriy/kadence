@@ -35,10 +35,13 @@
 | [research/context-handoff-2026-09.md](research/context-handoff-2026-09.md) | Як прийнято передавати контекст AI, як це робимо ми, і три умови дешевої координації між людьми |
 | [research/decision-capture-2026-09.md](research/decision-capture-2026-09.md) | Чи існує біль під `kadence decision`. Біль описаний зовні; питання тепер про механізм, не про існування |
 | [research/probe-d-docs-linkage.md](research/probe-d-docs-linkage.md) | **✅ Виконано.** Зв'язок документа із задачею економить не пошук, а відсіювання: 34× на п'яти випадках |
+| [research/reports-discovery-2026-09.md](research/reports-discovery-2026-09.md) | **Звіти.** Що пропонують Jira, PMI Agile, Kanban Guide, GitHub Projects; що з цього виводиться з журналу; дві передумови, знайдені вимірюванням — межа «почато» захардкоджена, а компакція недоступна користувачу. Англійською |
+| [research/branch-context-2026-09.md](research/branch-context-2026-09.md) | **✅ Виконано.** `--branch` — не `--search` під іншою назвою: приналежність живе в історії git, а не в тексті. Звуження від 3.2× до 20.8× на розмірах борду з Probe A. Англійською |
 | [research/probe-c-agent-cost.md](research/probe-c-agent-cost.md) | **✅ Виконано.** Відповідь про задачу — 948 байт незалежно від розміру проєкту; журнал росте до 528 КБ. Спростував наш власний аргумент про MCP |
 | [research/agent-readability-2026-09.md](research/agent-readability-2026-09.md) | **Читати перед зміною агентського контракту.** Як агенти читають репозиторій. Claude Code не читає `AGENTS.md` — а `init` пише тільки його |
 | [research/ecosystem-and-monetization-2026-09.md](research/ecosystem-and-monetization-2026-09.md) | Докази для дороги до 1.0: Beads як головний конкурент, ринок памʼяті для агентів, ETH Zurich про контекстні файли, METR про швидкість, дистрибуція, моделі доходу |
 | [research/discovery-verdict-2026-09.md](research/discovery-verdict-2026-09.md) | **Вердикт дискавері.** Продукт має сенс як один продукт і як три інші ні. Скарги користувачів Beads і Backlog.md з реакціями, нуль запитів на velocity, розмір сегмента знизу вгору |
+| [research/tech-lead-feedback-2026-09-10.md](research/tech-lead-feedback-2026-09-10.md) | **Перший відгук ззовні, n=1.** Тех-лід погодився, що проблема є, назвав продукт «Jira, але в репо», і сказав, що дрейф — від уваги, а не від сховища. Наше формулювання в README сильніше за те, що ми можемо довести. Англійською |
 
 ## 4. Проєктування
 
@@ -57,6 +60,9 @@
 | [../SPEC.md](../SPEC.md) | Технічна специфікація, вісім модулів |
 | [decisions/](decisions/) | Десять ADR, усі підкріплені вимірами |
 | [decisions/010-decisions-as-events.md](decisions/010-decisions-as-events.md) | Чому заміщення — одна подія, чому `list` за замовчуванням ховає скасоване, і чому документи лише зв'язані |
+| [decisions/011-claims-as-events.md](decisions/011-claims-as-events.md) | Чому claim — не лок, і чому другий претендент зберігається як `contested`, а не відхиляється. Англійською |
+| [decisions/012-network-only-in-packages.md](decisions/012-network-only-in-packages.md) | Чому мережа живе в окремому пакеті й лише через `gh`, і чому публікація односпрямована. Англійською |
+| [decisions/013-labels-as-deltas.md](decisions/013-labels-as-deltas.md) | Єдине поле, де «кожен намір збережено» було неправдою. Чому набір лейблів рухається дельтами, чому об'єднання при згортанні не підходить, і чому старі журнали досі читаються по-старому. Англійською |
 | [decisions/009-the-agent-contract.md](decisions/009-the-agent-contract.md) | Контракт для агентів: дві точки входу, коди помилок, `kadence schema --json` |
 | [decisions/007-what-goes-into-git.md](decisions/007-what-goes-into-git.md) | Що комітимо, а що ні. Читати перед додаванням нової теки |
 

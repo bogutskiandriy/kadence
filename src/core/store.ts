@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse, serialize, type FlowEvent } from './event.js';
 
@@ -165,6 +165,12 @@ function listJsonFiles(dir: string): string[] {
 export interface CompactResult {
   archivedMonths: string[];
   archivedEvents: number;
+  /**
+   * Archive files that exist but could not be read, by path. The month each
+   * one belongs to was left untouched — sources and all — so that a damaged
+   * archive costs disk space rather than history.
+   */
+  skipped: string[];
 }
 
 /**
@@ -176,16 +182,86 @@ export interface CompactResult {
  * Hot months are left alone: that is where concurrent writes happen, and where
  * one file per event is what delivers zero conflicts.
  */
+/**
+ * One archive file's events, `[]` when there is no such file — and `null` when
+ * the file is there and cannot be read.
+ *
+ * The three cases must stay distinct. An archive is the only copy of every
+ * event compacted before it, so a caller that reads "unreadable" as "absent"
+ * is one write away from replacing months of history with whatever batch it
+ * happens to be holding.
+ */
+function readArchive(path: string): FlowEvent[] | null {
+  if (!existsSync(path)) return [];
+  try {
+    const raw: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    if (!Array.isArray(raw)) return null;
+    return raw.map((x) => parse(JSON.stringify(x)).event).filter((e): e is FlowEvent => e !== null);
+  } catch {
+    return null;
+  }
+}
+
+export interface CompactionPlan {
+  months: Array<{ month: string; events: number }>;
+  events: number;
+}
+
+/**
+ * What `compact` would do, without doing it.
+ *
+ * Read-only on purpose: the dry run and the summary line both need the answer,
+ * and neither may write. Counts parse each file the way the archive would, so
+ * a corrupted event that compaction skips is not counted as archived either.
+ */
+export function compactionPlan(root: string, keepFromMonth: string): CompactionPlan {
+  const base = eventsDir(root);
+  const months: Array<{ month: string; events: number }> = [];
+  let total = 0;
+
+  let entries: import('node:fs').Dirent[];
+  try {
+    entries = readdirSync(base, { withFileTypes: true });
+  } catch {
+    return { months: [], events: 0 };
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === 'archive') continue;
+    if (entry.name >= keepFromMonth) continue;
+    // Counted against the archive that is already there: re-archiving an
+    // event that is in it moves nothing, and saying otherwise would make the
+    // dry run and the summary disagree.
+    // A month whose archive is unreadable will be skipped, not archived; the
+    // plan says so by counting nothing already filed rather than guessing.
+    const already = new Set(
+      (readArchive(join(archiveDir(root), `${entry.name}.json`)) ?? []).map((e) => e.id),
+    );
+    let count = 0;
+    for (const file of listJsonFiles(join(base, entry.name))) {
+      const e = parse(readFileSync(file, 'utf8')).event;
+      if (e !== null && !already.has(e.id)) count += 1;
+    }
+    if (count === 0) continue;
+    months.push({ month: entry.name, events: count });
+    total += count;
+  }
+
+  months.sort((a, b) => (a.month < b.month ? -1 : 1));
+  return { months, events: total };
+}
+
 export function compact(root: string, keepFromMonth: string): CompactResult {
   const base = eventsDir(root);
   const archived: string[] = [];
+  const skipped: string[] = [];
   let count = 0;
 
   let entries: import('node:fs').Dirent[];
   try {
     entries = readdirSync(base, { withFileTypes: true });
   } catch {
-    return { archivedMonths: [], archivedEvents: 0 };
+    return { archivedMonths: [], archivedEvents: 0, skipped: [] };
   }
 
   for (const entry of entries) {
@@ -202,20 +278,41 @@ export function compact(root: string, keepFromMonth: string): CompactResult {
     }
     if (batch.length === 0) continue;
 
-    batch.sort((a, b) => (a.id < b.id ? -1 : 1));
-
-    // Archive first, delete the sources only after: an interrupted process
-    // must never leave the journal without its events.
+    // An archive for this month may already exist: a branch that compacted
+    // earlier, merged, and then delivered more events for the same month —
+    // `append` files an event by its own `ts`, so a January event written
+    // today lands in a January directory next to an archived January.
+    // Overwriting here deleted every event already archived, silently, in a
+    // journal whose whole promise is that nothing is ever lost.
     mkdirSync(archiveDir(root), { recursive: true });
     const target = join(archiveDir(root), `${entry.name}.json`);
+    const existing = readArchive(target);
+    if (existing === null) {
+      // Stop before the first write. Overwriting would drop every event the
+      // archive already holds, and `rmSync` below would then drop the sources
+      // too — two silent losses from one unreadable file.
+      skipped.push(target);
+      continue;
+    }
+    const merged = new Map<string, FlowEvent>();
+    for (const e of existing) merged.set(e.id, e);
+    let added = 0;
+    for (const e of batch) {
+      if (!merged.has(e.id)) added += 1;
+      merged.set(e.id, e);
+    }
+
+    const all = [...merged.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
     const tmp = `${target}.tmp`;
-    writeFileSync(tmp, JSON.stringify(batch), 'utf8');
+    // Archive first, delete the sources only after: an interrupted process
+    // must never leave the journal without its events.
+    writeFileSync(tmp, JSON.stringify(all), 'utf8');
     renameSync(tmp, target);
 
     rmSync(monthDir, { recursive: true, force: true });
     archived.push(entry.name);
-    count += batch.length;
+    count += added;
   }
 
-  return { archivedMonths: archived.sort(), archivedEvents: count };
+  return { archivedMonths: archived.sort(), archivedEvents: count, skipped: skipped.sort() };
 }

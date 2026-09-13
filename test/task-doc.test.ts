@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -125,3 +125,51 @@ describe('superseding must not detach the reasoning from the work', () => {
     expect(shown()['decisions']).toEqual([]);
   });
 });
+
+describe('task doc add — create and link', () => {
+  it('creates the file from a template and records the link in one call', () => {
+    runTaskAdd(dir, env, 'Design the fold', {});
+    const r = runTaskDoc(dir, env, 'KAD-2', 'docs/design.md', true);
+    expect(r.ok).toBe(true);
+    expect(r.message).toMatch(/Created/);
+    expect(r.data!['created']).toBe(true);
+
+    const written = readFileSync(join(dir, 'docs', 'design.md'), 'utf8');
+    expect(written).toContain('# Design the fold');
+    expect(written).toContain('KAD-2');
+
+    // And the link is in the journal, not only on disk.
+    const shown = runTaskShow(dir, env, 'KAD-2');
+    expect((shown.data!['task'] as { docs: string[] }).docs).toEqual(['docs/design.md']);
+  });
+
+  it('makes the directory when git has not versioned it', () => {
+    runTaskAdd(dir, env, 'Deep', {});
+    runTaskDoc(dir, env, 'KAD-2', 'docs/design/notes/deep.md', true);
+    expect(existsSync(join(dir, 'docs', 'design', 'notes', 'deep.md'))).toBe(true);
+  });
+
+  it('never overwrites a file that is already there', () => {
+    // The file is the document. Replacing it with a template would destroy
+    // the thing being linked.
+    runTaskAdd(dir, env, 'Existing', {});
+    mkdirSync(join(dir, 'docs'), { recursive: true });
+    writeFileSync(join(dir, 'docs', 'design.md'), 'Work somebody already did.\n', 'utf8');
+
+    const r = runTaskDoc(dir, env, 'KAD-2', 'docs/design.md', true);
+    expect(r.ok).toBe(true);
+    expect(r.data!['created']).toBe(false);
+    expect(readFileSync(join(dir, 'docs', 'design.md'), 'utf8')).toBe('Work somebody already did.\n');
+  });
+
+  it('leaves plain `task doc` exactly as it was', () => {
+    runTaskAdd(dir, env, 'Plain', {});
+    const r = runTaskDoc(dir, env, 'KAD-2', 'docs/absent.md');
+    expect(r.ok).toBe(true);
+    expect(r.data!['created']).toBe(false);
+    // Still a warning rather than a refusal, and still no file created.
+    expect(existsSync(join(dir, 'docs', 'absent.md'))).toBe(false);
+    expect(r.warnings!.join(' ')).toMatch(/No file at/);
+  });
+});
+

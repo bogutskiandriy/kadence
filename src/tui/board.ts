@@ -1,6 +1,7 @@
 import blessed from 'blessed';
 import type { Task, ProjectState } from '../core/projection.js';
 import { THEME, statusColor, renderCard, decorateCard, renderField, KEY_HINTS } from './theme.js';
+import { readyTasks } from '../core/query.js';
 import {
   createKeyRouter,
   moveCursor,
@@ -21,6 +22,23 @@ import {
 export interface BoardCallbacks {
   /** Re-reads the journal; the board never caches state of its own. */
   reload: () => { state: ProjectState; warnings: string[] };
+  /**
+   * Event ids the current branch introduced, or null outside a branch.
+   *
+   * Read once per reload rather than per keystroke: it costs a subprocess,
+   * and the answer cannot change while the board is open.
+   */
+  branchEventIds: () =>
+    | { ids: Set<string>; name: string; base: string }
+    | { reason: 'detached' }
+    | { reason: 'no-base'; base: string };
+  /**
+   * Whose claims count as "mine".
+   *
+   * Without it `readyTasks` treats every claim as somebody else's, and the
+   * ready filter hides the work you just took.
+   */
+  actor: string;
   move: (taskId: string, status: string) => string | null;
   assign: (taskId: string, who: string) => string | null;
   create: (title: string) => string | null;
@@ -33,6 +51,11 @@ export interface BoardCallbacks {
   logTime: (taskId: string, duration: string) => string | null;
   setPriority: (taskId: string, priority: string) => string | null;
   addToSprint: (taskId: string) => string | null;
+  /** Take a task, or give it back — the same commands the CLI runs. */
+  claim: (taskId: string) => string | null;
+  release: (taskId: string) => string | null;
+  /** Check or uncheck one acceptance criterion by its number. */
+  toggleCriterion: (taskId: string, n: number, uncheck: boolean) => string | null;
   sprintStatus: () => string;
   sprintStart: () => string | null;
   sprintClose: () => string | null;
@@ -61,7 +84,14 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
   });
 
   let { state } = callbacks.reload();
+  let branch = callbacks.branchEventIds();
   let filter = '';
+  /** Show only what can be started right now — the board's `kadence ready`. */
+  let readyOnly = false;
+  /** Show only what this branch introduced. Off until asked, like `--branch`. */
+  let branchOnly = false;
+  /** MS-N of the milestone being shown alone, or '' for every task. */
+  let milestoneOnly = '';
   let columns: Column[] = [];
   let focused = 0;
 
@@ -156,9 +186,30 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
 
   function tasksFor(st: string): Task[] {
     const needle = filter.toLowerCase();
+    // The same function `kadence ready` calls: the board must not grow its own
+    // idea of what "ready" means.
+    const ready = readyOnly
+      ? new Set(readyTasks(state.tasks, { viewer: callbacks.actor }).map((t) => t.id))
+      : null;
+    // The same rule the CLI uses: created on the branch, or any event about it
+    // arrived there.
+    // Captured in a local so the narrowing survives into the closure — `branch`
+    // is reassigned on reload, so TypeScript cannot keep it narrowed.
+    const range = branchOnly && !('reason' in branch) ? branch : null;
+    const onBranch =
+      range === null
+        ? null
+        : (t: Task): boolean => range.ids.has(t.id) || t.history.some((h) => range.ids.has(h.id));
+    const milestoneId =
+      milestoneOnly === ''
+        ? null
+        : (state.milestones.find((m) => m.label === milestoneOnly)?.id ?? null);
     return state.tasks.filter(
       (t) =>
         t.status === st &&
+        (ready === null || ready.has(t.id)) &&
+        (onBranch === null || onBranch(t)) &&
+        (milestoneId === null || t.milestone === milestoneId) &&
         (needle === '' ||
           t.title.toLowerCase().includes(needle) ||
           (t.assignee ?? '').toLowerCase().includes(needle) ||
@@ -209,7 +260,10 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
   }
 
   function refresh(reload = false): void {
-    if (reload) state = callbacks.reload().state;
+    if (reload) {
+      state = callbacks.reload().state;
+      branch = callbacks.branchEventIds();
+    }
 
     if (columns.length !== visibleStatuses().length) build();
 
@@ -234,7 +288,11 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
 
     const active = state.sprints.find((s) => s.status === 'active');
     const sprintName = active === undefined ? 'no active sprint' : active.name;
-    const filterNote = filter === '' ? '' : `  filter: "${filter}"`;
+    const filterNote =
+      (filter === '' ? '' : `  filter: "${filter}"`) +
+      (readyOnly ? '  ready only' : '') +
+      (branchOnly && !('reason' in branch) ? `  branch: ${branch.name}` : '') +
+      (milestoneOnly === '' ? '' : `  milestone: ${milestoneOnly}`);
     header.setContent(` kadence  ${sprintName}  ${total} tasks, ${points} points${filterNote}`);
 
     if (state.cycles.length > 0) {
@@ -328,6 +386,17 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
       { key: 'labels', label: 'labels', value: () => (task.labels.length > 0 ? task.labels.join(', ') : '—'), hint: 'Labels, comma separated:' },
     ];
 
+    /**
+     * The checklist shares the field cursor rather than adding a second one.
+     *
+     * Two cursors in one dialog is how a keystroke ends up going to whichever
+     * one happens to be focused — the bug this TUI already paid for once.
+     */
+    const rows = (): Array<{ kind: 'field'; index: number } | { kind: 'criterion'; n: number }> => [
+      ...fields.map((_, index) => ({ kind: 'field' as const, index })),
+      ...task.criteria.map((c) => ({ kind: 'criterion' as const, n: c.n })),
+    ];
+
     // Display only. A focusable list here swallowed escape and q before the
     // dialog ever saw them, which is why the window would not close.
     const list = blessed.list({
@@ -335,7 +404,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
       top: 0,
       left: 1,
       right: 1,
-      height: fields.length,
+      height: fields.length + task.criteria.length,
       keys: false,
       mouse: false,
       interactive: false,
@@ -349,7 +418,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
 
     const info = blessed.box({
       parent: box,
-      top: fields.length + 1,
+      top: fields.length + task.criteria.length + 1,
       left: 1,
       right: 1,
       bottom: 0,
@@ -359,7 +428,19 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
 
     function paintFields(): void {
       // Selection is drawn, not delegated: this list is display-only.
-      list.setItems(fields.map((f, i) => renderField(f.label, f.value(), i === cursor)));
+      list.setItems(
+        rows().map((row, i) =>
+          row.kind === 'field'
+            ? renderField(fields[row.index]!.label, fields[row.index]!.value(), i === cursor)
+            : renderField(
+                `  ${row.n}.`,
+                `[${task.criteria.find((c) => c.n === row.n)?.checked === true ? 'x' : ' '}] ${
+                  task.criteria.find((c) => c.n === row.n)?.text ?? ''
+                }`,
+                i === cursor,
+              ),
+        ),
+      );
 
       const extra = [
         task.blockedBy.length > 0 ? `{red-fg}blocked by ${task.blockedBy.length} task(s){/}` : '',
@@ -372,6 +453,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
         task.comments.length > 0 ? `{cyan-fg}comments (${task.comments.length}){/}` : '',
         ...task.comments.map((c) => `  {gray-fg}${c.author}:{/} ${c.text}`),
         '',
+        task.criteria.length > 0 ? '{gray-fg}space toggles the criterion under the cursor{/}' : '',
         '{gray-fg}↑↓ field   enter edit   e description in $EDITOR   esc close{/}',
         '{gray-fg}description opens the editor, so it can hold paragraphs{/}',
       ].filter((l) => l !== '');
@@ -412,17 +494,36 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
       const { ch, name } = event;
 
       if (name === 'up' || ch === 'k') {
-        cursor = moveCursor(cursor, -1, fields.length);
+        cursor = moveCursor(cursor, -1, rows().length);
         return paintFields();
       }
       if (name === 'down' || ch === 'j') {
-        cursor = moveCursor(cursor, 1, fields.length);
+        cursor = moveCursor(cursor, 1, rows().length);
         return paintFields();
+      }
+      if (ch === ' ' || name === 'space') {
+        const row = rows()[cursor];
+        if (row === undefined || row.kind !== 'criterion') return;
+        const found = task.criteria.find((c) => c.n === row.n);
+        if (found === undefined) return;
+        // The same command the CLI runs: the board must not grow its own idea
+        // of what checking a criterion means.
+        const result = callbacks.toggleCriterion(task.id, row.n, found.checked);
+        if (result !== null) say(result);
+        return reloadTask();
       }
       if (isCloseKey(event)) return close();
       if (ch === 'e') return editDescription();
 
       if (name === 'enter') {
+        const row = rows()[cursor];
+        if (row !== undefined && row.kind === 'criterion') {
+          const found = task.criteria.find((c) => c.n === row.n);
+          if (found === undefined) return;
+          const result = callbacks.toggleCriterion(task.id, row.n, found.checked);
+          if (result !== null) say(result);
+          return reloadTask();
+        }
         const field = fields[cursor];
         if (field === undefined) return;
 
@@ -450,6 +551,10 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
       '  enter         task details',
       '  /             filter    escape clears it',
       '  r             reload from the journal',
+      '  R             show only what can be started now (ready)',
+      '  b             show only what this branch introduced',
+      '  M             show only one milestone (empty clears it)',
+      '  C             claim the selected task, or release it if it is yours',
       '',
       '{cyan-fg}Task actions{/}',
       '  [ ]           move one column left or right',
@@ -681,6 +786,63 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
     if (ch === 'r') {
       say('Reloaded.');
       return refresh(true);
+    }
+    // `r` has meant reload since the board shipped, so the ready filter takes
+    // the shifted key rather than retraining a reflex people already have.
+    if (ch === 'R') {
+      readyOnly = !readyOnly;
+      say(readyOnly ? 'Showing only what can be started now.' : 'Showing every task.');
+      return refresh();
+    }
+    // `C`, not `k`: `k` is vim's cursor-up and is bound above, so a claim
+    // there would never fire — and the board would silently move the cursor
+    // instead. Exactly the family of bug this TUI has shipped before.
+    if (ch === 'b') {
+      if ('reason' in branch) {
+        return say(
+          branch.reason === 'detached'
+            ? 'HEAD is detached, so there is no branch to filter by.'
+            : `There is no branch "${branch.base}" to compare against.`,
+          THEME.warn,
+        );
+      }
+      branchOnly = !branchOnly;
+      say(
+        branchOnly
+          ? `Showing only what ${branch.name} introduced since ${branch.base}.`
+          : 'Showing every task.',
+      );
+      return refresh();
+    }
+    if (ch === 'M') {
+      if (state.milestones.length === 0) {
+        return say('No milestones yet. Create one with kadence milestone create.', THEME.warn);
+      }
+      const known = state.milestones.map((m) => `${m.label} ${m.name}`).join(', ');
+      return prompt(`Milestone (${known}; empty for all):`, milestoneOnly, (value) => {
+        const wanted = value.trim();
+        if (wanted === '') {
+          milestoneOnly = '';
+          say('Showing every task.');
+          return refresh();
+        }
+        const found = state.milestones.find(
+          (m) =>
+            m.label.toUpperCase() === wanted.toUpperCase() ||
+            m.name.toLowerCase() === wanted.toLowerCase(),
+        );
+        if (found === undefined) return say(`No milestone "${wanted}".`, THEME.warn);
+        milestoneOnly = found.label;
+        say(`Showing ${found.label} ${found.name}.`);
+        refresh();
+      });
+    }
+    if (ch === 'C') {
+      const task = current();
+      if (task === undefined) return;
+      return act(
+        task.claimedBy === null ? callbacks.claim(task.id) : callbacks.release(task.id),
+      );
     }
     if (ch === '?') return showHelp();
 

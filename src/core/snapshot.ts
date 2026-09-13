@@ -25,7 +25,7 @@ import { project, type ProjectState } from './projection.js';
  * `test/snapshot.test.ts` pins this constant to the field lists, so changing a
  * shape without bumping it fails the build.
  */
-export const SNAPSHOT_VERSION = 'kadence-snapshot/2';
+export const SNAPSHOT_VERSION = 'kadence-snapshot/10';
 
 interface Snapshot {
   version: string;

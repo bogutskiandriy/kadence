@@ -1,6 +1,12 @@
-import { isAbsolute, join, relative } from 'node:path';
+import { isAbsolute, join, relative, dirname, resolve } from 'node:path';
 import { ERROR_CODES, TASK_FIELDS, type ErrorCode } from '../../agent/contract.js';
-import { findRepoRoot, getActorEmail } from '../../core/git.js';
+import {
+  findRepoRoot,
+  getActorEmail,
+  currentBranch,
+  defaultBaseBranch,
+  eventIdsOnBranch,
+} from '../../core/git.js';
 import { append, dataDir, readAll } from '../../core/store.js';
 import { ulid } from '../../core/ulid.js';
 import type { FlowEvent } from '../../core/event.js';
@@ -8,8 +14,11 @@ import {
   TASK_TYPES,
   PRIORITIES,
   DEFAULT_STATUSES,
+  TERMINAL_STATUS,
+  CANCELLED_STATUS,
   type ProjectState,
   type Task,
+  type Criterion,
   type TaskStatus,
   type TaskType,
   type Priority,
@@ -20,12 +29,14 @@ import {
   filterTasks,
   sortTasks,
   describeEmptyResult,
+  describeNothingReady,
   isSortKey,
+  readyTasks,
   SORT_KEYS,
   type TaskFilters,
   type SortKey,
 } from '../../core/query.js';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 
 /**
  * Default columns, shown in help before a repository exists.
@@ -168,6 +179,8 @@ export interface TaskFields {
   due?: string;
   /** Estimate comes last: the substance of the task first, its cost after. */
   estimate?: number;
+  /** Skip the board's definition of done — a spike is not a delivery. */
+  noDod?: boolean;
 }
 
 export function runTaskAdd(
@@ -195,8 +208,10 @@ export function runTaskAdd(
 
   // A parent may be given as KAD-1, but the event must store the stable ULID.
   let resolvedParent: string | undefined;
+  let existing: ProjectState | null = null;
   if (options.parent !== undefined) {
     const { state } = loadState(ctx.root, ctx.actor);
+    existing = state;
     const parent = findTask(state, options.parent);
     if (parent === undefined) {
       return {
@@ -236,16 +251,43 @@ export function runTaskAdd(
 
   append(ctx.root, event);
 
+  // The definition of done is copied into the task as its own criteria, not
+  // referenced. A reference would mean raising the standard silently changed
+  // what finished work had promised — the criteria a task carries belong to
+  // that task's journal.
+  //
+  // Read before the append, and reusing the fold `--parent` may already have
+  // done: `task add` runs dozens of times a day under a 200 ms budget, and a
+  // second full read of the journal to learn the list is empty is not free.
+  const dod = options.noDod === true ? [] : (existing ?? loadState(ctx.root, ctx.actor).state).dod;
+  for (const text of dod) {
+    append(ctx.root, {
+      id: ulid(),
+      type: 'task.criterion_added',
+      entity: id,
+      actor: ctx.actor,
+      ts: new Date().toISOString(),
+      source: ctx.source,
+      data: { text },
+    });
+  }
+
   const warning =
     options.estimate === undefined
       ? '\nWithout an estimate this task will not count towards velocity. Add --estimate.'
       : '';
+  const standard = dod.length === 0 ? '' : `\n${dod.length} acceptance criteria from the board's definition of done.`;
 
   return {
     ok: true,
     exitCode: 0,
-    message: `Created: ${trimmed}${warning}`,
-    data: { schema: 'kadence/v1', ok: true, task: { id, title: trimmed } },
+    message: `Created: ${trimmed}${standard}${warning}`,
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      task: { id, title: trimmed },
+      criteria: dod.map((text, i) => ({ n: i + 1, text, checked: false, checkedBy: null })),
+    },
   };
 }
 
@@ -303,6 +345,11 @@ function unknownStatus(value: string, available: readonly string[]): CommandResu
 }
 
 export interface ListOptions extends TaskFilters {
+  /** Only the work this branch introduced, measured against `base`. */
+  branch?: boolean;
+  /** What to compare against; `main`, or `init.defaultBranch`, by default. */
+  base?: string;
+  json?: boolean;
   sort?: string;
   /** Show parent/child structure instead of a flat list. */
   tree?: boolean;
@@ -346,8 +393,44 @@ export function runTaskList(
     return unknownStatus(options.status, state.statuses);
   }
 
-  const { sort, tree, ...filters } = options;
-  const matched = filterTasks(state.tasks, filters);
+  const { sort, tree, branch, base, json: _json, ...filters } = options;
+  let matched = filterTasks(state.tasks, filters);
+
+  // The branch filter is applied after the others and never stored: membership
+  // lives in git's history, and is read at the moment it is asked for.
+  let branchInfo: { name: string; base: string } | null = null;
+  if (branch === true) {
+    const head = currentBranch(ctx.root);
+    if (head === null) {
+      // The flag was understood; the repository state is what refuses. Exit 2
+      // would tell an agent to look for a typo it did not make.
+      return failure(
+        1,
+        'conflicting_state',
+        'HEAD is detached, so there is no branch to compare.\n' +
+          'Check one out, or name the range yourself:\n  git checkout main',
+        { hint: 'git checkout main' },
+      );
+    }
+    const against = base ?? defaultBaseBranch(ctx.root);
+    const ids = eventIdsOnBranch(ctx.root, against, head);
+    if (ids === null) {
+      return failure(
+        2,
+        'invalid_argument',
+        `There is no branch "${against}" to compare against.\n` +
+          'Name one that exists:\n  kadence task list --branch --base <name>',
+        { received: against, hint: 'git branch --list' },
+      );
+    }
+    branchInfo = { name: head, base: against };
+    // A task belongs to the branch when it was created there, or when any
+    // event about it arrived there.
+    matched = matched.filter(
+      (t) => ids.has(t.id) || t.history.some((h) => ids.has(h.id)),
+    );
+  }
+
   const tasks = sort === undefined ? matched : sortTasks(matched, sort as SortKey);
 
   // An empty board and an over-narrow query need opposite next steps, so the
@@ -357,8 +440,17 @@ export function runTaskList(
       ok: true,
       exitCode: 0,
       warnings,
-      message: describeEmptyResult(filters),
-      data: { schema: 'kadence/v1', ok: true, tasks: [] },
+      message:
+        branchInfo === null
+          ? describeEmptyResult(filters)
+          : `Branch ${branchInfo.name} has introduced no task changes since ${branchInfo.base}.\n` +
+            'See the whole board:\n  kadence task list',
+      data: {
+        schema: 'kadence/v1',
+        ok: true,
+        tasks: [],
+        ...(branchInfo === null ? {} : { branch: branchInfo }),
+      },
     };
   }
 
@@ -373,8 +465,12 @@ export function runTaskList(
     data: {
       schema: 'kadence/v1',
       ok: true,
-      tasks: tasks.map((t) => serializeTask(t, fields)),
+      tasks: tasks.map((t) => serializeTask(t, fields, state)),
       cycles: state.cycles,
+      // Present only when the flag was given: the contract only ever gains
+      // fields, and a caller that did not ask should see the same response it
+      // saw before this shipped.
+      ...(branchInfo === null ? {} : { branch: branchInfo }),
     },
   };
 }
@@ -435,10 +531,23 @@ export function runTaskMove(
 
   const note = already.length > 0 ? `\n${already.length} already ${to}.` : '';
 
+  // Surfaced, not refused. Refusing would make the board lie about where the
+  // work is, and a checklist is evidence rather than a gate — the team decides
+  // what `done` costs, not the tool.
+  const unfinished =
+    to === TERMINAL_STATUS
+      ? moved
+          .filter((t) => t.criteria.some((c) => !c.checked))
+          .map((t) => {
+            const open = t.criteria.filter((c) => !c.checked).length;
+            return `${t.label} moved to ${to} with ${open} of ${t.criteria.length} acceptance criteria unchecked. See: kadence task ac list ${t.label}`;
+          })
+      : [];
+
   return {
     ok: true,
     exitCode: 0,
-    warnings,
+    warnings: [...warnings, ...unfinished],
     message: `${summarise('moved', moved, `${moved[0]!.status} → ${to}`)}${skipped}${note}`,
     data: {
       schema: 'kadence/v1',
@@ -498,13 +607,17 @@ export function parseFields(
  * each field is unchanged, so a narrowed response is a subset, never a variant
  * (Probe C §4, ADR-009).
  */
-export function serializeTask(t: Task, fields: readonly string[] | null = null): Record<string, unknown> {
-  const full = fullTask(t);
+export function serializeTask(
+  t: Task,
+  fields: readonly string[] | null = null,
+  state: ProjectState | null = null,
+): Record<string, unknown> {
+  const full = fullTask(t, state);
   if (fields === null) return full;
   return Object.fromEntries(fields.map((f) => [f, full[f]]));
 }
 
-function fullTask(t: Task): Record<string, unknown> {
+function fullTask(t: Task, state: ProjectState | null = null): Record<string, unknown> {
   return {
     id: t.id,
     label: t.label,
@@ -517,13 +630,32 @@ function fullTask(t: Task): Record<string, unknown> {
     assignee: t.assignee,
     reporter: t.reporter,
     sprint: t.sprint,
+    // The MS-N label and nothing else. A milestone created on a branch that
+    // has not merged reads as null rather than as a ULID: an agent matching
+    // MS-N must never be handed a 26-character id instead.
+    milestone:
+      t.milestone === null
+        ? null
+        : (state?.milestones.find((m) => m.id === t.milestone)?.label ?? null),
     loggedHours: t.loggedHours,
     parent: t.parent,
     blockedBy: t.blockedBy,
     due: t.due,
+    claimedBy: t.claimedBy,
+    contestedBy: t.contestedBy,
     comments: t.comments,
     docs: t.docs,
     estimate: t.estimate,
+    // Present everywhere, not only in `task show`: "which tasks have unchecked
+    // criteria" must not cost one call per task, which is the N+1 that
+    // --summary and Probe C exist to avoid.
+    criteria: t.criteria.map((c) => ({
+      n: c.n,
+      text: c.text,
+      checked: c.checked,
+      checkedBy: c.checkedBy,
+    })),
+    openCriteria: t.criteria.filter((c) => !c.checked).length,
     history: t.history,
   };
 }
@@ -610,15 +742,23 @@ export function runTaskShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): C
       source: d.source,
     }));
 
+  // Notes travel with the task for the same reason decisions do: they are the
+  // part of the context an agent cannot recover from the code.
+  const notes = state.notes.filter((n) => n.task === task.id);
+
   return {
     ok: true,
     exitCode: 0,
     warnings,
-    message: renderTaskDetail(task),
+    message: renderTaskDetail(task, notes),
     data: {
       schema: 'kadence/v1',
       ok: true,
-      task: { ...serializeTask(task), decisions },
+      task: {
+        ...serializeTask(task, null, state),
+        decisions,
+        notes: notes.map((n) => ({ id: n.id, text: n.text, at: n.at, by: n.by, source: n.source })),
+      },
     },
   };
 }
@@ -631,7 +771,39 @@ export interface TaskEdits {
   priority?: string;
   due?: string;
   estimate?: number;
+  /** The set becomes exactly this. Written as the difference, never as the set (ADR-013). */
   labels?: string[];
+  addLabels?: string[];
+  removeLabels?: string[];
+}
+
+/**
+ * The label events one edit produces: what left the set, then what joined it.
+ *
+ * A set is not a value, so it is never written as one. Two branches that each
+ * add a label record two different changes and both survive the merge; a branch
+ * that removes one records that, and it survives too. Replacement was the only
+ * field in the product where a merge lost an intent (ADR-013).
+ */
+function labelDeltas(
+  task: Task,
+  edits: TaskEdits,
+): Array<{ type: 'task.label_added' | 'task.label_removed'; label: string }> {
+  const clean = (xs: readonly string[]): string[] => xs.map((l) => l.trim()).filter((l) => l.length > 0);
+  const target =
+    edits.labels !== undefined
+      ? [...new Set(clean(edits.labels))]
+      : [
+          ...new Set([
+            ...task.labels.filter((l) => !clean(edits.removeLabels ?? []).includes(l)),
+            ...clean(edits.addLabels ?? []),
+          ]),
+        ];
+
+  const out: Array<{ type: 'task.label_added' | 'task.label_removed'; label: string }> = [];
+  for (const l of task.labels) if (!target.includes(l)) out.push({ type: 'task.label_removed', label: l });
+  for (const l of target) if (!task.labels.includes(l)) out.push({ type: 'task.label_added', label: l });
+  return out;
 }
 
 export function runTaskEdit(
@@ -658,6 +830,28 @@ export function runTaskEdit(
         { received: edits.due },
       ),
     };
+  }
+
+  // `--label` replaces the set and `--add-label` changes one; together they say
+  // two different things about the same field, and picking one silently is the
+  // kind of quiet intent loss ADR-013 exists to end.
+  if (edits.labels !== undefined && (edits.addLabels !== undefined || edits.removeLabels !== undefined)) {
+    return failure(
+      2,
+      'invalid_argument',
+      '--label replaces the whole set; --add-label and --remove-label change one. Use one or the other.',
+      { hint: 'kadence task edit KAD-1 --add-label impact-high' },
+    );
+  }
+
+  const both = (edits.addLabels ?? []).filter((l) => (edits.removeLabels ?? []).includes(l));
+  if (both.length > 0) {
+    return failure(
+      2,
+      'invalid_argument',
+      `A label cannot be added and removed in one edit: ${both.join(', ')}.`,
+      { received: both.join(','), hint: 'kadence task edit KAD-1 --add-label impact-high' },
+    );
   }
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
@@ -705,22 +899,38 @@ export function runTaskEdit(
     data['estimate'] = edits.estimate;
     changed.push('estimate');
   }
-  if (edits.labels !== undefined && edits.labels.join(',') !== task.labels.join(',')) {
-    data['labels'] = edits.labels;
-    changed.push('labels');
-  }
+  const deltas =
+    edits.labels === undefined && edits.addLabels === undefined && edits.removeLabels === undefined
+      ? []
+      : labelDeltas(task, edits);
+  if (deltas.length > 0) changed.push('labels');
 
   if (changed.length === 0) continue;
 
-  append(ctx.root, {
-    id: ulid(),
-    type: 'task.updated',
-    entity: task.id,
-    actor: ctx.actor,
-    ts: new Date().toISOString(),
-    source: ctx.source,
-    data,
-  });
+  // Scalars in one `task.updated`, labels as one event each: the first group
+  // can only ever have one answer, the second is a set (ADR-013).
+  if (Object.keys(data).length > 0) {
+    append(ctx.root, {
+      id: ulid(),
+      type: 'task.updated',
+      entity: task.id,
+      actor: ctx.actor,
+      ts: new Date().toISOString(),
+      source: ctx.source,
+      data,
+    });
+  }
+  for (const d of deltas) {
+    append(ctx.root, {
+      id: ulid(),
+      type: d.type,
+      entity: task.id,
+      actor: ctx.actor,
+      ts: new Date().toISOString(),
+      source: ctx.source,
+      data: { label: d.label },
+    });
+  }
   touched.push(task);
   for (const c of changed) allChanged.add(c);
   }
@@ -844,17 +1054,66 @@ export function runTaskDelete(cwd: string, env: NodeJS.ProcessEnv, ref: string):
  * keeps versioning it. What git cannot say is that this file explains this task,
  * and that is the only thing recorded here (Probe D).
  */
+/**
+ * The template a created document starts from.
+ *
+ * Deliberately four lines: it exists so the file is not empty and so a reader
+ * arriving from the issue knows which task it belongs to. Anything more would
+ * be kadence having opinions about documents, which is what ADR-010 declined.
+ */
+function docTemplate(title: string, label: string): string {
+  return [
+    `# ${title}`,
+    '',
+    `Written for ${label}. Link it back with \`kadence task show ${label}\`.`,
+    '',
+    '',
+  ].join('\n');
+}
+
+/**
+ * A repository-relative path, or a refusal.
+ *
+ * Both callers write a file at the result, so containment is checked before
+ * anything is created rather than described in a comment. `relative()` after
+ * `resolve()` is the only form that catches every escape: `..` segments, an
+ * absolute path, and a symlink-free path that simply points elsewhere.
+ */
+export function repoRelative(
+  root: string,
+  input: string,
+  hint: string,
+): { rel: string; full: string } | CommandResult {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) {
+    return failure(2, 'invalid_argument', 'A path is required.', { hint });
+  }
+  const full = resolve(root, trimmed);
+  const rel = relative(root, full);
+  if (rel.length === 0 || rel.startsWith('..') || isAbsolute(rel)) {
+    // An absolute path stops meaning anything the moment the journal reaches
+    // another machine, and a path above the root is not this project's to write.
+    return failure(
+      2,
+      'invalid_argument',
+      `${input} is outside the repository.\nUse a path inside it:\n  ${hint}`,
+      { received: input, hint },
+    );
+  }
+  return { rel, full };
+}
+
 export function runTaskDoc(
   cwd: string,
   env: NodeJS.ProcessEnv,
   ref: string,
   path: string,
+  create = false,
 ): CommandResult {
   const ctx = resolveContext(cwd, env);
   if (!isContext(ctx)) return ctx;
 
-  const trimmed = path.trim();
-  if (trimmed.length === 0) {
+  if (path.trim().length === 0) {
     return failure(2, 'invalid_argument', 'A link needs a path.', {
       hint: 'kadence task doc KAD-1 docs/design.md',
     });
@@ -864,12 +1123,24 @@ export function runTaskDoc(
   const task = findTask(state, ref);
   if (task === undefined) return taskNotFound(ref);
 
-  // Relative to the repository root: an absolute path stops meaning anything the
-  // moment the journal reaches another machine.
-  const rel = isAbsolute(trimmed) ? relative(ctx.root, trimmed) : trimmed.replace(/^\.\//, '');
+  const resolved = repoRelative(ctx.root, path, 'kadence task doc KAD-1 docs/design.md');
+  if ('exitCode' in resolved) return resolved;
+  const { rel, full } = resolved;
+
   // Missing is a warning, not a refusal: the file may arrive in a later commit
   // or live on another branch.
-  const missing = !existsSync(join(ctx.root, rel));
+  let missing = !existsSync(full);
+  let created = false;
+
+  // `task doc add` is create-and-link in one call — the third experiment. It
+  // never overwrites: a file that is already there is the document, and
+  // replacing it with a template would destroy the very thing being linked.
+  if (create && missing) {
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, docTemplate(task.title, task.label), 'utf8');
+    missing = false;
+    created = true;
+  }
 
   append(ctx.root, {
     id: ulid(),
@@ -888,14 +1159,388 @@ export function runTaskDoc(
       ...warnings,
       ...(missing ? [`No file at ${rel} — the link is recorded anyway; it may arrive later.`] : []),
     ],
-    message: `${rel} linked to ${task.label}.`,
+    message: created
+      ? `Created ${rel} and linked it to ${task.label}.`
+      : `${rel} linked to ${task.label}.`,
     data: {
       schema: 'kadence/v1',
       ok: true,
       task: { id: task.id, label: task.label },
       doc: rel,
+      created,
     },
   };
+}
+
+/**
+ * Take a task.
+ *
+ * There is no lock, and the message says so. Two machines can each claim
+ * before either pushes; the merge is where that becomes visible, and both
+ * claims survive it (ADR-011). Promising exclusivity we cannot enforce would
+ * be the same lie as promising erasure in an append-only journal.
+ */
+export function runTaskClaim(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  ref: string | undefined,
+  options: { assignee?: string } = {},
+): CommandResult {
+  const ctx = resolveContext(cwd, env);
+  if (!isContext(ctx)) return ctx;
+
+  const { state, warnings } = loadState(ctx.root, ctx.actor);
+
+  let task: Task | undefined;
+  if (ref === undefined || ref.trim().length === 0) {
+    // No argument: take the top of the ready list. One step instead of two,
+    // which is the whole reason an agent asks what to do next.
+    //
+    // Contested tasks are the exception. `ready` keeps them precisely so both
+    // claimants see the conflict, but handing one to a third actor asking for
+    // work adds a claimant to a contest two people already have to resolve —
+    // and a fleet of agents would do it on every poll. Naming the task is
+    // still allowed: contesting on purpose is a choice, not an accident.
+    const options_ = options.assignee === undefined ? {} : { assignee: options.assignee };
+    const ready = readyTasks(state.tasks, { viewer: ctx.actor, ...options_ });
+    task = ready.find((t) => t.claimedBy === null || t.claimedBy === ctx.actor);
+    if (task === undefined) {
+      // `describeNothingReady` speaks for `ready`, where a contested task does
+      // count. Reusing it here would answer "Nothing ready." about tasks the
+      // very next `kadence ready` lists — true for this command, unreadable
+      // for the person running it.
+      const held = ready.filter((t) => t.claimedBy !== null);
+      if (held.length > 0) {
+        const names = held.map((t) => `${t.label} (${t.claimedBy})`).join(', ');
+        return failure(
+          1,
+          'nothing_ready',
+          `Nothing free to claim. ${held.length === 1 ? 'The one task' : `All ${held.length} tasks`} ` +
+            `ready for you ${held.length === 1 ? 'is' : 'are'} already contested: ${names}.\n` +
+            'Name one to join the contest on purpose, or pick something else:\n' +
+            `  kadence task claim ${held[0]!.label}\n  kadence task list`,
+          { hint: `kadence task claim ${held[0]!.label}` },
+        );
+      }
+      return failure(1, 'nothing_ready', describeNothingReady(state.tasks, ctx.actor, options.assignee), {
+        hint: 'kadence task list',
+      });
+    }
+  } else {
+    task = findTask(state, ref);
+    if (task === undefined) return taskNotFound(ref);
+  }
+
+  if (task.status === TERMINAL_STATUS || task.status === CANCELLED_STATUS) {
+    // The arguments were understood; the state is what refuses. `received` is
+    // reserved for an argument, and the status is not one.
+    return failure(
+      1,
+      'conflicting_state',
+      `${task.label} is ${task.status}, so there is nothing to claim.\n` +
+        `Reopen it first:\n  kadence task move ${task.label} in_progress`,
+      { hint: `kadence task move ${task.label} in_progress` },
+    );
+  }
+
+  // Nothing to write when the journal already says this. A second claim by
+  // someone already contesting is discarded by the fold, so appending it only
+  // adds a line to every future read.
+  if (task.claimedBy === ctx.actor || task.contestedBy.includes(ctx.actor)) {
+    return {
+      ok: true,
+      exitCode: 0,
+      warnings,
+      message:
+        task.claimedBy === ctx.actor
+          ? `${task.label} is already yours.`
+          : `${task.label} already carries your contested claim; ${task.claimedBy ?? 'nobody'} holds it.`,
+      data: {
+        schema: 'kadence/v1',
+        ok: true,
+        task: { id: task.id, label: task.label, claimedBy: task.claimedBy, contestedBy: task.contestedBy },
+      },
+    };
+  }
+
+  const held = task.claimedBy;
+  append(ctx.root, {
+    id: ulid(),
+    type: 'task.claimed',
+    entity: task.id,
+    actor: ctx.actor,
+    ts: new Date().toISOString(),
+    source: ctx.source,
+    data: { by: ctx.actor },
+  });
+
+  const contested =
+    held === null
+      ? []
+      : [
+          `${task.label} is contested: ${held} claimed it first and keeps it. ` +
+            'Both claims stay in the journal — talk to them before starting.',
+        ];
+
+  return {
+    ok: true,
+    exitCode: 0,
+    warnings: [...warnings, ...contested],
+    message:
+      held === null
+        ? `${task.label} ${task.title} \u2014 claimed by ${ctx.actor}.\n` +
+          'Another machine may have claimed it before your push; the merge will show that.'
+        : `${task.label} claim recorded, contested with ${held}.`,
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      task: {
+        id: task.id,
+        label: task.label,
+        claimedBy: held ?? ctx.actor,
+        // Built from the folded state, not from this call alone: someone else
+        // may already be contesting, and reporting only ourselves would
+        // disagree with the very next read.
+        contestedBy: held === null ? [] : [...task.contestedBy, ctx.actor],
+      },
+    },
+  };
+}
+
+/** Give a task back. Releasing what you never held is true, not an error. */
+export function runTaskRelease(cwd: string, env: NodeJS.ProcessEnv, ref: string): CommandResult {
+  const ctx = resolveContext(cwd, env);
+  if (!isContext(ctx)) return ctx;
+
+  const { state, warnings } = loadState(ctx.root, ctx.actor);
+  const task = findTask(state, ref);
+  if (task === undefined) return taskNotFound(ref);
+
+  const holds = task.claimedBy === ctx.actor;
+  const contests = task.contestedBy.includes(ctx.actor);
+  if (!holds && !contests) {
+    // Nothing to write: the journal gains nothing from an event that changes
+    // no state, and every extra event is one more line in every fold.
+    return {
+      ok: true,
+      exitCode: 0,
+      warnings,
+      message:
+        task.claimedBy === null
+          ? `${task.label} is not claimed.`
+          : `${task.label} is claimed by ${task.claimedBy}, not by you. Nothing released.`,
+      data: { schema: 'kadence/v1', ok: true, task: { id: task.id, label: task.label, claimedBy: task.claimedBy } },
+    };
+  }
+
+  append(ctx.root, {
+    id: ulid(),
+    type: 'task.released',
+    entity: task.id,
+    actor: ctx.actor,
+    ts: new Date().toISOString(),
+    source: ctx.source,
+    data: { by: ctx.actor },
+  });
+
+  return {
+    ok: true,
+    exitCode: 0,
+    warnings,
+    message: holds
+      ? `${task.label} released.`
+      : `${task.label} withdrawn from — ${task.claimedBy ?? 'nobody'} keeps the claim.`,
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      task: {
+        id: task.id,
+        label: task.label,
+        claimedBy: holds ? null : task.claimedBy,
+        contestedBy: holds ? [] : task.contestedBy.filter((a) => a !== ctx.actor),
+      },
+    },
+  };
+}
+
+/**
+ * Acceptance criteria.
+ *
+ * The number a person types is a position in the folded list, never something
+ * stored — the same rule as `KAD-N` (I7). Two branches can each add a
+ * criterion and merge without a renumbering conflict, which is the whole
+ * reason the checklist lives in the journal instead of in the task's text.
+ */
+export function runTaskCriterionAdd(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  ref: string,
+  text: string,
+): CommandResult {
+  const ctx = resolveContext(cwd, env);
+  if (!isContext(ctx)) return ctx;
+
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    return failure(2, 'invalid_argument', 'A criterion needs text.', {
+      hint: `kadence task ac add ${ref} "tests green"`,
+    });
+  }
+
+  const { state, warnings } = loadState(ctx.root, ctx.actor);
+  const task = findTask(state, ref);
+  if (task === undefined) return taskNotFound(ref);
+
+  append(ctx.root, {
+    id: ulid(),
+    type: 'task.criterion_added',
+    entity: task.id,
+    actor: ctx.actor,
+    ts: new Date().toISOString(),
+    source: ctx.source,
+    data: { text: trimmed },
+  });
+
+  const n = task.criteria.length + 1;
+  return {
+    ok: true,
+    exitCode: 0,
+    warnings,
+    message: `${task.label} criterion ${n}: ${trimmed}`,
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      task: { id: task.id, label: task.label },
+      criterion: { n, text: trimmed, checked: false, checkedBy: null },
+    },
+  };
+}
+
+/** Resolves the number a person typed to the criterion it names. */
+function findCriterion(task: Task, number: string): Criterion | CommandResult {
+  const n = Number(number);
+  const available = task.criteria.map((c) => c.n);
+  if (!Number.isInteger(n)) {
+    return failure(2, 'invalid_argument', `"${number}" is not a criterion number.`, {
+      received: number,
+      hint: `kadence task ac list ${task.label}`,
+    });
+  }
+  const found = task.criteria.find((c) => c.n === n);
+  if (found === undefined) {
+    return failure(
+      2,
+      'invalid_argument',
+      task.criteria.length === 0
+        ? `${task.label} has no criteria yet.\n  kadence task ac add ${task.label} "tests green"`
+        : `${task.label} has no criterion ${n}.\nAvailable: ${available.join(', ')}`,
+      { received: number, hint: `kadence task ac list ${task.label}` },
+    );
+  }
+  return found;
+}
+
+export function runTaskCriterionCheck(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  ref: string,
+  number: string,
+  uncheck: boolean,
+): CommandResult {
+  const ctx = resolveContext(cwd, env);
+  if (!isContext(ctx)) return ctx;
+
+  const { state, warnings } = loadState(ctx.root, ctx.actor);
+  const task = findTask(state, ref);
+  if (task === undefined) return taskNotFound(ref);
+
+  const found = findCriterion(task, number);
+  if (!('id' in found)) return found;
+
+  const want = !uncheck;
+  if (found.checked === want) {
+    // Nothing to write: an event that changes no state is a line every future
+    // fold has to read.
+    return {
+      ok: true,
+      exitCode: 0,
+      warnings,
+      message: `${task.label} criterion ${found.n} is already ${want ? 'checked' : 'unchecked'}.`,
+      data: { schema: 'kadence/v1', ok: true, task: { id: task.id, label: task.label } },
+    };
+  }
+
+  append(ctx.root, {
+    id: ulid(),
+    type: want ? 'task.criterion_checked' : 'task.criterion_unchecked',
+    entity: task.id,
+    actor: ctx.actor,
+    ts: new Date().toISOString(),
+    source: ctx.source,
+    data: { criterion: found.id },
+  });
+
+  const done = task.criteria.filter((c) => (c.id === found.id ? want : c.checked)).length;
+  return {
+    ok: true,
+    exitCode: 0,
+    warnings,
+    message: `${task.label} criterion ${found.n} ${want ? 'checked' : 'unchecked'} \u2014 ${done} of ${task.criteria.length} done.`,
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      task: { id: task.id, label: task.label },
+      criterion: { n: found.n, text: found.text, checked: want, checkedBy: want ? ctx.actor : null },
+      done,
+      total: task.criteria.length,
+    },
+  };
+}
+
+export function runTaskCriterionList(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  ref: string,
+): CommandResult {
+  const ctx = resolveContext(cwd, env);
+  if (!isContext(ctx)) return ctx;
+
+  const { state, warnings } = loadState(ctx.root, ctx.actor);
+  const task = findTask(state, ref);
+  if (task === undefined) return taskNotFound(ref);
+
+  if (task.criteria.length === 0) {
+    return {
+      ok: true,
+      exitCode: 0,
+      warnings,
+      message: `${task.label} has no acceptance criteria.\nAdd one:\n  kadence task ac add ${task.label} "tests green"`,
+      data: { schema: 'kadence/v1', ok: true, task: { id: task.id, label: task.label }, criteria: [] },
+    };
+  }
+
+  return {
+    ok: true,
+    exitCode: 0,
+    warnings,
+    message: task.criteria.map((c) => `  ${c.n}. [${c.checked ? 'x' : ' '}] ${c.text}`).join('\n'),
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      task: { id: task.id, label: task.label },
+      criteria: serializeCriteria(task),
+    },
+  };
+}
+
+/** Always an array, and always the same four keys — agents branch on them. */
+export function serializeCriteria(task: Task): Array<Record<string, unknown>> {
+  return task.criteria.map((c) => ({
+    n: c.n,
+    text: c.text,
+    checked: c.checked,
+    checkedBy: c.checkedBy,
+  }));
 }
 
 export function runTaskComment(

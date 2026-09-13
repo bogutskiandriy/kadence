@@ -1,4 +1,4 @@
-import type { Task, Priority, Cycle } from '../core/projection.js';
+import type { Task, Priority, Cycle, Note } from '../core/projection.js';
 
 /**
  * Human-facing output.
@@ -104,8 +104,17 @@ const TYPE_MARK: Record<string, string> = {
 };
 
 /** One board line: short, but carrying everything that affects the choice. */
-function boardLine(t: Task, colors: boolean): string {
+export function boardLine(t: Task, colors: boolean): string {
   const parts = [paint(t.label, ANSI.bold, colors)];
+
+  // Unfinished evidence behind a done task is the one thing a board should say
+  // out loud: it moved, and the checklist did not agree.
+  const open = t.criteria.filter((c) => !c.checked).length;
+  if (open > 0) {
+    parts.push(
+      paint(`[${t.criteria.length - open}/${t.criteria.length}]`, ANSI.yellow, colors),
+    );
+  }
 
   const mark = PRIORITY_MARK[t.priority];
   if (mark !== '') {
@@ -220,7 +229,7 @@ export function renderCycles(cycles: readonly Cycle[], labels: Map<string, strin
 }
 
 /** Task detail: substance first, then classification, then cost. */
-export function renderTaskDetail(t: Task): string {
+export function renderTaskDetail(t: Task, notes: readonly Note[] = []): string {
   const lines = [`${t.label}  ${t.title}`, ''];
 
   if (t.description !== null) lines.push(t.description, '');
@@ -231,7 +240,12 @@ export function renderTaskDetail(t: Task): string {
   if (t.labels.length > 0) lines.push(`  Labels:    ${t.labels.join(', ')}`);
   if (t.parent !== null) lines.push(`  Parent:    ${t.parent}`);
   if (t.blockedBy.length > 0) lines.push(`  Blocked by: ${t.blockedBy.length} task(s)`);
-  lines.push(`  Assignee:  ${t.assignee ?? '—'}`);
+  lines.push(`  Assignee:  ${t.assignee ?? '\u2014'}`);
+  if (t.claimedBy !== null) {
+    const contested =
+      t.contestedBy.length > 0 ? `  (contested by ${t.contestedBy.join(', ')})` : '';
+    lines.push(`  Claimed:   ${t.claimedBy}${contested}`);
+  }
   lines.push(`  Reporter:  ${t.reporter}`);
   if (t.due !== null) lines.push(`  Due:       ${t.due}${dueSuffix(t.due)}`);
   // Estimate last: what the task is about first, what it costs after.
@@ -243,6 +257,20 @@ export function renderTaskDetail(t: Task): string {
       lines.push(`    ${c.author} · ${c.ts.slice(0, 10)}`);
       // Indent every line so a multi-line comment stays visually attached.
       for (const line of c.text.split('\n')) lines.push(`      ${line}`);
+    }
+  }
+
+  if (t.criteria.length > 0) {
+    const done = t.criteria.filter((c) => c.checked).length;
+    lines.push('', `  Acceptance criteria (${done}/${t.criteria.length}):`);
+    for (const c of t.criteria) lines.push(`    ${c.n}. [${c.checked ? 'x' : ' '}] ${c.text}`);
+  }
+
+  if (notes.length > 0) {
+    lines.push('', `  Notes (${notes.length}):`);
+    for (const n of notes) {
+      lines.push(`    ${n.by} \u00b7 ${n.at.slice(0, 10)}`);
+      for (const line of n.text.split('\n')) lines.push(`      ${line}`);
     }
   }
 

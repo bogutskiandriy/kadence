@@ -1,5 +1,18 @@
 import cac from 'cac';
 import { runInit } from './commands/init.js';
+import { runReady } from './commands/ready.js';
+import { runPrime } from './commands/prime.js';
+import { runStats } from './commands/stats.js';
+import { runCompact } from './commands/compact.js';
+import { runReport, REPORTS } from './commands/report.js';
+import { runCompletion, SHELLS } from './commands/completion.js';
+import { runNoteAdd, runNoteList } from './commands/note.js';
+import {
+  runMilestoneCreate,
+  runMilestoneAdd,
+  runMilestoneClose,
+  runMilestoneList,
+} from './commands/milestone.js';
 import {
   runTaskAdd,
   runTaskList,
@@ -17,12 +30,17 @@ import {
   TASK_STATUSES,
   failure,
   type CommandResult,
+  runTaskClaim,
+  runTaskCriterionAdd,
+  runTaskCriterionCheck,
+  runTaskCriterionList,
+  runTaskRelease,
 } from './commands/task.js';
 import { buildContract } from '../agent/contract.js';
 import { runDecisionAdd, runDecisionList, runDecisionShow } from './commands/decision.js';
 import { writeSync } from 'node:fs';
 import { editText, canUseEditor } from './editor.js';
-import { runBoard, runBoardConfig } from './commands/board.js';
+import { runBoard, runBoardConfig, runBoardExport } from './commands/board.js';
 import {
   runSprintCreate,
   runSprintAdd,
@@ -128,17 +146,35 @@ function textFromFlagOrEditor(
 }
 
 /**
+ * The value of a flag as it was typed, before cac converted it.
+ *
+ * cac hands `--milestone 1.0` back as the number 1, which is a different
+ * milestone name than the one the person wrote — and by then the digits are
+ * gone. A name is a string, so it is read from argv rather than recovered.
+ */
+function rawFlag(name: string, argv: readonly string[] = process.argv): string | undefined {
+  const flag = `--${name}`;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === flag) return argv[i + 1];
+    if (arg.startsWith(`${flag}=`)) return arg.slice(flag.length + 1);
+  }
+  return undefined;
+}
+
+/**
  * The actions each command takes, named once so a mistyped one can be answered
  * with the list instead of a sentence.
  */
 const TASK_ACTIONS = [
   'add', 'list', 'show', 'edit', 'move', 'assign', 'comment', 'log',
-  'parent', 'block', 'unblock', 'cancel', 'delete',
+  'parent', 'block', 'unblock', 'claim', 'release', 'ac', 'cancel', 'delete',
 ] as const;
 const SPRINT_ACTIONS = [
   'create', 'add', 'edit', 'start', 'close', 'status', 'list', 'burndown',
 ] as const;
 const TEMPLATE_ACTIONS = ['save', 'list', 'delete'] as const;
+const MILESTONE_ACTIONS = ['create', 'add', 'list', 'close'] as const;
 
 /**
  * Usage errors all look the same, so they are built in one place — including
@@ -164,6 +200,119 @@ function renderContractSummary(contract: Record<string, unknown>): string {
     'The machine-readable form is what agents read:\n  kadence schema --json'
   );
 }
+
+cli
+  .command('milestone [action] [arg]', 'Milestones: create | add | list | close — grouping by outcome')
+  .option('--due <date>', 'Target date, YYYY-MM-DD')
+  .option('--milestone <ref>', 'Which milestone, by MS-N or name')
+  .option('--all', 'Include closed milestones, hidden by default')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence milestone create "1.0" --due 2026-12-01')
+  .example('  kadence milestone add KAD-1 --milestone 1.0')
+  .example('  kadence milestone list --json')
+  .example('  kadence milestone close 1.0')
+  .action(
+    (
+      action: string | undefined,
+      arg: string | undefined,
+      // cac hands back a number when the value looks like one, so these are
+      // widened here rather than lied about in the type.
+      options: { due?: string | number; milestone?: string | number; all?: boolean; json?: boolean },
+    ) => {
+      const json = options.json === true;
+      const cwd = process.cwd();
+
+      switch (action) {
+        case 'create':
+          if (arg === undefined) {
+            emit(usage('A milestone needs a name:\n  kadence milestone create "1.0"'), json);
+          }
+          emit(
+            runMilestoneCreate(
+              cwd,
+              process.env,
+              arg,
+              options.due === undefined ? {} : { due: rawFlag('due') ?? String(options.due) },
+            ),
+            json,
+          );
+          break;
+        case 'add':
+          if (arg === undefined || options.milestone === undefined) {
+            emit(
+              usage('A task and a milestone are required:\n  kadence milestone add KAD-1 --milestone 1.0'),
+              json,
+            );
+          }
+          emit(
+            runMilestoneAdd(cwd, process.env, arg, rawFlag('milestone') ?? String(options.milestone)),
+            json,
+          );
+          break;
+        case 'close':
+          if (arg === undefined) {
+            emit(usage('Which milestone?\n  kadence milestone close 1.0'), json);
+          }
+          emit(runMilestoneClose(cwd, process.env, arg), json);
+          break;
+        case 'list':
+        case undefined:
+          emit(runMilestoneList(cwd, process.env, { ...(options.all === true ? { all: true } : {}), json }), json);
+          break;
+        default:
+          emit(
+            usage(`Unknown milestone action "${action}".`, {
+              received: action,
+              allowed: MILESTONE_ACTIONS,
+            }),
+            json,
+          );
+      }
+    },
+  );
+
+cli
+  .command('note [text]', 'Record something learned; `note list` reads them back')
+  .option('--task <ref>', 'The task it came out of')
+  .option('--limit <n>', 'At most this many, newest first')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence note "Tests need a git identity"')
+  .example('  kadence note "The redirect drops the cookie" --task KAD-1')
+  .example('  kadence note list --limit 5')
+  .action((text: string | undefined, options: { task?: string; limit?: string; json?: boolean }) => {
+    const json = options.json === true;
+    const cwd = process.cwd();
+    const limit = options.limit === undefined ? undefined : Number(options.limit);
+    if (limit !== undefined && (!Number.isFinite(limit) || limit < 1)) {
+      emit(usage(`--limit must be a positive number, got "${options.limit}".`), json);
+    }
+
+    // `note list` reads, anything else is the note's text. One word cannot be
+    // both, and `list` is the one people type by reflex.
+    if (text === 'list') {
+      emit(
+        runNoteList(cwd, process.env, {
+          ...(options.task === undefined ? {} : { task: options.task }),
+          ...(limit === undefined ? {} : { limit }),
+          json,
+        }),
+        json,
+      );
+      return;
+    }
+    if (text === undefined) {
+      emit(
+        usage(
+          'A note needs text:\n  kadence note "Tests need a git identity"\n  kadence note list',
+        ),
+        json,
+      );
+    }
+    emit(
+      runNoteAdd(cwd, process.env, text, options.task === undefined ? {} : { task: options.task }),
+      json,
+    );
+  });
 
 cli
   .command('decision [action] [arg]', 'Decisions: add | list | show — the why behind the work')
@@ -263,21 +412,134 @@ cli
   });
 
 cli
+  .command('prime', 'Everything a session needs before it starts. Short by design')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence prime')
+  .example('  kadence prime --json')
+  .action((options: { json?: boolean }) => {
+    emit(runPrime(process.cwd(), process.env, { json: options.json === true }), options.json === true);
+  });
+
+cli
+  .command('ready', 'What can be started right now: open, unblocked, unclaimed')
+  .option('-a, --assignee <who>', 'Only this person; "me" for yourself')
+  .option('--limit <n>', 'At most this many tasks')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence ready')
+  .example('  kadence ready --assignee me --json')
+  .action((options: { assignee?: string; limit?: string; json?: boolean }) => {
+    const limit = options.limit === undefined ? undefined : Number(options.limit);
+    if (limit !== undefined && (!Number.isFinite(limit) || limit < 1)) {
+      emit(usage(`--limit must be a positive number, got "${options.limit}".`), options.json === true);
+    }
+    emit(
+      runReady(process.cwd(), process.env, {
+        ...(options.assignee === undefined ? {} : { assignee: options.assignee }),
+        ...(limit === undefined ? {} : { limit }),
+        json: options.json === true,
+      }),
+      options.json === true,
+    );
+  });
+
+cli
+  .command('stats', 'Where the project stands: counts, blockers, contested claims, velocity')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence stats')
+  .action((options: { json?: boolean }) => {
+    emit(runStats(process.cwd(), process.env, { json: options.json === true }), options.json === true);
+  });
+
+cli
+  .command('report [name]', `Reports folded from the journal: ${REPORTS.join(' | ')}`)
+  .option('--since <days>', 'Window ending today, in calendar days (default 30d)')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence report flow                 cycle time, throughput, aging work')
+  .example('  kadence report flow --since 90d')
+  .example('  kadence report cfd                  tasks per column, per day')
+  .example('  kadence report attention            work in flight that nobody is moving')
+  .action((name: string | undefined, options: { since?: string | number; json?: boolean }) => {
+    emit(
+      runReport(process.cwd(), process.env, name, {
+        // Read from argv, not from cac: it coerces before we see it, so `007`
+        // arrives as 7 and `1e2` as 100 — neither is what was typed.
+        ...(options.since === undefined ? {} : { since: rawFlag('since') ?? String(options.since) }),
+        json: options.json === true,
+      }),
+      options.json === true,
+    );
+  });
+
+cli
+  .command('compact', 'Fold old months into one file each; cold start on a long journal drops from ~200 ms to ~20 ms')
+  .option('--keep-months <n>', 'Months to keep as separate files, counting this one (default 2)')
+  .option('--dry-run', 'Say what would be archived and write nothing')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence compact --dry-run')
+  .example('  kadence compact --keep-months 3')
+  .action((options: { keepMonths?: string | number; dryRun?: boolean; json?: boolean }) => {
+    const rawKeep = rawFlag('keep-months');
+    const keep = options.keepMonths === undefined ? undefined : Number(rawKeep ?? options.keepMonths);
+    emit(
+      runCompact(process.cwd(), process.env, {
+        ...(keep === undefined ? {} : { keepMonths: keep, keepMonthsRaw: rawKeep ?? String(options.keepMonths) }),
+        ...(options.dryRun === true ? { dryRun: true } : {}),
+        json: options.json === true,
+      }),
+      options.json === true,
+    );
+  });
+
+cli
+  .command('completion [action]', 'Shell completion; "install" writes it where your shell looks')
+  .option('--shell <name>', `Shell: ${SHELLS.join(' | ')}; detected from $SHELL by default`)
+  .option('--force', 'Overwrite a completion file kadence did not write')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence completion            print the script')
+  .example('  kadence completion install --shell zsh')
+  .action((action: string | undefined, options: { shell?: string; force?: boolean; json?: boolean }) => {
+    const json = options.json === true;
+    if (action !== undefined && action !== 'install') {
+      emit(
+        usage(`Unknown completion action "${action}".`, { received: action, allowed: ['install'] }),
+        json,
+      );
+    }
+    emit(
+      runCompletion(process.env, {
+        ...(options.shell === undefined ? {} : { shell: options.shell }),
+        ...(action === 'install' ? { install: true } : {}),
+        ...(options.force === true ? { force: true } : {}),
+        // Without a terminal the script is piped somewhere, and a status line
+        // in the middle of it would break whatever is reading.
+        isTty: process.stdout.isTTY === true,
+      }),
+      json,
+    );
+  });
+
+cli
   .command('init', 'Set up kadence in this repository')
+  .option('--hooks', 'Also add a SessionStart hook running `kadence prime` to .claude/settings.json')
   .example('  kadence init')
-  .action(() => {
-    const r = runInit(process.cwd(), __VERSION__);
+  .example('  kadence init --hooks')
+  .action((options: { hooks?: boolean }) => {
+    // `.claude/settings.json` is the user's file and is committed to their
+    // repository, so it is only ever touched when the flag asks for it.
+    const r = runInit(process.cwd(), __VERSION__, { hooks: options.hooks === true });
     emit({ ok: r.ok, message: r.message, exitCode: r.ok ? 0 : 1 }, false);
   });
 
 cli
-  .command('task [action] [arg] [value]', 'Tasks: add | list | show | move | assign | doc')
+  .command('task [action] [arg] [value] [extra]', 'Tasks: add | list | show | move | assign | ac | doc')
   .option('--title <text>', 'New title (for edit)')
   .option('-d, --description <text>', 'Full description; use quotes for multiple lines')
   .option('--type <type>', `Type: ${TASK_TYPES.join(' | ')}`)
   .option('--priority <level>', `Priority: ${PRIORITIES.join(' | ')}`)
   .option('-a, --assignee <who>', 'Assignee, e.g. dev@example.com')
-  .option('--label <name>', 'Label; repeat the flag for several')
+  .option('--label <name>', 'Label; repeat the flag for several. On edit, the set becomes exactly this')
+  .option('--add-label <name>', 'Add one label, leaving the rest; repeat for several')
+  .option('--remove-label <name>', 'Remove one label, leaving the rest; repeat for several')
   .option('--estimate <points>', 'Estimate in points, a positive number')
   .option('--due <date>', 'Due date, YYYY-MM-DD; empty string clears it')
   .option('--status <status>', `Filter by status: ${TASK_STATUSES.join(' | ')}`)
@@ -286,8 +548,11 @@ cli
   .option('--due-before <date>', 'Only tasks due before YYYY-MM-DD')
   .option('--sort <key>', `Sort by: ${SORT_KEYS.join(' | ')}`)
   .option('--tree', 'Show parent/child structure')
+  .option('--branch', 'Only the work this branch introduced')
+  .option('--base <name>', 'What --branch compares against; main by default')
   .option('--parent <task>', 'Parent task, e.g. KAD-1 (use "none" to detach)')
   .option('--template <name>', 'Pre-fill fields from a saved template')
+  .option('--no-dod', 'Skip the board\'s definition of done for this task')
   .option('--fields <list>', 'JSON only: comma-separated task fields to return')
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence task add "Fix login" -d "Broken since 2.3" --type bug --priority high --estimate 3')
@@ -295,9 +560,18 @@ cli
   .example('  kadence task list --search cookie --overdue')
   .example('  kadence task list --assignee me --label auth')
   .example('  kadence task list --tree')
+  .example('  kadence task list --branch            what this branch is about')
+  .example('  kadence task list --branch --base release/1.0')
   .example('  kadence task list --json --fields id,label,status')
   .example('  kadence task move KAD-1,KAD-2,KAD-3 done     bulk: all or nothing')
   .example('  kadence task add "Login form" --parent KAD-1   KAD-1 can be an epic')
+  .example('  kadence task claim                            take the top of `kadence ready`')
+  .example('  kadence task claim KAD-1')
+  .example('  kadence task release KAD-1')
+  .example('  kadence task ac add KAD-1 "tests green"')
+  .example('  kadence task ac check KAD-1 1')
+  .example('  kadence task ac list KAD-1')
+  .example('  kadence task doc add KAD-1 docs/design.md   create it and link it')
   .example('  kadence task parent KAD-2 KAD-1')
   .example('  kadence task block KAD-2 KAD-1               KAD-2 waits for KAD-1')
   .example('  kadence task unblock KAD-2 KAD-1')
@@ -316,6 +590,7 @@ cli
       action: string | undefined,
       arg: string | undefined,
       value: string | undefined,
+      extra: string | undefined,
       options: {
         title?: string;
         description?: string;
@@ -324,6 +599,8 @@ cli
         priority?: string;
         assignee?: string;
         label?: string | string[];
+        addLabel?: string | string[];
+        removeLabel?: string | string[];
         estimate?: string;
         due?: string;
         status?: string;
@@ -332,6 +609,9 @@ cli
         dueBefore?: string;
         sort?: string;
         tree?: boolean;
+        dod?: boolean;
+        branch?: boolean;
+        base?: string;
         parent?: string;
         template?: string;
         json?: boolean;
@@ -402,22 +682,32 @@ cli
               ...(options.due !== undefined ? { due: options.due } : {}),
               ...(options.parent !== undefined ? { parent: options.parent } : {}),
               ...(estimate !== undefined ? { estimate } : {}),
+              // cac turns `--no-dod` into `dod: false`.
+              ...(options.dod === false ? { noDod: true } : {}),
             }),
             json,
           );
           break;
         }
-        case 'doc':
-          if (arg === undefined || value === undefined) {
+        case 'doc': {
+          // `task doc add KAD-1 path` creates the file and links it in one
+          // call; `task doc KAD-1 path` links what is already there.
+          const create = arg === 'add';
+          const ref = create ? value : arg;
+          const path = create ? extra : value;
+          if (ref === undefined || path === undefined) {
             emit(
               usage(
-                'A task and a path are required:\n  kadence task doc KAD-1 docs/design.md',
+                'A task and a path are required:\n' +
+                  '  kadence task doc KAD-1 docs/design.md        link an existing file\n' +
+                  '  kadence task doc add KAD-1 docs/design.md    create it and link it',
               ),
               json,
             );
           }
-          emit(runTaskDoc(cwd, process.env, arg, value), json);
+          emit(runTaskDoc(cwd, process.env, ref, path, create), json);
           break;
+        }
         case 'log':
           if (arg === undefined || value === undefined) {
             emit(
@@ -444,6 +734,77 @@ cli
           }
           emit(runTaskParent(cwd, process.env, arg, value), json);
           break;
+        case 'ac': {
+          // `task ac <sub> <ref> [text|number]` — four positionals, because
+          // the checklist has its own verbs and folding them into `task edit`
+          // would make one command mean two things.
+          if (arg === undefined || value === undefined) {
+            emit(
+              usage(
+                'An action and a task are required:\n' +
+                  '  kadence task ac add KAD-1 "tests green"\n' +
+                  '  kadence task ac check KAD-1 1\n' +
+                  '  kadence task ac uncheck KAD-1 1\n' +
+                  '  kadence task ac list KAD-1',
+                {
+                  ...(arg === undefined ? {} : { received: arg }),
+                  allowed: ['add', 'check', 'uncheck', 'list'],
+                },
+              ),
+              json,
+            );
+          }
+          if (arg === 'list') {
+            emit(runTaskCriterionList(cwd, process.env, value), json);
+            break;
+          }
+          if (extra === undefined) {
+            emit(
+              usage(
+                arg === 'add'
+                  ? `The criterion text is missing:\n  kadence task ac add ${value} "tests green"`
+                  : `Which criterion?\n  kadence task ac ${arg} ${value} 1`,
+                { received: arg },
+              ),
+              json,
+            );
+          }
+          if (arg === 'add') {
+            emit(runTaskCriterionAdd(cwd, process.env, value, extra), json);
+            break;
+          }
+          if (arg === 'check' || arg === 'uncheck') {
+            emit(runTaskCriterionCheck(cwd, process.env, value, extra, arg === 'uncheck'), json);
+            break;
+          }
+          emit(
+            usage(`Unknown criteria action "${arg}".`, {
+              received: arg,
+              allowed: ['add', 'check', 'uncheck', 'list'],
+            }),
+            json,
+          );
+          break;
+        }
+        case 'claim':
+          // No argument is the point: `task claim` takes the top of the ready
+          // list, which is one step instead of two for an agent starting work.
+          emit(
+            runTaskClaim(
+              cwd,
+              process.env,
+              arg,
+              options.assignee === undefined ? {} : { assignee: options.assignee },
+            ),
+            json,
+          );
+          break;
+        case 'release':
+          if (arg === undefined) {
+            emit(usage('Which task?\n  kadence task release KAD-1'), json);
+          }
+          emit(runTaskRelease(cwd, process.env, arg), json);
+          break;
         case 'block':
         case 'unblock':
           if (arg === undefined || value === undefined) {
@@ -466,12 +827,12 @@ cli
           if (estimate !== undefined && (!Number.isFinite(estimate) || estimate < 0)) {
             emit(usage(`Estimate must be a positive number, got "${options.estimate}".`), json);
           }
-          const labels =
-            options.label === undefined
-              ? undefined
-              : Array.isArray(options.label)
-                ? options.label
-                : [options.label];
+          // cac gives a single flag as a string and repeats as an array.
+          const many = (v: string | string[] | undefined): string[] | undefined =>
+            v === undefined ? undefined : Array.isArray(v) ? v : [v];
+          const labels = many(options.label);
+          const addLabels = many(options.addLabel);
+          const removeLabels = many(options.removeLabel);
 
           // With no field flags at all, editing means editing the description.
           const touchesFields =
@@ -482,6 +843,8 @@ cli
             options.due !== undefined ||
             estimate !== undefined ||
             labels !== undefined ||
+            addLabels !== undefined ||
+            removeLabels !== undefined ||
             value !== undefined;
 
           let description = options.description;
@@ -513,6 +876,8 @@ cli
               ...(options.due !== undefined ? { due: options.due } : {}),
               ...(estimate !== undefined ? { estimate } : {}),
               ...(labels !== undefined ? { labels } : {}),
+              ...(addLabels !== undefined ? { addLabels } : {}),
+              ...(removeLabels !== undefined ? { removeLabels } : {}),
             }),
             json,
           );
@@ -555,6 +920,8 @@ cli
               ...(options.dueBefore !== undefined ? { dueBefore: options.dueBefore } : {}),
               ...(options.sort !== undefined ? { sort: options.sort } : {}),
               ...(options.tree === true ? { tree: true } : {}),
+              ...(options.branch === true ? { branch: true } : {}),
+              ...(options.base !== undefined ? { base: options.base } : {}),
               // Selection only narrows JSON; the table renders its own columns.
               ...(json && options.fields !== undefined ? { fields: options.fields } : {}),
             }),
@@ -609,26 +976,56 @@ cli
   );
 
 cli
-  .command('board [action]', 'Kanban board in the terminal; "config" edits the columns')
+  .command('board [action]', 'Kanban board in the terminal; "config" edits it, "export" writes a snapshot')
   .option('--fields <list>', 'JSON only: comma-separated task fields to return')
   .option('--statuses <list>', 'Comma-separated columns, e.g. "todo,doing,done"')
+  .option('--dod <list>', 'Criteria every new task starts with, e.g. "tests green,docs updated"')
+  .option('--started <status>', 'The column where work counts as started; cycle time is measured from it')
+  .option('--summary', 'JSON only: column state without history or comments')
+  .option('--html', 'export: one self-contained HTML file, no server and no network')
+  .option('--md', 'export: markdown for a README or a pull request')
+  .option('--readme', 'export: update the section between markers in README.md')
+  .option('--file <path>', 'export: where to write it')
   .option('-a, --assignee <who>', 'Only this person\'s tasks; "me" means you')
   .option('--sprint', 'Only tasks in the active sprint')
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence board')
   .example('  kadence board --assignee me --sprint')
   .example('  kadence board --json --fields label,status,assignee')
+  .example('  kadence board --json --summary        the state, without the history')
   .example('  kadence board config')
   .example('  kadence board config --statuses "todo,doing,review,done"')
-  .action((action: string | undefined, options: { assignee?: string; sprint?: boolean; statuses?: string; fields?: string; json?: boolean }) => {
+  .example('  kadence board config --dod "tests green,docs updated"')
+  .example('  kadence board config --started doing        where cycle time starts counting')
+  .example('  kadence board export --html')
+  .example('  kadence board export --md --readme')
+  .action((action: string | undefined, options: {
+      assignee?: string; sprint?: boolean; statuses?: string; dod?: string; started?: string; fields?: string;
+      summary?: boolean; html?: boolean; md?: boolean; readme?: boolean; file?: string; json?: boolean;
+    }) => {
+    if (action === 'export') {
+      emit(
+        runBoardExport(process.cwd(), process.env, {
+          ...(options.html === true ? { html: true } : {}),
+          ...(options.md === true ? { md: true } : {}),
+          ...(options.readme === true ? { readme: true } : {}),
+          ...(options.file === undefined ? {} : { file: options.file }),
+        }),
+        options.json === true,
+      );
+      return;
+    }
     if (action === 'config') {
-      emit(runBoardConfig(process.cwd(), process.env, options.statuses), options.json === true);
+      emit(
+        runBoardConfig(process.cwd(), process.env, options.statuses, options.dod, options.started),
+        options.json === true,
+      );
     }
     if (action !== undefined) {
       emit(
-        usage(`Unknown action "${action}".\nAvailable: config\n  kadence board --help`, {
+        usage(`Unknown action "${action}".\nAvailable: config, export\n  kadence board --help`, {
           received: action,
-          allowed: ['config'],
+          allowed: ['config', 'export'],
         }),
         options.json === true,
       );
@@ -643,6 +1040,7 @@ cli
         },
         // Selection only narrows JSON; the human board renders its own columns.
         options.json === true ? options.fields : undefined,
+        options.json === true && options.summary === true,
       ),
       options.json === true,
     );

@@ -5,6 +5,9 @@ import {
   runTaskAdd,
   runTaskDelete,
   runTaskComment,
+  runTaskClaim,
+  runTaskRelease,
+  runTaskCriterionCheck,
   runTaskLog,
 } from './task.js';
 import {
@@ -15,6 +18,7 @@ import {
   runSprintBurndown,
 } from './sprint.js';
 import { editText, canUseEditor } from '../editor.js';
+import { currentBranch, defaultBaseBranch, eventIdsOnBranch } from '../../core/git.js';
 import { runTaskEdit } from './task.js';
 
 /**
@@ -54,6 +58,17 @@ export async function runUi(cwd: string, env: NodeJS.ProcessEnv): Promise<Comman
 
   board.runBoardUi({
     reload: () => loadState(ctx.root, ctx.actor),
+    actor: ctx.actor,
+    branchEventIds: () => {
+      // Two different failures, reported as two: a detached HEAD and a base
+      // that does not exist need different things from the user.
+      const name = currentBranch(ctx.root);
+      if (name === null) return { reason: 'detached' as const };
+      const base = defaultBaseBranch(ctx.root);
+      const ids = eventIdsOnBranch(ctx.root, base, name);
+      if (ids === null) return { reason: 'no-base' as const, base };
+      return { ids, name, base };
+    },
 
     // Each action goes through the same command the CLI uses, so the board can
     // never drift from the terminal in what a move or an assignment means.
@@ -110,6 +125,10 @@ export async function runUi(cwd: string, env: NodeJS.ProcessEnv): Promise<Comman
     logTime: (taskId, duration) => messageOf(runTaskLog(cwd, env, taskId, duration)),
     setPriority: (taskId, priority) => messageOf(runTaskEdit(cwd, env, taskId, { priority })),
     addToSprint: (taskId) => messageOf(runSprintAdd(cwd, env, taskId, {})),
+    claim: (taskId) => messageOf(runTaskClaim(cwd, env, taskId, {})),
+    release: (taskId) => messageOf(runTaskRelease(cwd, env, taskId)),
+    toggleCriterion: (taskId, n, uncheck) =>
+      messageOf(runTaskCriterionCheck(cwd, env, taskId, String(n), uncheck)),
 
     // Reports return their whole text: a dialog has room for it, unlike the
     // single status line an action gets.
