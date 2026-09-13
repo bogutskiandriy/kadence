@@ -134,7 +134,7 @@ twitter:card summary_large_image
 schema       SoftwareApplication + FAQPage
 ```
 
-Один `<h1>`. URL: `/`, `/docs`, `/compare/backlog-md`, `/talk`. Канонічні посилання на `https://kadence.tools`.
+Один `<h1>`. URL: `/`, `/docs`, `/compare/backlog-md`, `/talk`. Канонічні посилання на `https://kadence.guru` (домен зареєстровано 2026-09-13; планувався `kadence.tools`).
 
 **Цільові запити — не назва.** Ім'я «kadence» в органіці належить WordPress-конструктору Kadence WP (див. розділ 11 у [візуальному напрямі](brand-and-visual-direction.md)). Тому сторінка оптимізується під `git task tracker`, `sprint velocity cli`, `tasks in git repo`, `backlog.md alternative`, а трафік по назві не планується взагалі.
 

@@ -66,7 +66,7 @@ Seven gates. Every one is checkable; none is a date.
 | G3 | **The contract is frozen and proven** | A compatibility suite folds fixtures from every 0.x release into the same state; `kadence schema --json` is additive-only under test; a written deprecation policy | Schema test exists (ADR-009); no 0.x fixture corpus, no policy |
 | G4 | **It installs everywhere it claims to** | CI matrix: npm, pnpm, yarn, bun on macOS, Linux, Windows; a Homebrew tap; `npx`/`pnpm dlx`/`bunx` smoke test | Node shebang verified; no matrix, no Windows CI, no tap |
 | G5 | **It survives real size** | 10k events cold ≤ 200 ms and warm ≤ 20 ms stay in CI; `board --json` no longer grows with history (Probe C finding 4); compaction tested on a real-size journal | Budgets tested; `board --json` unfixed |
-| G6 | **The site exists and every number on it has a source** | `kadence.tools` live; `content/facts.json` with a `source` per figure (ADR-008); docs generated from `--help` and `schema --json`, not typed | Site live on the Vercel subdomain; `facts.json` with a source per figure; docs and quickstart exist but are typed by hand; no custom domain yet |
+| G6 | **The site exists and every number on it has a source** | `kadence.guru` live; `content/facts.json` with a `source` per figure (ADR-008); docs generated from `--help` and `schema --json`, not typed | Site live on `kadence.guru` since 2026-09-13; `facts.json` with a source per figure, re-verified at each publish; demo recorded from the published package; docs and quickstart exist but are typed by hand |
 | G7 | **A human has used every screen** | The TUI checklist in CLAUDE.md run on the release candidate; the `init` section length under a guardrail test | Checklist informal; no length test |
 
 **What 1.0 does not require:** an MCP package, a web UI, a single binary, an importer. Each may arrive before 1.0 if a Next item earns it; none is a gate.
@@ -100,7 +100,7 @@ Conditional on Probe B. If the answer is "no context loss", the first two items 
 
 **`0.5` — the ecosystem.**
 **Enable** a team that has never heard of us **to** go from a search result to a working board in under five minutes without reading the repository **so that** Probe B's successors come from outside our network.
-- The site already exists ([ADR-008](../decisions/008-where-the-site-lives.md) executed; `facts.json` in place). What 0.5 adds: the `kadence.tools` domain, reference docs generated from `--help` and `schema --json` instead of typed, the demo recording, and a line in the release checklist that `facts.json` is verified against each npm publish. The "Book twenty minutes" CTA is Probe B's recruiting channel from outside our network.
+- The site already exists ([ADR-008](../decisions/008-where-the-site-lives.md) executed; `facts.json` in place). What 0.5 adds: reference docs generated from `--help` and `schema --json` instead of typed, and a line in the release checklist that `facts.json` is verified against each npm publish. Already done ahead of it: the custom domain (`kadence.guru`, 2026-09-13) and the demo recording. The "Book thirty minutes" CTA is Probe B's recruiting channel from outside our network.
 - Homebrew tap. Core when notability allows (≈75 stars, 30 days); not sooner, they will refuse.
 - Nix expression if a contributor wants it; one file, real audience.
 - **Probe E**, the with/without-journal measurement. Its result is the only speed claim the site may ever carry.
@@ -132,7 +132,7 @@ Hardening toward the gates. No metrics here; the questions are still open.
 | **Nix** | One expression, as Backlog.md ships | Next, if asked |
 | **Single binary; winget, scoop** | Bun compile or Node SEA plus an arch-switching bin. Measure before deciding | Later |
 | **Deno / JSR** | Different registry, different audience. Not planned | — |
-| **Site (`kadence.tools`)** | Live from its own repository on Vercel with `facts.json`. Remaining: custom domain, docs generated from the tool, demo | Exists · Next |
+| **Site (`kadence.guru`)** | Live from its own repository on Vercel with `facts.json`, on its own domain, with the demo recorded from the published package. Remaining: docs generated from the tool | Exists · Next |
 | **Agent skill packages** | A `SKILL.md`-style package for Claude Code, Cursor rules and the skill marketplaces where Beads is already listed. Agents install tools their users ask for; this is where they look. Cheap, and it is also a length-controlled alternative to growing the `init` section | Next |
 | **Core as a library** | Publish the projection and the event schema as an importable package so others can build viewers and integrations on the format without us running anything. Beads' community built its own TUI and web viewers; that only happens when the format is buildable-on | Later |
 | **Agent entry points** | Short section in `AGENTS.md` and `CLAUDE.md`, regenerated on `init`; length under test | Now (exists) · Later (test) |
@@ -208,7 +208,7 @@ None of these was derivable from evidence; each changes what gets built. The own
 
 1. **Monetization intent: reputation now, door open.** Core MIT forever; the format never gated; the projection kept reusable as a library so a product on top stays possible. Sponsorship at 1.0, not before.
 2. **G1 threshold: five** public repositories with two authors 14 days after `init`, plus five Probe B conversations.
-3. **Site: already live.** The question was moot — [kadence-site.vercel.app](https://kadence-site.vercel.app/) exists with sourced numbers, docs and a "Book twenty minutes" CTA. That CTA becomes Probe B's outside channel. G6 keeps the domain and the generated docs.
+3. **Site: already live.** The question was moot — [kadence-site.vercel.app](https://kadence-site.vercel.app/) exists with sourced numbers, docs and a "Book thirty minutes" CTA — now on [kadence.guru](https://kadence.guru/). That CTA becomes Probe B's outside channel. G6 keeps the domain and the generated docs.
 4. **Windows is a gate** (G4). A journal that corrupts on one platform is trusted on none.
 5. **Single binary: measure once** during `0.7`, one afternoon, then decide. Not assumed either way.
 
