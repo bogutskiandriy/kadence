@@ -61,6 +61,21 @@ import { TASK_TYPES, PRIORITIES } from '../core/projection.js';
 import { SORT_KEYS } from '../core/query.js';
 
 /**
+ * cac hands a single flag back as a string and a repeat as an array, so every
+ * option read straight into a string operation is one repeated flag away from a
+ * TypeError. These two say what a repeat means, once, instead of each call site
+ * guessing: `last` for a flag whose second use is a correction, `joined` for one
+ * whose second use is a second value.
+ */
+function last(value: string | string[]): string {
+  return Array.isArray(value) ? (value.at(-1) ?? '') : value;
+}
+
+function joined(value: string | string[]): string {
+  return Array.isArray(value) ? value.join('; ') : value;
+}
+
+/**
  * Writes to a file descriptor and does not return until the bytes are gone.
  *
  * `process.stdout.write` is asynchronous when stdout is a pipe — which is how
@@ -331,10 +346,10 @@ cli
       action: string | undefined,
       arg: string | undefined,
       options: {
-        why?: string;
-        rejected?: string;
-        task?: string;
-        supersedes?: string;
+        why?: string | string[];
+        rejected?: string | string[];
+        task?: string | string[];
+        supersedes?: string | string[];
         doc?: string | string[];
         all?: boolean;
         json?: boolean;
@@ -357,10 +372,23 @@ cli
           }
           emit(
             runDecisionAdd(cwd, process.env, arg as string, {
-              ...(options.why !== undefined ? { why: options.why } : {}),
-              ...(options.rejected !== undefined ? { rejected: options.rejected } : {}),
-              ...(options.task !== undefined ? { task: options.task } : {}),
-              ...(options.supersedes !== undefined ? { supersedes: options.supersedes } : {}),
+              // Repeats mean different things per flag, and both readings are
+              // the honest one. A second `--why`, `--task` or `--supersedes` is
+              // a correction, so the last wins. A second `--rejected` is a
+              // second alternative that was turned down — a decision record
+              // exists to list those — so they are kept, joined rather than
+              // stored as an array because `rejected` is a string in
+              // `kadence/v1` and the contract only ever gains fields.
+              //
+              // Before this, all four went into `.trim()` as arrays and threw
+              // `o.rejected.trim is not a function`. Found by recording a real
+              // decision about this repository with two rejected options.
+              ...(options.why !== undefined ? { why: last(options.why) } : {}),
+              ...(options.rejected !== undefined ? { rejected: joined(options.rejected) } : {}),
+              ...(options.task !== undefined ? { task: last(options.task) } : {}),
+              ...(options.supersedes !== undefined
+                ? { supersedes: last(options.supersedes) }
+                : {}),
               ...(docs !== undefined ? { docs } : {}),
             }),
             json,
@@ -371,7 +399,7 @@ cli
           emit(
             runDecisionList(cwd, process.env, {
               ...(options.all === true ? { all: true } : {}),
-              ...(options.task !== undefined ? { task: options.task } : {}),
+              ...(options.task !== undefined ? { task: last(options.task) } : {}),
             }),
             json,
           );

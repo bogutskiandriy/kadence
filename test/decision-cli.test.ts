@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { runInit } from '../src/cli/commands/init.js';
 import { runTaskAdd } from '../src/cli/commands/task.js';
 import {
@@ -276,5 +276,66 @@ describe('who wrote the decision — human or agent', () => {
 
     const sources = (list() as unknown as { source: string }[]).map((d) => d.source);
     expect(sources).toEqual(['human', 'agent']);
+  });
+});
+
+/**
+ * Repeated flags.
+ *
+ * Found by recording a real decision about this repository with two rejected
+ * alternatives: `--rejected A --rejected B` crashed with
+ * `o.rejected.trim is not a function`. cac hands a single flag back as a string
+ * and a repeat as an array, and only `--doc` was normalised for it — the four
+ * single-value flags of `decision add` took the array straight into `.trim()`.
+ *
+ * These go through the built binary, because the defect is in the flag
+ * plumbing rather than in the command: calling `runDecisionAdd` directly is
+ * exactly the path that could not see it.
+ */
+describe('decision add with a flag given twice', () => {
+  const CLI = resolve('dist/cli.js');
+
+  function cli(args: string[]): { stdout: string; code: number } {
+    const r = spawnSync('node', [CLI, ...args], { cwd: dir, encoding: 'utf8' });
+    return { stdout: r.stdout, code: r.status ?? -1 };
+  }
+
+  function shown(): { rejected: string | null; why: string; task: string | null } {
+    const r = JSON.parse(cli(['decision', 'show', 'DEC-1', '--json']).stdout);
+    return r.decision;
+  }
+
+  it('keeps both rejected alternatives rather than crashing', () => {
+    // A decision record exists to say what was turned down. Two of them is a
+    // list, not a mistake, so both are kept.
+    const r = cli([
+      'decision', 'add', 'Use ULIDs',
+      '--why', 'Clocks disagree between machines',
+      '--rejected', 'Auto-increment: collides across branches',
+      '--rejected', 'UUIDv4: no order, so no derived label',
+    ]);
+
+    expect(r.code).toBe(0);
+    expect(shown().rejected).toContain('Auto-increment');
+    expect(shown().rejected).toContain('UUIDv4');
+  });
+
+  it('takes the last --why, because a second one is a correction', () => {
+    const r = cli(['decision', 'add', 'A choice', '--why', 'first', '--why', 'second']);
+
+    expect(r.code).toBe(0);
+    expect(shown().why).toBe('second');
+  });
+
+  it('takes the last --task for the same reason', () => {
+    runTaskAdd(dir, env, 'One', {});
+    runTaskAdd(dir, env, 'Two', {});
+    const r = cli([
+      'decision', 'add', 'A choice', '--why', 'w', '--task', 'KAD-1', '--task', 'KAD-2',
+    ]);
+
+    expect(r.code).toBe(0);
+    const two = JSON.parse(cli(['task', 'show', 'KAD-2', '--json']).stdout);
+    expect(two.task.decisions).toHaveLength(1);
   });
 });
