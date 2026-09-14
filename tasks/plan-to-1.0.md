@@ -402,11 +402,18 @@ Milestone став великим: 17 задач. Тому він поділен
   - AC: `release.yml` після `npm publish` оновлює `url` і `sha256` у формулі через PR, не пуш у `main` tap-у
   - Перевірка: `brew install` → `kadence --version` показує щойно опубліковану версію
   - Файли: `.github/workflows/release.yml`; формула — у tap-репозиторії
-- [ ] **T60. Довідка, згенерована з інструмента** · M
-  - AC: `scripts/reference.mjs` у **цьому** репозиторії (ADR-008: генератор живе в продукті) збирає `--help` кожної команди і `schema --json` у один `reference.json`; `release.yml` прикріплює його артефактом релізу
-  - AC: сайт при збірці читає артефакт останнього релізу і рендерить `cli.mdx` і `agents.mdx` з нього; сторінки, набрані руками, видаляються
-  - AC: тест у продукті: `reference.json` містить кожну команду з `src/cli/commands/` — нова команда без довідки ламає збірку
-  - Файли: `scripts/reference.mjs`, `test/reference.test.ts`, `.github/workflows/release.yml`; у сайті — `content/docs/cli.mdx`, `agents.mdx`, збірка
+- [x] **T60. Довідка, згенерована з інструмента** ✅ 2026-09-13 — 9 тестів
+  - AC: ✅ `scripts/reference.mjs` збирає `--help` кожної команди і `schema --json` в один `reference.json`; `release.yml` прикріплює його до GitHub-релізу тегу
+  - AC: ✅ сайт рендерить `cli.mdx` із довідки (16 команд), а в `agents.mdx` генерований блок між маркерами несе 15 кодів помилок і поля задачі; набрана руками сторінка видалена з git
+  - AC: ✅ тест читає `src/cli/commands/` і падає на команді без довідки — перевірено фальшивим `phantom.ts`
+  - **Пакуємо генератор, не дані** (DEC-4): виміряно 1.9 KB проти 6.2 KB packed, 4.9 KB проти 39.7 KB unpacked, результат той самий
+  - **Сайт бере довідку комітом, не завантаженням** (DEC-5): деплой сайту частіший за реліз, а збірка, що йде в мережу по опис команди, падає з причини, якої ніхто не міняв. Свіжість перевіряється: генератор відмовляється працювати, коли версії `reference.json` і `facts.json` розходяться
+  - Файли: `scripts/reference.mjs`, `test/reference.test.ts`, `.github/workflows/release.yml`; у сайті — `scripts/generate-cli-docs.mjs`, `content/reference.json`, `content/cli-notes.mjs`
+- [x] **T60b. kadence на kadence** ✅ 2026-09-13 — не планувалося, випливло з T60
+  - `scripts/kadence.mjs` запускає білд робочого дерева й перезбирає, коли `src/` новіший. Глобальний `kadence` тут був 0.1.5 при 0.4.1 у репозиторії, тобто хук `kadence prime` запускав би бінарник без команди `prime`
+  - `.claude/settings.json` — `SessionStart`-хук на `node scripts/kadence.mjs prime`; борд заведено: 12 задач із плану, дві віхи, DoD, 5 рішень, 3 нотатки
+  - CLAUDE.md отримав розділ «kadence runs on kadence» — коли claim, коли `decision`, коли `note`
+  - **Дві знахідки за перший день**, обидві при зеленому сьюті: bulk `task delete` за `KAD-N` б'є не по тих (лейбли виводяться при згортанні і зсуваються); повторений `--rejected` роняв `decision add` — виправлено
 - [ ] **T61. Чек-лист релізу** · XS
   - AC: `docs/RELEASING.md`: версія → CHANGELOG → тег → `release.yml` → перевірити `facts.json` проти `npm view` → tap оновлено → довідка на сайті показує нову версію → TUI пройдено руками (список кроків із T77)
   - AC: посилання на нього з CLAUDE.md розділу «Commands»

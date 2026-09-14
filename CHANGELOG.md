@@ -1,5 +1,65 @@
 # Changelog
 
+## [Unreleased]
+
+The command reference stops being prose. And the first two bugs found by using
+the product on itself.
+
+### Added
+
+- **`kadence schema --json` and every `--help` now have a machine-readable
+  sibling.** `npm run reference` writes `dist/reference.json`: every command,
+  its usage line, its flags with their descriptions, its examples, and the
+  whole agent contract, read out of the binary rather than written about it.
+  The release workflow attaches it to the GitHub release of each tag.
+
+  This exists because the hand-typed CLI page on the site described 0.3 for the
+  whole of 0.4 — nine commands and two dozen flags shipped without it noticing,
+  and the agents page named ten of the fifteen error codes. A paragraph has no
+  test. A test now reads `src/cli/commands/` and fails when a command file has
+  no help behind it, which is the only way that gap stays closed.
+
+  The generator ships in the package rather than its output: measured at 1.9 KB
+  packed against 6.2 KB, and 4.9 KB unpacked against 39.7 KB, for the same
+  result. Nothing in the data is unavailable from the CLI itself.
+
+- **`scripts/kadence.mjs`** — runs the build in this working tree, rebuilding
+  when `src/` is newer. For working on kadence with kadence, which is now how
+  this repository is run; `CLAUDE.md` says what that means in practice.
+
+### Fixed
+
+- **A repeated flag crashed `decision add`.** `--rejected A --rejected B` threw
+  `o.rejected.trim is not a function`: cac hands a single flag back as a string
+  and a repeat as an array, and only `--doc` was normalised for it. The four
+  single-value flags went into `.trim()` as arrays.
+
+  Repeats now mean what each flag means. A second `--why`, `--task` or
+  `--supersedes` is a correction, so the last wins; a second `--rejected` is a
+  second alternative that was turned down — which is what a decision record is
+  for — so both are kept, joined rather than stored as an array because
+  `rejected` is a string in `kadence/v1` and the contract only ever gains
+  fields.
+
+  Found by recording a real decision about this repository with two rejected
+  options, with 898 tests green. The tests for it go through the built binary,
+  because calling the command directly is exactly the path that could not see
+  it.
+
+### Notes
+
+Deleting several tasks by `KAD-N` in one loop removes the wrong ones. Labels
+are derived while folding (I7), so removing `KAD-1` renumbers everything after
+it and the next label in the list now belongs to a different task. Working as
+designed, and a sharp edge: delete by ULID, or one at a time. Recorded as a
+note in this repository's own journal rather than fixed, because the fix is not
+obvious — warning on a bulk delete of labels would fire on the common case too.
+
+A board-wide Definition of Done is engineering-shaped. `board config --dod`
+copies its criteria into every new task, so "typecheck clean" landed on the
+Probe B interview tasks, where it means nothing, and there is no `task ac
+remove` to take it off. Noted, not yet answered.
+
 ## [0.4.1] — 2026-09-13
 
 `0.4.0` was tagged and never published: these three were found by using it
