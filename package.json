@@ -12,6 +12,7 @@
   },
   "files": [
     "dist",
+    "scripts/reference.mjs",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
@@ -21,7 +22,8 @@
     "test:watch": "vitest",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "reference": "node scripts/reference.mjs"
   },
   "dependencies": {
     "blessed": "^0.1.81"
