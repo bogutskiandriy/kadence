@@ -1,5 +1,174 @@
 # Changelog
 
+## [Unreleased]
+
+## [0.5.0] — 2026-09-16
+
+**The second author.** kadence was built for a team, and until now its first
+run spoke to one person with a sprint. This release is the path the second
+person walks: their agent learns to write the why, a machine without kadence
+gets an install hint instead of an error, and the first screens talk about the
+work and its decisions rather than points. Reports are still here; they are
+just no longer the first thing anyone meets.
+
+### Added — the teammate path
+
+- **The section `init` writes into `AGENTS.md` and `CLAUDE.md` teaches writes,
+  not only reads.** `task claim`, `note "…" --task`, and `decision add "…" --why`
+  sit beside the read commands, plus one line for an agent on a machine where
+  `kadence` is not on PATH: ask the human to install it; `npx` needs the network
+  and that is their call. Still 23 lines and 1.2 KB, under a test of 25 lines and
+  2 KB; an older section is replaced in place by its version marker.
+- **The `SessionStart` hook survives a machine without kadence.** It runs
+  `kadence prime` when the binary is there and otherwise prints one line asking
+  the human to install it, exiting 0 (DEC-12: no `npx`, because a hook written by
+  `init` must not download code on a teammate's machine). `init --hooks` upgrades
+  the old `kadence prime` hook in place instead of adding a second.
+- **`.kadence/README.md` leads to decisions and teammates.** `decision list` and
+  `decision add` replace `sprint status` among the top commands, and a new
+  "Adding a teammate" section covers install, one `user.email` per person and
+  `KADENCE_SOURCE=agent`. Existing READMEs are still never overwritten.
+- **README: the first ten minutes, "Adding a teammate" and "Removing kadence"** —
+  the last one lists everything `init` touches, so leaving is a table, not a
+  guess. Sprints, reports and exports moved to `docs/reports.md`.
+
+### Changed — the first run speaks about the work
+
+- **`init`** suggests a first task *and* a first decision, names what to commit
+  so a teammate's agent finds it, and mentions `--hooks` when `.claude/` exists.
+- **`prime`** no longer opens with "No active sprint." when there is none; with
+  no decision in force it shows one line on how to record one. `--json` unchanged.
+- **`task add` without `--estimate`** says nothing outside a sprint; inside one it
+  names the sprint instead of velocity. `sprint add` says the same.
+- **`kadence --help`** lists commands in the order a session meets them: `init,
+  prime, ready, task, decision, note, board, ui, schema`, then planning, reports
+  and maintenance.
+- **The TUI header** without a sprint reads `N open · M ready · K decisions in
+  force`; points appear only when something is estimated.
+- **`report --list`** puts `attention` first and groups burndown, velocity and
+  workload under "Sprint and team".
+
+### Fixed — the contract
+
+- **`schema --json` lists every shipped command.** 21 entries were missing,
+  among them `sprint add/edit/start/list/burndown`, `task parent/unblock/cancel/delete`,
+  `template`, `completion` and `ui` — additive within `kadence/v1`. A test now
+  compares the binary's own commands and actions against the contract and fails
+  on any gap. Unknown `decision` actions now return `allowed`, and `task` lists
+  `doc` in it.
+
+### Tooling
+
+- **`scripts/north-star.mjs`** counts repositories with two authors fourteen days
+  after their first event — `--local` for a checkout, `--search` through `gh` for
+  public ones — and appends a weekly row to `docs/research/north-star-log.md`.
+  A maintainer script: the product itself still opens no socket. First row: 0,
+  with the reason GitHub code search has not indexed even this repository.
+
+---
+
+The command reference stops being prose. And the first two bugs found by using
+the product on itself.
+
+### Added
+
+- **`kadence report` is the whole catalogue.** `report burndown`, `report
+  velocity` and `report workload` join `flow`, `cfd` and `attention`, and
+  `report --list` names all six with what each one answers.
+
+  The folds were already here — the burndown under `sprint`, the workload
+  inside `stats` — so an agent reading `schema --json` could not find them and
+  `kadence report` was not the catalogue it looked like. `report burndown`
+  calls the same function `sprint burndown` does, resolved in one place, so the
+  two cannot drift. `report velocity` is new arithmetic over `sprintReport`,
+  and it answers with a range rather than an average (DEC-9): the spread
+  between sprints is the forecast, and a series shorter than four sprints says
+  so. `report workload` counts open tasks, points, work in progress and blocked
+  work per owner, with a row for unassigned work — no hours, no capacity, since
+  the journal has neither.
+
+  `--since` on a report that has no window, or `--sprint` on anything but the
+  burndown, is now an error rather than a silently ignored flag (DEC-10).
+
+- **`kadence report <name> --html`** — a report as one self-contained page, with
+  charts. `flow` gets a percentile dot plot, a created-vs-finished column chart
+  and an aging-work chart with the p85 cycle time drawn as a reference line;
+  `cfd` gets a stacked area chart with the bands named where they are wide
+  enough; `attention` gets the idle days against the threshold. `--file` puts it
+  where you want it, and with `--json` the response is the path, not the report.
+
+  The charts are hand-written inline SVG. Every chart library is a script tag,
+  and the page's one promise is the one the board export already makes: it opens
+  from disk and asks the network for nothing — asserted structurally, down to
+  `url(` in the stylesheet and the `xmlns` an inline `<svg>` does not need.
+  Measured at 0.1 ms and 14 KB for the flow page, 1.7 ms and 301 KB for a
+  two-year cumulative flow diagram. Every chart is followed by the rows it was
+  drawn from: three of the eight categorical colours sit below 3:1 against
+  white, and the rule that buys them is that colour is never the only channel.
+
+  Reasoning in DEC-7 (a page per report rather than a Reports section inside the
+  board export — a report is a question with a window, and the board export has
+  none) and DEC-8 (the charts).
+
+- **`kadence schema --json` and every `--help` now have a machine-readable
+  sibling.** `npm run reference` writes `dist/reference.json`: every command,
+  its usage line, its flags with their descriptions, its examples, and the
+  whole agent contract, read out of the binary rather than written about it.
+  The release workflow attaches it to the GitHub release of each tag.
+
+  This exists because the hand-typed CLI page on the site described 0.3 for the
+  whole of 0.4 — nine commands and two dozen flags shipped without it noticing,
+  and the agents page named ten of the fifteen error codes. A paragraph has no
+  test. A test now reads `src/cli/commands/` and fails when a command file has
+  no help behind it, which is the only way that gap stays closed.
+
+  The generator ships in the package rather than its output: measured at 1.9 KB
+  packed against 6.2 KB, and 4.9 KB unpacked against 39.7 KB, for the same
+  result. Nothing in the data is unavailable from the CLI itself.
+
+- **`scripts/kadence.mjs`** — runs the build in this working tree, rebuilding
+  when `src/` is newer. For working on kadence with kadence, which is now how
+  this repository is run; `CLAUDE.md` says what that means in practice.
+
+### Fixed
+
+- **`burndown.finalRemaining` was always `null`.** Both branches of
+  `sprint.status === 'closed' ? null : null` read the same, so the one number
+  the field exists for — what a closed sprint did not finish — was never in the
+  response, including in `sprint burndown --json`. It now carries the points
+  left on the sprint's last day.
+
+- **A repeated flag crashed `decision add`.** `--rejected A --rejected B` threw
+  `o.rejected.trim is not a function`: cac hands a single flag back as a string
+  and a repeat as an array, and only `--doc` was normalised for it. The four
+  single-value flags went into `.trim()` as arrays.
+
+  Repeats now mean what each flag means. A second `--why`, `--task` or
+  `--supersedes` is a correction, so the last wins; a second `--rejected` is a
+  second alternative that was turned down — which is what a decision record is
+  for — so both are kept, joined rather than stored as an array because
+  `rejected` is a string in `kadence/v1` and the contract only ever gains
+  fields.
+
+  Found by recording a real decision about this repository with two rejected
+  options, with 898 tests green. The tests for it go through the built binary,
+  because calling the command directly is exactly the path that could not see
+  it.
+
+### Notes
+
+Deleting several tasks by `KAD-N` in one loop removes the wrong ones. Labels
+are derived while folding (I7), so removing `KAD-1` renumbers everything after
+it and the next label in the list now belongs to a different task. Working as
+designed, and a sharp edge: delete by ULID, or one at a time. Recorded as a
+note in this repository's own journal rather than fixed, because the fix is not
+obvious — warning on a bulk delete of labels would fire on the common case too.
+
+A board-wide Definition of Done is engineering-shaped. `board config --dod`
+copies its criteria into every new task, so "typecheck clean" landed on the
+Probe B interview tasks, where it means nothing, and there is no `task ac
+remove` to take it off. Noted, not yet answered.
+
 ## [0.4.1] — 2026-09-13
 
 `0.4.0` was tagged and never published: these three were found by using it

@@ -7,12 +7,12 @@ import {
   serializeTask,
   parseFields,
   failure,
-  repoRelative,
   type CommandResult,
 } from './task.js';
 import { append, readAll } from '../../core/store.js';
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { writeExport } from '../write-export.js';
 import { boardHtml } from '../../export/html.js';
 import { boardMarkdown, upsertBoardSection } from '../../export/markdown.js';
 import { burndown } from '../../core/burndown.js';
@@ -431,31 +431,20 @@ export function runBoardExport(
     };
   }
 
-  const chosen = options.file ?? (options.html === true ? DEFAULT_HTML : DEFAULT_MD);
-  const resolved = repoRelative(ctx.root, chosen, 'kadence board export --html --file docs/board.html');
-  if ('exitCode' in resolved) return resolved;
-  const path = resolved.full;
-
   const content =
     options.html === true
       ? boardHtml(state, activeBurndown(ctx.root, state))
       : boardMarkdown(state);
 
-  // git does not version empty directories, so the parent may not be there.
-  mkdirSync(dirname(path), { recursive: true });
-  try {
-    writeFileSync(path, content, 'utf8');
-  } catch (err) {
-    // A directory at the target throws EISDIR out of the command, past the
-    // JSON contract, and the caller gets a libuv message on stderr with no
-    // response at all.
-    return failure(
-      1,
-      'conflicting_state',
-      `Could not write ${path}: ${(err as NodeJS.ErrnoException).code ?? 'unknown error'}.`,
-      { received: resolved.rel, hint: 'kadence board export --html --file docs/board.html' },
-    );
-  }
+  const written = writeExport(
+    ctx.root,
+    options.file,
+    options.html === true ? DEFAULT_HTML : DEFAULT_MD,
+    content,
+    'kadence board export --html --file docs/board.html',
+  );
+  if ('exitCode' in written) return written;
+  const path = written.path;
 
   return {
     ok: true,
@@ -472,7 +461,7 @@ export function runBoardExport(
       format: options.html === true ? 'html' : 'md',
       path,
       section: false,
-      bytes: Buffer.byteLength(content),
+      bytes: written.bytes,
     },
   };
 }

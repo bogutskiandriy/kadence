@@ -72,6 +72,37 @@ interface Column {
 }
 
 const CANCELLED = 'cancelled';
+const DONE = 'done';
+
+/** What the header line is made of; everything else about it is wording. */
+export interface HeaderFacts {
+  /** The active sprint's name, or null — and null says nothing at all. */
+  sprint: string | null;
+  open: number;
+  ready: number;
+  decisions: number;
+  /** Null when no shown task carries an estimate: "0 points" is not a fact. */
+  points: number | null;
+  /** The active filters, already formatted, appended as they are. */
+  filterNote: string;
+}
+
+/**
+ * The board's header, as a pure function so it has a test (T113).
+ *
+ * It used to lead with "no active sprint" and "0 points" — two facts about
+ * features a team may never have chosen. What every board has is open work,
+ * work ready to start, and the reasons in force, so that is what it says.
+ */
+export function boardHeader(f: HeaderFacts): string {
+  const parts = [
+    `${f.open} open`,
+    `${f.ready} ready`,
+    `${f.decisions} ${f.decisions === 1 ? 'decision' : 'decisions'} in force`,
+    ...(f.points === null ? [] : [`${f.points} points`]),
+  ];
+  return `kadence  ${f.sprint === null ? '' : `${f.sprint}  `}${parts.join(' · ')}${f.filterNote}`;
+}
 
 export function runBoardUi(callbacks: BoardCallbacks): void {
   const screen = blessed.screen({
@@ -273,13 +304,18 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
 
     if (columns.length !== visibleStatuses().length) build();
 
-    let total = 0;
+    let open = 0;
     let points = 0;
+    let estimated = false;
 
     columns.forEach((col, i) => {
       col.tasks = tasksFor(col.status);
-      total += col.tasks.length;
-      points += col.tasks.reduce((n, t) => n + (t.estimate ?? 0), 0);
+      // Points beside "open" are open points; finished work has a column label.
+      if (col.status !== DONE) {
+        open += col.tasks.length;
+        points += col.tasks.reduce((n, t) => n + (t.estimate ?? 0), 0);
+      }
+      if (col.tasks.some((t) => t.estimate !== null)) estimated = true;
 
       const innerWidth = (col.box.width as number) - 4;
       col.cursor = Math.min(col.cursor, Math.max(0, col.tasks.length - 1));
@@ -293,13 +329,28 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
     });
 
     const active = state.sprints.find((s) => s.status === 'active');
-    const sprintName = active === undefined ? 'no active sprint' : active.name;
     const filterNote =
       (filter === '' ? '' : `  filter: "${filter}"`) +
       (readyOnly ? '  ready only' : '') +
       (branchOnly && !('reason' in branch) ? `  branch: ${branch.name}` : '') +
       (milestoneOnly === '' ? '' : `  milestone: ${milestoneOnly}`);
-    header.setContent(` kadence  ${sprintName}  ${total} tasks, ${points} points${filterNote}`);
+    // The same function `kadence ready` calls, over the whole board: a filter
+    // narrows the columns, not what can be started.
+    const ready = readyTasks(state.tasks, {
+      viewer: callbacks.actor,
+      statuses: state.statuses,
+      started: state.started,
+    }).length;
+    header.setContent(
+      ` ${boardHeader({
+        sprint: active === undefined ? null : active.name,
+        open,
+        ready,
+        decisions: state.decisions.filter((d) => d.supersededBy === null).length,
+        points: estimated ? points : null,
+        filterNote,
+      })}`,
+    );
 
     if (state.cycles.length > 0) {
       say(`${state.cycles.length} dependency cycle(s) — see kadence task list`, THEME.danger);

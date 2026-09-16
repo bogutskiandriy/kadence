@@ -9,7 +9,7 @@ import type { FlowEvent } from '../src/core/event.js';
 import { createUlid } from '../src/core/ulid.js';
 import { runInit } from '../src/cli/commands/init.js';
 import { runTaskAdd, runTaskMove } from '../src/cli/commands/task.js';
-import { runReport } from '../src/cli/commands/report.js';
+import { runReport, REPORTS } from '../src/cli/commands/report.js';
 
 /**
  * Attention signals: work the board presents as active while nobody moves it.
@@ -306,7 +306,7 @@ describe('kadence report attention', () => {
 
   it('joins the list of reports the command offers', () => {
     const r = runReport(dir, env, 'pie', {});
-    expect(r.error!.allowed).toEqual(['flow', 'cfd', 'attention']);
+    expect(r.error!.allowed).toEqual([...REPORTS]);
   });
 
   it('defaults to seven days of silence, not the thirty a window report uses', () => {

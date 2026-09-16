@@ -1,9 +1,11 @@
 # The road to 1.0 — kadence
 
+> **2026-09-16:** the go-to-market, SMART targets and dated gates now live in [strategy.md](strategy.md). This document remains the reference for gates G1–G7, the ecosystem, money and the kill criteria.
+
 - **Date:** 2026-09-08
 - **Method:** a destination (Cagan-style narrative, five years), a definition of `1.0.0` as a set of gates, and Now / Next / Later horizons stated as outcomes. Evidence in [ecosystem-and-monetization-2026-09.md](../research/ecosystem-and-monetization-2026-09.md).
 - **Relation to [roadmap.md](roadmap.md):** that document is the next six weeks and stays authoritative for them. This one is the whole arc to 1.0 and the ecosystem around the binary. Where they disagree, the shorter horizon wins, because it is closer to evidence.
-- **State:** `kadence@0.3.0`, six days after the first commit. One star. Zero known users. Our own board is the only journal we can observe. The site is live at [kadence-site.vercel.app](https://kadence-site.vercel.app/) from its own repository, with `facts.json` sourcing every number (ADR-008 executed).
+- **State:** `kadence@0.3.0`, six days after the first commit. One star. Zero known users. Our own board is the only journal we can observe. The site is live at [kadence.guru](https://kadence.guru/) from its own repository, with `facts.json` sourcing every number (ADR-008 executed).
 - **Execution plan:** [tasks/plan-to-1.0.md](../../tasks/plan-to-1.0.md) — milestones 14–20, tasks T50–T79, three tracks each (product, users, engineering), gate evidence table at Checkpoint 20.
 - **Decisions taken 2026-09-08:** see §9. Reputation project with the door open; G1 at five repositories; the site already exists; Windows is a gate; the single binary is measured once, then decided.
 
@@ -208,7 +210,7 @@ None of these was derivable from evidence; each changes what gets built. The own
 
 1. **Monetization intent: reputation now, door open.** Core MIT forever; the format never gated; the projection kept reusable as a library so a product on top stays possible. Sponsorship at 1.0, not before.
 2. **G1 threshold: five** public repositories with two authors 14 days after `init`, plus five Probe B conversations.
-3. **Site: already live.** The question was moot — [kadence-site.vercel.app](https://kadence-site.vercel.app/) exists with sourced numbers, docs and a "Book thirty minutes" CTA — now on [kadence.guru](https://kadence.guru/). That CTA becomes Probe B's outside channel. G6 keeps the domain and the generated docs.
+3. **Site: already live.** The question was moot — [kadence.guru](https://kadence.guru/) exists with sourced numbers, docs and a "Book thirty minutes" CTA — now on [kadence.guru](https://kadence.guru/). That CTA becomes Probe B's outside channel. G6 keeps the domain and the generated docs.
 4. **Windows is a gate** (G4). A journal that corrupts on one platform is trusted on none.
 5. **Single binary: measure once** during `0.7`, one afternoon, then decide. Not assumed either way.
 

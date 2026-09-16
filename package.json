@@ -1,6 +1,6 @@
 {
   "name": "kadence",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Your team and your AI agents work from the same context: tasks, their full history and time as plain files in your git repository",
   "type": "module",
   "license": "MIT",
@@ -12,6 +12,7 @@
   },
   "files": [
     "dist",
+    "scripts/reference.mjs",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
@@ -21,7 +22,8 @@
     "test:watch": "vitest",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "reference": "node scripts/reference.mjs"
   },
   "dependencies": {
     "blessed": "^0.1.81"
@@ -37,14 +39,14 @@
   "keywords": [
     "cli",
     "git",
-    "task",
-    "sprint",
-    "velocity",
-    "kanban",
-    "tui",
-    "project-management",
     "ai-agents",
     "shared-context",
+    "claude-code",
+    "agents-md",
+    "decisions",
+    "task",
+    "kanban",
+    "tui",
     "event-sourcing",
     "offline"
   ],
@@ -52,7 +54,7 @@
     "type": "git",
     "url": "git+https://github.com/bogutskiandriy/kadence.git"
   },
-  "homepage": "https://github.com/bogutskiandriy/kadence#readme",
+  "homepage": "https://kadence.guru",
   "bugs": {
     "url": "https://github.com/bogutskiandriy/kadence/issues"
   }

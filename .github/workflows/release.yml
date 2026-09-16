@@ -16,7 +16,9 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # `contents: write` only for the release the last step creates; nothing
+      # here pushes a commit or moves a branch.
+      contents: write
       id-token: write
 
     steps:
@@ -44,3 +46,20 @@ jobs:
       - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # The command reference of exactly this version, read out of the binary
+      # that was just published. The site keeps its own committed copy so a
+      # deploy never depends on the network, and this is where that copy comes
+      # from — one download instead of a checkout and a build.
+      #
+      # `npm publish` ran prepublishOnly, so dist/ is the published build.
+      - name: Attach the command reference to the release
+        run: |
+          node scripts/reference.mjs
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes "kadence $TAG is on npm. \`dist/reference.json\` below is every command, flag and error code of this version, generated from the binary — it is what the site's CLI page is built from." \
+            dist/reference.json
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          GH_TOKEN: ${{ github.token }}

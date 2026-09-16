@@ -1,9 +1,9 @@
 import { append } from '../../core/store.js';
 import { ulid } from '../../core/ulid.js';
 import { sprintReport, type SprintReport } from '../../core/velocity.js';
-import { burndown, renderBurndown } from '../../core/burndown.js';
+import { burndown, renderBurndown, type Burndown } from '../../core/burndown.js';
 import { readAll } from '../../core/store.js';
-import type { ProjectState } from '../../core/projection.js';
+import type { ProjectState, Sprint } from '../../core/projection.js';
 import { resolveContext, isContext, loadState, findTask, type CommandResult, type Context,
   taskNotFound,
   failure,
@@ -133,7 +133,9 @@ export function runSprintAdd(
   write(ctx, 'sprint.task_added', sprint.id, { task: task.id });
 
   const noEstimate =
-    task.estimate === null ? '\nWithout an estimate this task will not count towards velocity.' : '';
+    task.estimate === null
+      ? `\nWithout an estimate this task adds no points to sprint "${sprint.name}". Add --estimate.`
+      : '';
 
   return {
     ok: true,
@@ -489,6 +491,34 @@ export function runSprintEdit(
   };
 }
 
+/**
+ * The chart for one sprint, for every command that draws it.
+ *
+ * `sprint burndown` and `report burndown` are the same question asked in two
+ * places. Two resolutions of "which sprint" and two ideas of what a burndown
+ * is would drift, so there is one of each, here.
+ */
+export function burndownFor(
+  root: string,
+  state: ProjectState,
+  name: string | undefined,
+): { sprint: Sprint; chart: Burndown | null } | CommandResult {
+  const sprint = name === undefined ? activeSprint(state) : findSprintByName(state, name);
+  if (sprint === undefined) {
+    return failure(
+      1,
+      'sprint_not_found',
+      name === undefined
+        ? 'No active sprint.\n  kadence sprint list'
+        : `No sprint named "${name}".\n  kadence sprint list`,
+      { ...(name !== undefined ? { received: name } : {}), hint: 'kadence sprint list --json' },
+    );
+  }
+  // The chart is derived from raw events, not from folded state: only the
+  // journal knows when each transition happened.
+  return { sprint, chart: burndown(state, readAll(root).events, sprint) };
+}
+
 export function runSprintBurndown(
   cwd: string,
   env: NodeJS.ProcessEnv,
@@ -498,24 +528,10 @@ export function runSprintBurndown(
   if (!isContext(ctx)) return ctx;
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
-  const sprint = name === undefined ? activeSprint(state) : findSprintByName(state, name);
+  const resolved = burndownFor(ctx.root, state, name);
+  if ('exitCode' in resolved) return resolved;
+  const { sprint, chart } = resolved;
 
-  if (sprint === undefined) {
-    return {
-      ...failure(
-        1,
-        'sprint_not_found',
-        name === undefined
-          ? 'No active sprint.\n  kadence sprint list'
-          : `No sprint named "${name}".\n  kadence sprint list`,
-        { ...(name !== undefined ? { received: name } : {}), hint: 'kadence sprint list --json' },
-      ),
-    };
-  }
-
-  // The chart is derived from raw events, not from folded state: only the
-  // journal knows when each transition happened.
-  const chart = burndown(state, readAll(ctx.root).events, sprint);
   if (chart === null) {
     return {
       ok: true,

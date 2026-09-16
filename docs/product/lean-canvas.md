@@ -1,5 +1,7 @@
 # Lean Canvas — kadence
 
+> **Superseded 2026-09-16 by [strategy.md](strategy.md).** Kept as history; where the two disagree, strategy.md wins.
+
 - **Дата:** 2026-09-02
 - **Метод:** Ash Maurya
 - **Статус:** гіпотеза, не план

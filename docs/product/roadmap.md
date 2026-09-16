@@ -1,5 +1,7 @@
 # Роадмап — kadence
 
+> **Superseded 2026-09-16 by [strategy.md](strategy.md).** Kept as history; where the two disagree, strategy.md wins.
+
 - **Дата:** 2026-09-08
 - **Метод:** Now / Next / Later, формулювання через результат, а не через фічу
 - **Стан:** `kadence@0.3.0` опубліковано · нуль відомих користувачів · нуль даних про використання

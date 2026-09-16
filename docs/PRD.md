@@ -1,506 +1,356 @@
 # kadence — Product Requirements Document
 
-> **Поточна рамка (2026-09-04).** Головний меседж змінено з аналітики спринтів
-> на **спільний контекст роботи команди й AI**. Розділ про конкурентів застарів
-> удвічі: актуальний ландшафт — GitHub Spec Kit, Beads, Backlog.md — розібраний
-> у [positioning-review-2026-09.md](product/positioning-review-2026-09.md).
+- **Version:** 2 · **Date:** 2026-09-16 · **Covers:** `0.4.x` (published 0.4.1, 2026-09-13) plus the unreleased working tree, through `1.0.0`
+- **Status:** current. Replaces PRD v1 (2026-09-01, "Draft v0.1, pre-discovery", partly Ukrainian), which is in git history.
+- **Where this sits:** [strategy.md](product/strategy.md) owns positioning, ICP, objectives, gates and the scorecard. [roadmap-to-1.0.md](product/roadmap-to-1.0.md) owns gates G1–G7, the ecosystem and money. [SPEC.md](../SPEC.md) and [docs/decisions/](decisions/) own the engineering. This PRD says **what the product must do, for whom, and how we know it is done** — and links rather than copies. Where this file disagrees with strategy.md, strategy.md wins.
+- **Labels:** **Fact** — measured or read from the binary, with a source · **Inference** — our reading of facts · **Assumption** — load-bearing and unevidenced · **Open** — undecided.
 
-
-**Статус:** Draft v0.1 (pre-discovery)
-**Дата:** 2026-09-01
-**Автор:** bogutski2005@gmail.com
-**Тип документа:** PRD для нового продукту (greenfield)
-
-> **Читачу, важливо.** Цей PRD написаний без discovery-дослідження. Твердження про користувачів позначені як 🔶 **Assumption** — це гіпотези, не факти. 🔵 **Open Question** позначає нерозв'язане.
->
-> **Валідацію свідомо пропущено.** Рішення прийнято автором 2026-09-02: продукт будується на переконанні, що проблема реальна, без попередніх інтерв'ю. Це усвідомлений обмін — швидкість замість певності. Практичний наслідок: перший реальний тест гіпотези відбудеться на публічному релізі, тому реліз має вийти рано й малим, а не пізно й повним.
+> **Read this first.** The architecture is measured. The product bet is not. As of today: **0 Probe B interviews, 0 pilots, 0 known external users** ([strategy §0](product/strategy.md), [probe-b-results](research/probe-b-results.md)). Every statement about what users feel is an Assumption until the Oct 19 verdict.
 
 ---
 
-## Зміст
+## 0. What changed since v1
 
-1. [Executive Summary](#1-executive-summary)
-2. [Problem Statement](#2-problem-statement)
-3. [Target Users & Personas](#3-target-users--personas)
-4. [Strategic Context](#4-strategic-context)
-5. [Solution Overview](#5-solution-overview)
-6. [Success Metrics](#6-success-metrics)
-7. [User Stories & Requirements](#7-user-stories--requirements)
-8. [Out of Scope](#8-out-of-scope)
-9. [Dependencies & Risks](#9-dependencies--risks)
-10. [Open Questions](#10-open-questions)
-11. [Self-Assessment](#11-self-assessment)
+### Positioning
 
----
-
-## 1. Executive Summary
-
-Ми будуємо **kadence** — open-source інструмент управління проєктами, який живе всередині Git-репозиторію, для tech-heavy команд із 2–20 осіб та їхніх AI-агентів. Він вирішує проблему розірваного контексту: задачі, спринти й документація сидять у зовнішньому SaaS (Jira, Linear), тоді як код і AI-агенти — у репозиторії, через що агент не бачить, над чим працює команда, а розробник платить когнітивний податок за постійне перемикання між терміналом і браузером.
-
-kadence ставиться через `npx kadence`, зберігає весь стан як append-only журнал подій у файлах репозиторію, і дає повноцінний kanban-борд, спринти, епіки, естімейти та time tracking просто в терміналі. Через те що стан — це файли, AI-агент читає беклог так само природно, як читає код, а PM отримує повну історію подій для аналітики, яку не дає жоден із конкурентів «із коробки».
-
-**Гіпотеза успіху:** команди, які працюють з AI-агентами щодня, приймуть інструмент, що дає агенту контекст задач без окремої інтеграції — і залишаться в ньому, бо трекінг перестане бути окремою роботою.
-
----
-
-## 2. Problem Statement
-
-### 2.1. Хто має цю проблему
-
-Розробницькі команди 2–20 осіб, які:
-- працюють у Git-репозиторії як основному робочому середовищі;
-- активно використовують AI coding-агентів (Claude Code, Cursor, Copilot Workspace, Codex);
-- ведуть задачі у зовнішньому інструменті (Jira, Linear, ClickUp, Notion, GitHub Projects) або не ведуть майже ніяк.
-
-### 2.2. У чому проблема
-
-**Контекст проєкту фізично розділений між двома світами.** Код, історія змін, документація та AI-агенти живуть у репозиторії. Задачі, спринти, пріоритети, естімейти та рішення — у зовнішній базі даних, доступній лише через браузер або мережевий API.
-
-Наслідок для трьох груп:
-
-- **Розробник** перемикається між терміналом і браузером десятки разів на день, щоб оновити статус задачі. Оновлення статусу — це робота, яка не створює цінності, тому її роблять із запізненням або не роблять узагалі.
-- **AI-агент** не має жодного уявлення про те, що зараз у спринті, який пріоритет у задачі, що вже зроблено і що заблоковано. Кожна сесія з агентом починається з того, що людина вручну переказує йому контекст, який уже існує — просто в іншій системі.
-- **PM / Tech Lead** отримує дані, які не відображають реальність, бо вони введені постфактум. Аналітика (velocity, estimate accuracy, cycle time) будується на зіпсованому вході або не будується взагалі.
-
-### 2.3. Чому це болить
-
-🔶 **Assumption** — усі три пункти нижче є гіпотезами, не підтвердженими дослідженням:
-
-| Група | Припущений біль | Припущений наслідок |
+| v1 (2026-09-01) | v2 (2026-09-16) | Why |
 |---|---|---|
-| Розробник | Перемикання контексту та ручне оновлення статусів | Дані борду відстають від реальності; трекінг сприймається як бюрократія |
-| AI-агент / людина з агентом | Ручне «підвантаження» контексту в кожну сесію | Агент дає гірші результати; людина витрачає час на переказ того, що вже записано |
-| PM | Дані недостовірні або відсутні | Планування спринтів на відчуттях; ретроспективи без фактів |
+| "Open-source project management inside the git repository" for teams of 2–20, then "work journal with sprint analytics" | **Shared context of a team and its agents, in the repo**, for teams of 3–8 where more than one human or more than one agent vendor works | [discovery-verdict](research/discovery-verdict-2026-09.md): 0 velocity requests across 1,076 open Beads issues; the leader's users asked for plain files, no daemon, merge without resolving |
+| Velocity / estimate-vs-actual as the differentiator | Velocity and reports **present, not advertised** — a consequence of the journal | same |
+| Conflict-freedom implied as a headline | Conflict-freedom is **proof, not pitch** — real but rare (15.4% of repos, ~1 merge in 200) | [probe-a-results](research/probe-a-results.md) |
+| Competitors: git-bug, Backlog.md, git-issues, Jira, Linear, GitHub Issues | **Beads, Backlog.md, Spec Kit**; vendor memory (Claude Code Auto Memory, Tasks) as adjacency | [positioning-review](product/positioning-review-2026-09.md), discovery-verdict §1 |
 
-### 2.4. Evidence
+### Shipped since v1 (0.2 → 0.4.1) and unreleased
 
-🔵 **Open Question — доказової бази поки що немає.** Це головна слабкість цього PRD. Що потрібно зібрати до початку розробки:
-
-- **6–10 discovery-інтерв'ю** з tech-lead'ами команд 2–20 осіб, які щодня використовують AI-агентів. Ключове питання не «чи хотіли б ви», а «покажіть, як ви вчора давали агенту контекст задачі».
-- **Кількісний сигнал:** скільки коштує Jira/Linear для команди 10 осіб і чи це взагалі є болем (гіпотеза: ціна — не головний драйвер, контекст — головний).
-- **Поведінковий доказ:** чи існують уже саморобні рішення — `TODO.md`, `tasks/` у репо, кастомні скрипти. Наявність саморобок — найсильніший сигнал реального попиту.
-
-**Непрямий сигнал, який уже є:** поява конвенцій `AGENTS.md` / `CLAUDE.md` та їх швидке поширення показує, що індустрія вже кладе контекст для агентів у репозиторій. kadence — логічне продовження цього тренду на рівень задач. 🔶 **Assumption:** що цей тренд пошириться з «інструкцій для агента» на «стан проєкту».
-
----
-
-## 3. Target Users & Personas
-
-### 3.1. Ієрархія користувачів
-
-| Роль | Хто | Чому саме тут |
-|---|---|---|
-| **Primary** | Мала tech-heavy команда (2–10) | Точка входу adoption: ставить `npx kadence` без закупівельного циклу |
-| **Secondary** | PM / Tech Lead (5–20) | Приносить гроші й вимагає звітності, але приходить після команди (bottom-up) |
-| **Не персона, а принцип** | AI-агенти | Другий клас споживачів того самого контракту даних |
-
-### 3.2. Primary Persona — «Тех-лід Тарас»
-
-- **Роль:** tech lead / senior dev у продуктовому стартапі, 6 людей у команді
-- **Середовище:** термінал, Neovim або VS Code, Claude Code відкритий постійно
-- **Цілі:** тримати команду синхронною без бюрократії; щоб агент допомагав, а не потребував няньки
-- **Болі:** Jira здається важкою й повільною; GitHub Issues замало для спринтів; ніхто в команді не оновлює статуси вчасно
-- **Поведінка:** ставить інструмент сам, за вечір, без дозволу; кидає в команду з фразою «спробуйте»
-- **Що змусить кинути продукт:** якщо доведеться боротися з мердж-конфліктами через борд
-
-### 3.3. Secondary Persona — «PM Поліна»
-
-- **Роль:** product manager, 15 людей у двох командах, не пише код але читає Git
-- **Цілі:** передбачуваність спринтів, чесний velocity, дані для ретроспектив і для розмови з бізнесом
-- **Болі:** «дані в Jira — художня література»; звіти доводиться збирати руками
-- **Поведінка:** не встановлюватиме CLI сама 🔶 **Assumption** — ключове обмеження: **без візуального дашборду вона не стане активним користувачем**. Це прямо обґрунтовує необхідність `kadence serve` у v2 (див. розділ 8).
-
-### 3.4. AI-агент як споживач
-
-Не персона, але має свій контракт. Агент повинен уміти:
-- прочитати поточний спринт і беклог без окремої інтеграції;
-- дізнатися, над чим зараз працює людина;
-- змінити статус задачі, не пошкодивши цілісність даних;
-- залишити слід у журналі, який відрізняє його дії від людських.
-
-### 3.5. Jobs-to-Be-Done
-
-- Коли я починаю робочий день у терміналі, я хочу побачити свої задачі спринту, щоб не відкривати браузер.
-- Коли я запускаю AI-агента, я хочу, щоб він уже знав контекст задачі, щоб не переказувати його вручну.
-- Коли я закриваю спринт, я хочу отримати чесний velocity з реальних подій, щоб планувати наступний на фактах.
-- Коли я повертаюсь до коміту місячної давнини, я хочу побачити, який тоді був стан проєкту, щоб зрозуміти чому це було зроблено.
-
----
-
-## 4. Strategic Context
-
-### 4.1. Бізнес-цілі
-
-Продукт — **open source під AGPL-3.0**. Рішення прийнято 2026-09-02. Наслідки:
-
-- Метрики успіху — **adoption-метрики**, не revenue (див. розділ 6).
-- **AGPL зберігає можливість open-core в майбутньому.** Ніхто не візьме ядро й не побудує на ньому закритий комерційний сервіс. Осмислений вибір для інструменту, у якого попереду ймовірний sync-сервер (v1.0+).
-- **Ціна вибору — ризик для adoption.** Багато компаній мають OSS-політики, що автоматично блокують AGPL-залежності, навіть коли copyleft юридично не спрацьовує: kadence лише запускається як CLI, не лінкується в продукт користувача, тому код проєкту не стає похідним твором. Сканери ліцензій цієї різниці не роблять.
-- **Мітигація:** окремий `LICENSING.md` у корені репо, який прямим текстом пояснює межі copyleft для випадку «використовую kadence як інструмент». Написати його до публічного релізу, не після першої скарги.
-
-### 4.2. Конкурентний ландшафт
-
-> **Оновлено 2026-09-02 після конкурентного дослідження.** Попередня версія цього розділу порівнювала kadence лише з Jira, Linear і GitHub Issues — інструментами іншого класу — і повністю пропускала прямих конкурентів. Це була найсерйозніша прогалина документа. Повний розбір: [competitive-snapshot](research/competitive-snapshot.md).
-
-#### Прямі конкуренти — категорія вже зайнята
-
-| Конкурент | Зірки | Що вже має | Де вразливий |
-|---|---|---|---|
-| **git-bug** | 10k | CLI + TUI + веб, мости до GitHub/GitLab | Дані — git-об'єкти, **не файли**: `git checkout` не показує тодішні задачі, агент не читає їх як файл; GPLv3 |
-| **Backlog.md** | 6.6k | Markdown-задачі, TUI-канбан, веб-UI, MCP для Claude Code/Gemini/Codex | Змінюваний файл на задачу → конфлікти; **власна відкрита задача `task-4.12`** про колізії ID між гілками; немає спринтів і velocity |
-| **git-issues** | ? | Go-бінарник, `.issues/` з frontmatter, TUI, `.agent.md`, `issues next/claim/done` | Зрілість невідома; немає спринтів; конфлікти не адресовані |
-
-**Що з цього випливає.** Теза «ніхто не тримає задачі у файлах репо» спростована. Але дві відмінності вціліли, і обидві перевірені:
-
-1. **Усі троє зберігають змінюваний стан.** Append-only журнал лишається унікальним, і наш спайк показав нуль конфліктів там, де вони мають виникати.
-2. **Спринтів, velocity й estimate-vs-actual немає в жодного.**
-
-Тому позиціювання зміщується з «трекер задач у репо» (зайнято) на «журнал роботи команди з аналітикою спринтів» — див. [positioning](product/positioning.md).
-
-#### Інструменти іншого класу
-
-| Конкурент | Сильні сторони | Де програє kadence |
-|---|---|---|
-| **Jira** | Повний функціонал, звіти, екосистема | Важка, повільна, дорога, поза репозиторієм, недоступна агенту |
-| **Linear** | Найкращий UX у категорії, швидкість | SaaS, платна для команд, контекст поза репо |
-| **GitHub Issues + Projects** | Безкоштовні, поруч із кодом, уже є в кожного | Немає спринтів у звичному сенсі, немає time tracking, немає velocity; браузерні; стан у базі GitHub, не у файлах |
-| **Саморобний `TODO.md`** | У репо, простий, безкоштовний | Не масштабується далі 1–2 людей, немає структури, немає аналітики |
-
-**Чесна позиція щодо GitHub Issues + Projects.** Це головний конкурент, і аргумент «вони платні» — **невірний**: Issues і Projects (v2) входять у безкоштовний план, включно з приватними репозиторіями. Платне там — enterprise-рівень. Реальні межі диференціації:
-
-1. **Стан не версіонується разом із кодом.** Не можна зробити `git checkout` на старий коміт і побачити, який тоді був спринт. У kadence — можна. Це унікальна властивість, якої немає в жодного конкурента.
-2. **Аналітики бракує.** Немає velocity, немає estimate-vs-actual, немає time tracking. Щоб отримати щось серйозне — треба самому тягнути GraphQL API.
-3. **Немає терміналу й офлайну.** `gh` CLI не показує борд. Розробник усе одно йде в браузер.
-4. **Агент не має прямого доступу.** Контекст живе в базі GitHub — потрібен MCP, мережа, токен. Файл у репо агент читає просто як файл.
-5. **Vendor lock-in.** Issues не мігрують між форджами. Файли працюють на GitHub, GitLab, Gitea і локально.
-
-🔶 **Assumption:** пункти 1 і 4 достатньо цінні, щоб виправдати перехід із безкоштовного інструменту, який уже вбудований у workflow. Це найризикованіше припущення всього продукту — саме його треба валідувати першим.
-
-### 4.3. Чому зараз
-
-- AI coding-агенти стали щоденним інструментом, і контекст для них перетворився на окремий продуктовий клас (`AGENTS.md`, MCP, skills).
-- Термінал повернувся як основне середовище розробки саме через агентів.
-- Конвенція «конфігурація і контекст живуть у репо» вже прийнята індустрією — kadence поширює її на управління задачами.
-
-🔶 **Assumption:** вікно можливості відкрите ~12–18 місяців, після чого великі гравці (GitHub, Linear) закриють нішу власними агентними інтеграціями. Проте їхні рішення будуть API-first, а не file-first — отже, властивість «стан версіонується з кодом» лишиться нашою.
-
----
-
-## 5. Solution Overview
-
-### 5.1. Опис
-
-kadence — CLI-інструмент, який встановлюється в проєкт (`npx kadence init`) і створює директорію `.kadence/` у репозиторії. Усередині — весь стан проєкту: задачі, епіки, user stories, баги, спринти, беклог і документація.
-
-Ключове архітектурне рішення: **стан не зберігається як «поточний стан», а вираховується з append-only журналу подій**. Кожна дія — це новий незмінний запис. Ніхто не редагує ті самі рядки, тому мердж-конфлікти майже неможливі за побудовою. Побічний ефект, який виявляється головною фічею: повний аудит і аналітика виходять безкоштовно, бо історія подій — це і є дані для звітів.
-
-Розробник відкриває термінал і бачить kanban-борд поточного спринта. Тягне задачу в In Progress — це подія в журналі. Комітить її разом із кодом. AI-агент у тому ж репозиторії читає ті самі дані й розуміє, над чим працює команда.
-
-### 5.2. Ключові фічі (v0.1 MVP)
-
-| Фіча | Опис |
+| Line | What arrived |
 |---|---|
-| `kadence init` | Створює `.kadence/` зі структурою та самоописовим README для агентів |
-| Задачі | Створення, редагування, пріоритет, assignee, опис, теги |
-| Беклог | Список незапланованих задач із сортуванням |
-| Спринт | Один активний спринт: створити, додати задачі, закрити |
-| Kanban TUI | Інтерактивний борд у терміналі з навігацією та переміщенням задач |
-| Кастомні статуси | Конфігурована колонкова модель (Todo → In Progress → In Review → Done) |
-| `--json` на всіх командах | Контракт для AI-агентів і скриптів |
-| Event log | Append-only журнал як єдине джерело правди |
+| **0.2.1–0.2.2** (09-08) | Agent contract: `schema --json`, 15 error codes with `allowed`, `--fields`, `init` writes `CLAUDE.md` too; `cac` moved to devDependencies |
+| **0.3.0–0.3.1** (09-08) | `decision add/list/show` (`--why` required, `--rejected`, `--supersedes`); `task doc` links; `source` on decisions |
+| **0.3.2** (09-09) | CI and release pipeline hardening only |
+| **0.4.1** (09-13; 0.4.0 tagged, never published) | Agent loop: `ready`, `prime`, `init --hooks`, `task claim/release` (contested, not locked), `note`. Acceptance criteria + Definition of Done. Milestones. `task list --branch`. `stats`, shell completion. `board --json --summary`. `board export --html/--md`. `@kadence/github` one-way publish. `report flow/cfd/attention`. `compact`. Labels as deltas. `source` on comments and history |
+| **Unreleased** | `report burndown/velocity/workload`, `report --list`, `report <name> --html` with inline SVG; `npm run reference` → `dist/reference.json`; `scripts/kadence.mjs` wrapper (the repo runs on kadence). Fixes: `burndown.finalRemaining` always `null`; repeated `--rejected` crashing `decision add` |
 
-### 5.3. Контракт з AI-агентом
+Source for all rows: `CHANGELOG.md`, product inventory 2026-09-16.
 
-Дворівнева модель, обидва рівні входять у MVP:
+### v1 decisions dropped explicitly
 
-- **Читання — прямо з файлів.** Структура `.kadence/` самоописова, всередині лежить `README.md`, що пояснює агенту формат. Агент читає беклог звичайним Read/Grep, без жодної інтеграції. Працює з будь-яким агентом уже сьогодні.
-- **Запис — тільки через CLI.** Агент викликає `kadence task move KAD-12 in-progress` через Bash. CLI валідує й гарантує цілісність журналу. Пряме редагування файлів агентом не підтримується і має бути явно заборонене в README.
+| v1 said | Now | Source |
+|---|---|---|
+| Licence **AGPL-3.0**, `LICENSING.md` before release | **MIT**, forever; the format is never gated | `package.json`, `LICENSE`, roadmap-to-1.0 §5 |
+| "Validation skipped on purpose; the public release replaces interviews" | Reversed. Probe B (direct outreach, ≥ 5 interviews) is the **only Now item**; feature work is gated behind it | strategy §3–§4 |
+| Personas "Tech lead Taras" (team of 6) and "PM Polina" (15 people, needs a dashboard) | ICP and buyer persona from strategy §1 (§3 below). PMs are readers, reached through export and agents | strategy §1 |
+| `kadence serve` web dashboard in v0.2 | **Not doing** a server. Static HTML/Markdown export is the experiment in its place | roadmap-to-1.0 §7 |
+| Time tracking in v0.2 | **Not doing** timers. Time is derived from moves; `task log` is a correction only | roadmap-to-1.0 §7 |
+| MCP server and Jira/Linear/GitHub import in v1.0; multiple boards | MCP optional, only when a named user cannot run a CLI. Importers only from Backlog.md and Beads, only if the Oct 19 gate says so. No Jira/Linear import, no multiple boards planned | strategy §8, roadmap-to-1.0 §3 |
+| Primary metric **Weekly Active Repositories**; "opt-in telemetry" recommended | North Star: repos with **≥ 2 authors 14 days after `init`**. **No telemetry, ever** | strategy §3, §8 |
+| Events as YAML, UUID ids, "monotonic timestamps"; `entities/`, `sprints/`, `docs/` directories | JSON events (ADR-002); ULID identity and ordering, never `ts` (I2, I7); `.kadence/` holds `events/`, `README.md`, gitignored `state.json`; documents are linked, not stored (ADR-010) | SPEC, ADRs |
+| Open: TUI stack (Ink / Bubble Tea / own) · how an agent learns of the CLI | Closed: blessed, loaded lazily (ADR-006) · `init` writes `AGENTS.md` + `CLAUDE.md`, `init --hooks` runs `prime` (ADR-009) | ADRs |
+| Phasing v0.1a headless → v0.1b TUI | Done (0.1.0 shipped both) | CHANGELOG |
+| Spike figures: 28 ms cold, 0.43 s raw read, 39 MB → 1.9 MB | Historical. Current: **199 ms** cold one-file-per-event, **21 ms** compacted, 12 ms warm at 10k events (the old "11 ms cold" was a warm read, corrected in 0.4) | CHANGELOG 0.4, `test/perf.test.ts` |
 
-Це рішення свідоме: якщо дозволити агенту писати у файли напряму, він зламає журнал подій. Читання дешеве й безпечне, запис — контрольований.
+### v1 decisions still in force
 
-🔵 **Open Question:** як саме агент дізнається про існування CLI? Варіанти: генерувати секцію в `AGENTS.md`/`CLAUDE.md` під час `kadence init`; постачати Claude Code skill; покластися на README всередині `.kadence/`. Рекомендація — перше, як найбільш універсальне.
-
-### 5.4. Структура даних
-
-```
-.kadence/
-├── README.md           # самоопис формату — точка входу для AI-агента
-├── config.yml          # статуси, воркфлоу, налаштування команди
-├── events/             # append-only журнал: джерело правди
-│   └── 2026-09/
-│       └── <uuid>.yml  # одна подія = один файл (нуль конфліктів)
-├── entities/           # задачі, епіки, історії, баги як markdown+frontmatter
-│   ├── KAD-1.md
-│   └── KAD-2.md
-├── sprints/            # визначення спринтів
-└── docs/               # проєктна документація
-```
-
-**Рішення прийнято на основі спайку 2026-09-02: один файл на подію.** Альтернатива з денним файлом дала 2 конфлікти з 3 при конкурентному append; файл на подію — 0 конфліктів навіть коли троє рухають ту саму задачу. Деталі вимірів — розділ 6.4.
-
-Спайк також показав, що наївна реалізація не вкладається в guardrail'и, тому в структуру додаються два обов'язкові елементи:
-
-```
-.kadence/
-├── state.json          # снапшот-кеш поточного стану — У .gitignore
-├── events/
-│   ├── archive/        # компакція: події старші за N місяців, файл на місяць
-│   └── 2026-09/        # «гарячі» події — файл на подію
-```
-
-- **`state.json`** — похідний кеш, перебудовується з журналу, інвалідується за хешем останньої події. Без нього CLI не вкладеться в 200 мс: читання 10k окремих файлів займає 0.43 с.
-- **`events/archive/`** — компакція старих подій у файл на місяць. Конфлікти там неможливі: старі події вже ніхто не пише. Без компакції робоча копія роздувається до 39 МБ на 10k подій.
-- **`mkdir -p` при кожному записі.** Git не версіонує порожні директорії, тому `events/2026-09/` зникає при перемиканні гілок. Покладатися на структуру з `init` не можна — відтворено двічі під час спайку.
+Append-only journal, one file per event · snapshot cache and compaction are mandatory · agents **read** files, **write** through the CLI · two branches moving one task: later ULID wins, the losing event stays visible ([state-machine](design/state-machine.md)) · identity from `git config user.email` · Node ≥ 20 is an accepted requirement · `mkdir -p` before every write · 200 ms budget for non-interactive commands · every board action calls the CLI's function.
 
 ---
 
-## 6. Success Metrics
+## 1. Summary
 
-Оскільки продукт open-source, метрики — adoption-орієнтовані, не фінансові.
-
-### 6.1. Primary Metric
-
-**Weekly Active Repositories** — кількість унікальних репозиторіїв, у яких за тиждень зафіксовано хоча б одну подію kadence.
-
-- **Поточне:** 0 (продукт не існує)
-- **Ціль:** 🔵 **Open Question** — потрібен таргет. Орієнтир для OSS dev-tool: 100 активних репо через 6 місяців після публічного релізу вважається сильним сигналом product-market fit.
-
-Чому саме ця метрика: зірки на GitHub і завантаження npm вимірюють цікавість, а не використання. Активний репозиторій — це доказ, що команда реально працює в інструменті.
-
-🔵 **Open Question:** як це виміряти в OSS-інструменті без телеметрії? Варіанти: opt-in анонімна телеметрія (ризик для довіри спільноти), публічні репо через GitHub code search по `.kadence/`, або опитування. Рекомендація — code search як базовий сигнал плюс явно opt-in телеметрія.
-
-### 6.2. Secondary Metrics
-
-| Метрика | Що показує | Орієнтир |
-|---|---|---|
-| **Retention день 7 → день 30** | Чи інструмент виживає після ентузіазму | Гіпотеза: >40% репо, активних на 7-й день, лишаються активними на 30-й |
-| **Подій на репозиторій на тиждень** | Глибина використання, а не разова спроба | >20 подій = справжня робота, <5 = експеримент |
-| **Частка команд 2+ людини** | Чи продукт масштабується за межі solo | Ціль: >50% активних репо мають 2+ унікальних авторів подій |
-| **Дії, ініційовані агентом** | Чи спрацювала головна теза продукту | 🔶 **Assumption:** якщо ця частка близька до нуля — унікальна цінність не реалізувалась |
-
-Остання метрика — найважливіша для валідації стратегії. Якщо агенти не використовують kadence, ми побудували ще один task-менеджер.
-
-### 6.3. Guardrail Metrics
-
-| Guardrail | Поріг | Чому |
-|---|---|---|
-| Мердж-конфлікти в `.kadence/` | Близько до нуля | Перший же конфлікт на борді = втрата довіри й видалення інструменту |
-| Час старту CLI/TUI | < 200 мс на 1000 задач | ✅ **Досягнуто: 28 мс** холодний старт, 7 мс теплий — на 10k подій, не 1k |
-| Розмір `.kadence/` на диску | < 5 МБ на 10k подій | ✅ **Досягнуто: 1.9 МБ** після компакції (39.1 МБ без неї) |
-| Шум у `git diff` | Кожна подія — новий файл | Якщо PR-и заповнені змінами борду, це заважає код-рев'ю |
+kadence is a journal of a team's work — tasks, decisions, notes, claims, criteria — kept as immutable JSON events in the repository beside the code. A person or any vendor's agent that opens the repository runs one command (`prime`) and knows what is in flight, what was decided and rejected, and what is ready to pick up; the state merges from any number of branches without conflict and needs no server, account or network. For teams of 3–8 developers using coding agents daily, the intended outcome is **less re-explaining between sessions, people and vendors**. Whether that loss is painful enough to adopt a journal is the unvalidated bet (§2.3).
 
 ---
 
-### 6.4. Виміряна база (спайк, 2026-09-02)
+## 2. Problem
 
-Технічний spike на 10 000 подій — реальні числа, не оцінки:
+### 2.1 Statement
 
-| Показник | Виміряно | Guardrail | Статус |
+When a developer starts an agent session on work someone else — a teammate, another machine, another vendor's agent — already touched, the session starts without knowing what was tried, decided, rejected or blocked. The human re-explains it, or the agent repeats a rejected path. Vendor memory solves this for one person on one machine; it is private, per vendor, and not in the repository ([roadmap-to-1.0 §1 "Why now"](product/roadmap-to-1.0.md)).
+
+### 2.2 Evidence
+
+| # | Evidence | Label | Source |
 |---|---|---|---|
-| Merge 3 гілок, різні задачі | 0 конфліктів | ~0 | ✅ гіпотеза тримається |
-| Merge 3 гілок, **та сама** задача | 0 конфліктів, усі 3 наміри збережені | ~0 | ✅ витримує найгірший випадок |
-| Альтернатива: append у денний файл | **2 конфлікти з 3** | — | ❌ відхилено |
-| Розмір робочої копії, 10k подій | **39 МБ** | < 5 МБ | ❌ потрібна компакція |
-| Розмір `.git` після `gc` | 8.3 МБ | — | ✅ git стискає добре |
-| `git status` на 10k файлів | 0.089 с | — | ✅ git не є вузьким місцем |
-| Читання 10k подій із диску | **0.43 с** | < 0.2 с | ❌ потрібен `state.json` |
+| E1 | 482,304 public repos with a root `AGENTS.md`; ≈ 18,000 keep agent-facing work in the repo (Beads, Backlog.md, Spec Kit, `.claude/tasks.md`) | Fact (2026-09-08) | discovery-verdict §1, §5 |
+| E2 | Beads' top complaints are losing plain files, the daemon and atomic code+issue commits (38, 25, 17, 4 reactions) | Fact | discovery-verdict §2 |
+| E3 | Backlog.md users hit duplicate sequential IDs "in production twice" with humans + a server-side agent | Fact | discovery-verdict §2 |
+| E4 | The vendor shipped Tasks, Auto Memory and Auto Dream in three months — "agents forget" is acknowledged | Fact | discovery-verdict §1 |
+| E5 | 0 requests for sprint, velocity or time tracking across 1,076 open Beads issues | Fact | discovery-verdict §3 |
+| E6 | Task-file merge conflicts in **20 of 130** repos (15.4%), **44 of 8,396** merges (0.52%); 89% of classified ones are `CONFLICT (content)`, which append-only removes | Fact | probe-a-results |
+| E7 | One task as an agent reads it: **982 bytes** today (304 with `--summary`), independent of history. Probe C measured **948 bytes** at 0.2.1, constant from 10 to 1,000 tasks while the journal grew 5 KB → 528 KB | Fact | README "What it costs you"; probe-c-agent-cost |
+| E8 | One unsolicited tech lead (n = 1, not scripted) called drifting state "a real problem", then attributed it to attention, not storage | Fact, weak | tech-lead-feedback-2026-09-10 |
+| E9 | Teams that keep work in the repo with agents **lose enough context to adopt a journal for it** | **Assumption** — Probe B **not run**: 0 interviews | probe-b-results |
+| E10 | The value appears only with a second human, machine or vendor; a solo developer is accepted, not pursued | Inference | discovery-verdict verdict |
+| E11 | Private repositories behave like the public ones measured in E1 and E6 | Assumption | probe-a limits |
 
-**Головний висновок.** Архітектурна гіпотеза (append-only усуває конфлікти) підтверджена, включно з найгіршим сценарієм. Але наївна реалізація порушує два guardrail'и: розмір і швидкість. Обидва вирішуються похідними даними — снапшот-кешем і компакцією — без зміни моделі даних. Вузьке місце — файлова система (блок 4 КБ на подію в 200 байт), не git.
+### 2.3 The bet, stated so it can fail
 
----
+> Teams of 3–8 where more than one human or agent vendor works lose context between sessions often enough that, given a journal in the repo, **a second author writes to it within 14 days without being asked.**
 
-## 7. User Stories & Requirements
-
-### 7.1. Epic Hypothesis
-
-Ми віримо, що **інструмент управління задачами, стан якого живе у файлах репозиторію**, для **tech-heavy команд 2–20 осіб, які працюють з AI-агентами**, дасть **команді та її агентам єдиний контекст без зовнішніх інтеграцій**, бо **сьогодні контекст задач фізично недоступний агенту й вимагає ручного переказу**. Ми зрозуміємо, що праві, коли **>50% активних репозиторіїв матимуть 2+ авторів подій, а частка дій, ініційованих агентами, буде ненульовою і зростатиме**.
-
-### 7.2. User Stories — MVP
-
-**KAD-S1. Ініціалізація проєкту**
-*Як розробник, я хочу поставити kadence у свій репозиторій однією командою, щоб почати вести задачі без налаштувань.*
-
-- [ ] `npx kadence init` створює `.kadence/` із базовою структурою
-- [ ] Генерується `config.yml` зі статусами за замовчуванням (Todo, In Progress, In Review, Done)
-- [ ] Генерується `.kadence/README.md`, що описує формат для AI-агента
-- [ ] Команда ідемпотентна: повторний запуск не руйнує наявні дані
-- [ ] Якщо директорія не є Git-репозиторієм — попередження, але робота дозволена
-
-**KAD-S2. Створення задачі**
-*Як розробник, я хочу створити задачу з терміналу за секунди, щоб не втратити думку.*
-
-- [ ] `kadence task add "текст"` створює задачу з автоматичним ID (`KAD-N`)
-- [ ] Підтримуються прапорці: `--priority`, `--assignee`, `--estimate`, `--tag`, `--type`
-- [ ] Задача потрапляє в беклог, якщо не вказано спринт
-- [ ] Створюється подія в журналі з автором (з `git config user.email`) і часовою міткою
-- [ ] `--json` повертає створену сутність машиночитно
-
-**KAD-S3. Kanban-борд у терміналі**
-*Як розробник, я хочу бачити борд поточного спринта в терміналі, щоб не відкривати браузер.*
-
-- [ ] `kadence board` відкриває інтерактивний TUI з колонками зі `config.yml`
-- [ ] Навігація клавіатурою між задачами й колонками
-- [ ] Переміщення задачі між колонками записує подію
-- [ ] Видно assignee, пріоритет, естімейт на картці
-- [ ] Рендер борду з 500 задачами — менше 200 мс
-- [ ] Коректна поведінка при вузькому терміналі (< 80 колонок)
-
-**KAD-S4. Робота зі спринтом**
-*Як тех-лід, я хочу зібрати спринт із беклогу, щоб команда знала обсяг ітерації.*
-
-- [ ] `kadence sprint create --name --start --end`
-- [ ] `kadence sprint add KAD-12 KAD-13` переносить задачі з беклогу
-- [ ] `kadence sprint close` фіксує закриття; незавершені задачі повертаються в беклог або переносяться
-- [ ] Одночасно активний лише один спринт (обмеження MVP)
-- [ ] Після закриття доступна сума виконаних естімейтів
-
-**KAD-S5. Контракт для AI-агента**
-*Як розробник, я хочу, щоб мій AI-агент бачив спринт і міг рухати задачі, щоб не переказувати контекст вручну.*
-
-- [ ] Кожна команда підтримує `--json` зі стабільною схемою
-- [x] Компактний зріз стану однієї задачі, придатний для вставки в промпт — це `task show --json`: 948 байт, не росте з розміром проєкту ([Probe C](research/probe-c-agent-cost.md)). Окрему команду `kadence context` прибрано 2026-09-07 як дублікат
-- [x] Контракт публікується машинно: `kadence schema --json` — команди, обов'язкові поля, коди помилок
-- [x] Помилка несе `error.code`, а де множина відома — `allowed`
-- [x] Відповідь можна звузити: `--fields` на `board --json` і `task list --json`
-- [ ] `.kadence/README.md` явно забороняє пряме редагування `events/`
-- [ ] Події, створені агентом, помічаються джерелом (`source: agent`)
-- [ ] Схема JSON версіонована — зміни не ламають існуючі інтеграції
-
-**KAD-S6. Цілісність під конкурентним доступом**
-*Як член команди, я хочу, щоб паралельна робота в різних гілках не створювала конфліктів на борді.*
-
-- [ ] Дві гілки з незалежними змінами борду мерджаться без конфлікту
-- [ ] Кожна подія має UUID і монотонну часову мітку
-- [ ] Стан вираховується детерміновано: однаковий журнал → однаковий борд
-- [ ] Конфліктні наміри (двоє рухають ту саму задачу) розв'язуються за правилом last-write-wins із збереженням обох подій в історії
-
-### 7.3. Обмеження та edge cases
-
-- **Один активний спринт** у MVP — множинні команди/дошки поза скоупом.
-- **Ідентичність користувача** береться з `git config user.email`. 🔵 **Open Question:** що робити, коли пошта не налаштована або відрізняється між машинами.
-- **Годинники розходяться між машинами** — часові мітки не можна вважати надійним порядком. Потрібен логічний лічильник або сортування з урахуванням causality.
-- **Дуже великий журнал** (>50k подій) — потрібна стратегія компакції у снапшоти.
-- **Rebase / squash історії** може переписати або втратити події. 🔵 **Open Question:** це реальний ризик втрати даних, який потребує окремого рішення.
-- **Node.js як залежність** — команди без Node не зможуть поставити інструмент. Прийнятне обмеження для цільової аудиторії.
+Tested by Probe B (verdict **2026-10-19**) and concierge pilots (gate **2026-11-13**); thresholds in [strategy §4](product/strategy.md). If it fails, [roadmap-to-1.0 §8](product/roadmap-to-1.0.md) describes the narrower product.
 
 ---
 
-## 8. Out of Scope
+## 3. Target users
 
-### 8.1. Не входить у v0.1
+Taken from [strategy §1](product/strategy.md); not redefined here.
 
-| Що | Чому не зараз |
+| | Who |
 |---|---|
-| **Web UI / `kadence serve`** | Рішення прийнято: пізніше. Але це блокує Secondary-персону (PM Поліна) — вона не стане активним користувачем без візуального дашборду. Отже, це перший кандидат на v0.2. |
-| **Gantt-діаграма** | Цінна для PM, але без базового борду безглузда |
-| **Епіки та user stories як окремі сутності** | У MVP усе — задача з полем `type`. Ієрархія додається після валідації базового флоу |
-| **Time tracking** | Потребує окремого UX (старт/стоп/правки) — свій цикл розробки |
-| **Звіти й аналітика (velocity, burndown)** | Дані вже збираються журналом із першого дня; візуалізація — після накопичення реальних даних |
-| **MCP-сервер** | CLI + `--json` покриває агентів універсальніше. MCP — оптимізація для однієї екосистеми |
-| **Множинні спринти / кілька команд** | Ускладнює модель даних без доведеної потреби |
-| **Інтеграції (GitHub Issues, Slack, Jira import)** | Кожна — окремий продукт. Міграція з Jira критична для adoption, але не для валідації |
+| **Account (ICP)** | Product company or agency, **3–8 developers** on shared repositories (company ~5–60); **≥ 2 use Claude Code, Cursor or Codex daily**; Ukraine, Poland/EU, or English-speaking remote |
+| **Buyer / adopter** | **P1** tech lead, staff/senior or founding engineer — writes `CLAUDE.md`, can add `.kadence/` alone · **P2** CTO or head of engineering under 30 people · **P3** engineering manager — intro, not pitch |
+| **Daily users** | Developers (dozens of small commands a day) · **coding agents** (a first-class consumer of the same contract) |
+| **Readers** | Manager, PM, stakeholder — read exports and reports, rarely write |
+| **Triggers** | team went from 1 to 3 agent users · new hire onboarded · a rejected approach came back · `CLAUDE.md` passed ~200 lines · Beads' Dolt migration · a Backlog.md ID collision |
+| **Not for** | solo developers (as a segment) · > 20 developers asking for SSO · Jira/Linear mandate with nothing in the repo · no daily agent use · no Node ≥ 20 |
 
-### 8.2. Фазовість MVP під соло-розробника
-
-Скоуп v0.1 із розділу 5 — це 6 історій, з яких kanban TUI найдорожча. Для одного розробника з частковою зайнятістю це надто довгий шлях до першого зворотного зв'язку. Тому v0.1 ділиться надвоє:
-
-**v0.1a — headless CLI (перший публічний реліз)**
-Історії KAD-S1, S2, S4, S5, S6. Задачі, беклог, спринт, event log, `--json`, контракт для агента. Виводу — прості таблиці в stdout, без інтерактиву.
-*Чому спочатку це:* тестує головну тезу продукту (агент має контекст) без найдорожчої частини. Якщо теза хибна, ти дізнаєшся про це, не написавши жодного рядка TUI.
-
-**v0.1b — kanban TUI**
-Історія KAD-S3. Додається після того, як модель даних доведена в бою.
-*Чому потім:* TUI — це UX-робота, яка має сенс лише на стабільній моделі даних. Переписувати борд через зміну схеми подій — найдорожча можлива помилка.
-
-### 8.3. Дорожня карта після MVP
-
-- **v0.2:** `kadence serve` — локальний веб-дашборд для PM; епіки та ієрархія; time tracking
-- **v0.3:** звіти (velocity, burndown, estimate accuracy, cycle time); Gantt
-- **v1.0:** MCP-сервер; імпорт з Jira/Linear/GitHub Issues; множинні дошки
+Doors, in order of evidence: (1) agent-using teams via direct outreach, (2) Beads leavers and Backlog.md teams, (3) multi-vendor teams.
 
 ---
 
-## 9. Dependencies & Risks
+## 4. Jobs
 
-### 9.1. Залежності
-
-| Залежність | Статус | Примітка |
+| ID | Job story | Who |
 |---|---|---|
-| Node.js 20+ у користувача | Зовнішня | Прийнятна для цільової аудиторії |
-| Git у репозиторії | М'яка | Працює і без Git, але втрачає половину цінності |
-| TUI-бібліотека | Технічний вибір | 🔵 **Open Question:** Ink (React, знайомий стек, повільніший старт) vs Bubble Tea (Go, швидкий, але міняє мову) vs власний рендер |
-| Ресурси розробки | **Соло-розробник, часткова зайнятість** | Один автор. Прямо визначає скоуп — див. переглянуту фазовість MVP у розділі 8 |
-
-### 9.2. Ризики
-
-| Ризик | Ймовірність | Вплив | Мітигація |
-|---|---|---|---|
-| **GitHub Issues «достатньо добрі»** — користувачі не бачать причини мігрувати | Висока | Критичний | Валідувати ще до розробки: 6–10 інтерв'ю саме про контекст для агентів. Якщо біль не підтвердиться — переглянути позиціонування |
-| **Мердж-конфлікти все одно виникають** на порядку карток чи конфігурації | Середня | Критичний | Порядок карток вивести в похідні дані, не зберігати як стан; тестувати конкурентні сценарії з першого дня |
-| **Роздування репозиторію** тисячами файлів подій | Середня | Високий | Компакція в снапшоти; бенчмарк на 50k подій до релізу |
-| **Агенти не використовують інструмент** — головна теза не спрацьовує | Середня | Критичний | Метрика «дій від агента» з першого дня; генерація секції в `AGENTS.md` під час init |
-| **Rebase/squash втрачає події** | Середня | Високий | Документувати обмеження; розглянути зберігання подій поза основною історією |
-| **Розробники не хочуть коммітити стан задач** — шум у PR | Середня | Високий | Опція окремої гілки для `.kadence/`; налаштування `.gitattributes` для приховування з diff |
-| **Соло-розробник вигорить** — підтримка OSS коштує часу понад розробку | Висока | Високий | Реліз малим і рано; явно позначити проєкт як «підтримується в міру можливості»; не обіцяти SLA на issues |
-| **Bus factor = 1** | Висока | Середній | Ризик приймається свідомо. Мітигація — якість документації: щоб проєкт можна було підхопити ззовні |
-| **MVP-скоуп нереалістичний для соло** — TUI сам по собі великий | Висока | Високий | Розбити v0.1 на дві фази: headless CLI, потім TUI (розділ 8) |
-| **AGPL блокує корпоративне adoption** — сканери ліцензій відхиляють залежність | Середня | Середній | `LICENSING.md` з поясненням меж copyleft до релізу |
-| **Гіпотезу не валідовано** — проблема може виявитись несуттєвою | Середня | Критичний | Прийнято свідомо. Компенсація: ранній публічний реліз як заміна інтерв'ю; метрика «дій від агента» як перший чесний сигнал |
+| **J1** | When I start an agent session on work someone else started, I want the agent to already know what was tried, decided and blocked, so I don't re-explain and it doesn't repeat a rejected path | Dev, Agent (primary job, strategy §1) |
+| **J2** | When I make a choice or learn something, I want to record it in one command next to the work, so the next person or agent finds it without asking me | TL, Dev, Agent |
+| **J3** | When several people and agents work in parallel, I want to know what is ready and who holds what, so two of us don't do the same task | Agent, Dev, TL |
+| **J4** | When I plan or review, I want to see flow, stuck work and sprint cost from what actually happened, so I don't fill in forms | TL, Mgr |
+| **J5** | When someone outside the repo needs the state, I want to hand them a file or an issue, so they don't need the CLI | TL, Mgr |
+| **J6** | When branches merge, I want the work state to merge without conflicts or silent wrong IDs, so I can trust it | everyone, implicitly |
+| **J7** | When I adopt or switch, I want to go from README to a working journal with an agent reading it in minutes, so trying it is not a project | TL |
 
 ---
 
-## 10. Open Questions
+## 5. Goals and non-goals
 
-Три раніше блокувальні питання закриті 2026-09-02: ліцензія — **AGPL-3.0**; ресурси — **соло, часткова зайнятість**; валідація — **свідомо пропущена**. Залишились технічні рішення, які треба прийняти до відповідних етапів реалізації.
+### Goals to 1.0
 
-| # | Питання | Чому важливо | Коли треба відповідь |
-|---|---|---|---|
-| 1 | Вибір TUI-стеку: Ink vs Bubble Tea vs власний рендер | Впливає на швидкість старту й мову проєкту | До v0.1b |
-| 2 | Як агент дізнається про CLI (`AGENTS.md` / skill / README) | Реалізація головної тези продукту | До v0.1a |
-| 3 | Стратегія при rebase/squash історії | Ризик втрати даних | До v0.1a |
-| 4 | Ідентичність, коли `git config user.email` не налаштований | Edge case з реальною частотою | До реалізації подій |
-| 5 | Як вимірювати adoption без телеметрії | Без цього немає метрик успіху | До публічного релізу |
-| 6 | Чи монетизувати в майбутньому (open core) | AGPL цю опцію зберігає; рішення не термінове | Після v1.0 |
+1. **Answer the bet** (G2) before building beyond it — Probe B, then pilots.
+2. **Reach a second author** in teams we do not control (North Star; G1).
+3. **Freeze and prove the contract** — event format, `.kadence/` layout, `--json`, error codes (G3).
+4. **Survive real size and every claimed platform** (G4, G5) without breaking the 200 ms budget.
+5. **Make every public number sourced** (G6) and every TUI screen used by a human before release (G7).
 
-### Закриті рішення
+### Non-goals
 
-| Питання | Рішення | Дата |
+| Not doing | Why | Source |
 |---|---|---|
-| Ліцензія | AGPL-3.0 | 2026-09-02 |
-| Ресурси | Соло-розробник, часткова зайнятість | 2026-09-02 |
-| Discovery-валідація | Пропущена свідомо; заміна — ранній публічний реліз | 2026-09-02 |
-| Модель даних | Append-only event log | 2026-09-01 |
-| Контракт з агентом | Читання з файлів, запис через CLI | 2026-09-01 |
-| Web UI | Відкладено до v0.2 | 2026-09-01 |
-| Гранулярність журналу | **Файл на подію** — підтверджено спайком | 2026-09-02 |
-| Снапшот-кеш і компакція | Обов'язкові; без них guardrail'и недосяжні | 2026-09-02 |
+| Hosted core, accounts, telemetry, any network in the core | The promise; network lives only in separate packages | CLAUDE.md, ADR-012 |
+| Two-way sync with GitHub Issues or Jira | A mediocre bridge; one-way publish is the experiment | roadmap-to-1.0 §7 |
+| A web server / web UI | Contradicts "no server"; static export instead | same |
+| Timers or manual time tracking; hours or capacity in workload; averages in any report | Time is derived from events; ranges, not means (DEC-9) | same; inventory §2(f) |
+| `delegated`/`automated` context levels | Need a daemon | roadmap-to-1.0 §7 |
+| Storing documents | Git versions them; kadence links | ADR-010 |
+| `kadence context <task>` | `task show --json` already is it | Probe C; inventory |
+| `llms.txt`, editor extensions, competing with Spec Kit on specs | No evidence / a third surface / a different job | roadmap-to-1.0 §7 |
+| Committing, pushing, editing or deleting events for the user; `state.json` in git | Append-only honesty; the human owns git | CLAUDE.md |
+| Solo developers and > 20-person orgs as target segments | Value needs a second author; SSO is a different product | strategy §1 |
+| **Not required for 1.0:** MCP package, web UI, single binary, importer | May arrive if earned; none is a gate | roadmap-to-1.0 §2 |
 
 ---
 
-## 11. Self-Assessment
+## 6. Success metrics
 
-### Найсильніший розділ
-**Розділ 5 (Solution Overview)** — архітектурне рішення про append-only журнал зв'язне й вирішує одразу три проблеми: конфлікти, аудит і аналітику. Дворівневий контракт з агентом (читання з файлів, запис через CLI) конкретний і реалізовний.
+Defined in [strategy §3](product/strategy.md); the weekly scorecard is [strategy §5](product/strategy.md). Not duplicated here.
 
-### Найслабший розділ
-**Розділ 2 (Problem Statement)** — і це не дрібниця. У ньому **немає жодного доказу**: ні інтерв'ю, ні аналітики, ні цитат користувачів. Увесь PRD стоїть на гіпотезі, що біль реальний. Це нормально для pre-discovery документа, але означає, що переходити до розробки без валідації — ризиковано.
+| Level | Metric | Target (source: strategy) |
+|---|---|---|
+| **North Star** | Repositories whose `.kadence/events` holds entries from **≥ 2 authors 14 days after `init`** — observed via public repos, consented pilot check-ins; no telemetry | ≥ 2 incl. ≥ 1 public by **2027-01-18** (KR 7.1); ≥ 5 public for G1 (realistic Q2 2027) |
+| O1 Discovery | Interviews by script, verdict published | ≥ 5 by Oct 16, verdict Oct 19 |
+| O3 Pilots | Second author at day 14 · self-serve README → `task add` + agent `prime` in ≤ 10 min | ≥ 2 of 3 · 4 of 5 people, by Nov 13 |
+| O4/O5 Proof | Copies ÷ visits after one Show HN · skill package listed | ≥ 5% by Nov 24 · 2 marketplaces by Nov 6 |
+| Counter-metric | Interviews where **we** named the problem first | **0** |
+| Product guardrails | 200 ms budget (§9) · 0 conflicts in the three-branch merge test · `prime` ≤ 40 lines and ≤ 3 KB · `--json` valid past 128 KiB on a pipe | tests in `test/perf.test.ts`, `test/integration/merge.test.ts` |
 
-### Три припущення, які треба перевірити першими
+---
 
-1. **Команди відчувають брак контексту для агентів як біль**, а не як дрібну незручність. Якщо ні — унікальна цінність зникає, і kadence стає ще одним task-менеджером у переповненій категорії.
-2. **Цінність «стан у репо» переважує зручність уже встановленого GitHub Issues.** Найризикованіше припущення продукту.
-3. **Append-only журнал справді усуває конфлікти на практиці**, а не лише в теорії. Технічна перевірка, яку можна зробити прототипом за кілька днів.
+## 7. Requirements by job
 
-### Рекомендований наступний крок
+Status: **Shipped (version)** · **Unreleased** (in the working tree) · **Planned (gate/phase)** · **Not doing**. Detail lives in `--help` and `kadence schema --json`; this table states the capability.
 
-Валідацію пропущено свідомо, тому шлях — прямо в реалізацію, але з правильним порядком.
+### J1 — Resume with shared context
 
-**0. Probe A — археологія git. ✅ виконано 2026-09-02.** Відтворено 8 396 злиттів зі 130 публічних репозиторіїв на файлових трекерах. Конфлікти в задачах — у 15.4% репозиторіїв (0.52% злиттів): не спростовано, але й не підтверджено. 89% із них — `CONFLICT (content)`, тобто саме той тип, який append-only усуває. Деталі: [probe-a-results](research/probe-a-results.md). **Наступний крок — Probe B: інтерв'ю з 20 командами, де це траплялось.**
+| ID | Requirement | Status |
+|---|---|---|
+| R1.1 | `prime [--json]`: active sprint and days left, my work, ready count, decisions in force, last 5 notes, an attention line when warranted; ≤ 40 lines, ≤ 3 KB | Shipped 0.4.0 |
+| R1.2 | `init --hooks` upserts a `SessionStart` hook that runs `prime` | Shipped 0.4.0 |
+| R1.3 | `init` writes a marked, non-duplicating section into `AGENTS.md` and `CLAUDE.md`, and `.kadence/README.md`; human text left alone | Shipped 0.1.0 / 0.2.1 |
+| R1.4 | `task show [--json]`: history, comments, decisions, docs, notes, claim, criteria — size independent of history (982 B) | Shipped 0.1.0, extended 0.4.1 |
+| R1.5 | `task list --branch [--base]`: tasks touched on this branch, derived from git, never stored | Shipped 0.4.1 |
+| R1.6 | `init` section length under a guardrail test | Planned (G7) |
+| R1.7 | Agent skill package (`SKILL.md` ≤ 60 lines) in marketplaces that list Beads | Planned (O5, Nov 6) |
+| R1.8 | `kadence context <task>`; MCP server by default | Not doing (MCP conditional, 0.6) |
 
-**1. Технічний spike на event log — ✅ виконано 2026-09-02.** Гіпотеза підтверджена: 0 конфліктів навіть у найгіршому сценарії. Знайдено дві проблеми масштабу (39 МБ, 0.43 с), обидві вирішуються похідними даними без зміни моделі. Числа — розділ 6.4.
+### J2 — Capture work, decisions and learning
 
-**2. Специфікація ядра.** Схема події, схема сутності, правила згортання журналу в стан, версіонування JSON-контракту. Для соло-розробника це не бюрократія, а спосіб не переписувати сховище на третьому місяці.
+| ID | Requirement | Status |
+|---|---|---|
+| R2.1 | `task add/edit/move/assign/comment/cancel/delete/parent`, types, priorities, estimates, due dates, templates | Shipped 0.1.0 |
+| R2.2 | `task delete` writes `task.deleted` and says plainly it cannot erase | Shipped 0.1.0 |
+| R2.3 | Labels travel as `label_added/removed` deltas so concurrent branches keep both | Shipped 0.4.1 (ADR-013) |
+| R2.4 | `decision add --why` (required) `--rejected` (repeatable) `--supersedes` (one event) `--task --doc`; `DEC-N` derived | Shipped 0.3.0; repeat-flag crash fix Unreleased |
+| R2.5 | `note "text" [--task]` for things learned that were never a choice | Shipped 0.4.0 |
+| R2.6 | Acceptance criteria `task ac add/check/uncheck/list`; DoD copied into new tasks; moving to done with open criteria warns and proceeds | Shipped 0.4.1 |
+| R2.7 | `task ac remove`; DoD that fits non-code tasks | Open (known gap, CHANGELOG notes) |
+| R2.8 | `task doc add` creates from a template if missing and links; path contained to the repo | Shipped 0.4.1 (ADR-010) |
+| R2.9 | `source` human/agent on every event, comment, history line, decision and note via `KADENCE_SOURCE=agent` | Shipped (events 0.1.x → comments 0.4.1) |
 
-**3. Реалізація v0.1a (headless CLI)** — доводить головну тезу без найдорожчої частини.
+### J3 — Coordinate humans and agents
 
-**4. Ранній публічний реліз.** Оскільки інтерв'ю не буде, реліз — це і є акт валідації. Чим раніше він вийде, тим дешевше коштуватиме помилка в гіпотезі.
+| ID | Requirement | Status |
+|---|---|---|
+| R3.1 | `ready`: open, unblocked, unclaimed, before the started column; priority then age; empty result says why | Shipped 0.4.0 (fixed 0.4.1) |
+| R3.2 | `task claim [KAD-N]` / `release`; no lock — concurrent claims read `contested`, earliest ULID holds | Shipped 0.4.0 (ADR-011) |
+| R3.3 | Dependencies `task block/unblock`; cycles reported, not rejected | Shipped 0.1.0 |
+| R3.4 | Sprints `create/add/edit/start/close/status/list`; milestones `MS-N` with points progress | Shipped 0.1.0 / 0.4.1 |
+| R3.5 | Custom columns (`done` required); `board config --started` | Shipped 0.1.0 / 0.4.1 |
+
+### J4 — See the work and its cost
+
+| ID | Requirement | Status |
+|---|---|---|
+| R4.1 | Interactive board `ui` (keyboard, mouse, drag; `R` ready, `C` claim, `b` branch, `M` milestone, criteria checklist); every action calls the CLI function | Shipped 0.1.0 + 0.4.1 |
+| R4.2 | `board [--json]`, `stats`, shell completion (zsh, bash, fish) | Shipped 0.1.0 / 0.4.1 |
+| R4.3 | `sprint close/burndown`: velocity in points, actual hours from moves, hours per point, carry-over; rebuilt for any day | Shipped 0.1.0 |
+| R4.4 | `report flow/cfd/attention` — percentiles, never means; each names its window and started boundary | Shipped 0.4.1 |
+| R4.5 | `report burndown/velocity/workload`, `report --list`; velocity as low/median/high (DEC-9); flag strictness (DEC-10) | Unreleased |
+| R4.6 | Burnup, time in status, epic rollup (in that order); Monte Carlo forecasting | Planned, unscheduled (reports-discovery) |
+
+### J5 — Share outside the repo
+
+| ID | Requirement | Status |
+|---|---|---|
+| R5.1 | `board export --html`: one self-contained file, no external request (tested), light/dark | Shipped 0.4.1 (experiment with kill condition) |
+| R5.2 | `board export --md [--readme]` updates a marked README section, never creates a README | Shipped 0.4.1 |
+| R5.3 | `report <name> --html`: inline SVG charts, each followed by its data rows (DEC-7, DEC-8) | Unreleased |
+| R5.4 | `@kadence/github publish`: one-way via `gh`, duplicate-safe marker, never reads back; credential stays with `gh` | Shipped (package 0.1.0, experiment; ADR-012) |
+| R5.5 | Two-way sync; Jira; web server | Not doing |
+
+### J6 — Trust the repository
+
+| ID | Requirement | Status |
+|---|---|---|
+| R6.1 | One JSON file per event, append-only; three branches editing one task merge in every order with 0 conflicts and identical state | Shipped 0.1.0 (integration test) |
+| R6.2 | Conflicts surfaced, never rejected: cycles, removed columns, events for unmerged tasks, contested claims | Shipped 0.1.0 / 0.4.0 |
+| R6.3 | `state.json` cache, gitignored, versioned and pinned to the projected shape | Shipped 0.1.0 / 0.3.1 |
+| R6.4 | `compact [--keep-months] [--dry-run]`; archives merged by id | Shipped 0.4.1 — caveat: compact on one branch and merge before compacting on another |
+| R6.5 | Writes contained to the repo (`task doc add`, `--file`) | Shipped 0.4.1 |
+| R6.6 | `doctor` (rebuild, verify, report); compaction tested on a real-size journal in CI | Planned (G5) |
+| R6.7 | Rebase strategy test; identity when one person's `user.email` differs across machines | Open (SPEC §9) |
+
+### J7 — Adopt, install, switch
+
+| ID | Requirement | Status |
+|---|---|---|
+| R7.1 | `npx kadence init` in a git repo, Node ≥ 20; 1 runtime dependency (blessed, TUI only) | Shipped 0.1.0 |
+| R7.2 | First-run fixes from pilot hesitations | Planned (O3 KR 3.5, ≥ 3 by Nov 13) |
+| R7.3 | Reference docs generated from the binary (`dist/reference.json`), not typed | Unreleased (generator); site use Planned (G6) |
+| R7.4 | Install matrix npm/pnpm/yarn/bun on macOS, Linux, **Windows**; Homebrew tap | Planned (G4) |
+| R7.5 | Backlog.md importer, then Beads `issues.jsonl` importer | Planned (0.6) — only if the Oct 19 gate passes; Backlog.md by Dec 11 (KR 6.2) |
+| R7.6 | Single binary (Bun compile / Node SEA), winget, scoop | Planned (measure once in 0.7, then decide) |
+| R7.7 | Core published as a library for third-party viewers | Planned (Later, no date) |
+
+---
+
+## 8. Agent contract
+
+The contract is what agents depend on; changing it is **ask first** (CLAUDE.md). ADR-009.
+
+| ID | Requirement | Status |
+|---|---|---|
+| A1 | `--json` on every command; `schema: "kadence/v1"`; stdout carries JSON only, warnings to stderr; exit codes 0/1/2 | Shipped 0.1.0 |
+| A2 | **Additive only**: fields and error codes are added, never renamed or removed | Shipped (policy + schema test); written deprecation policy Planned (G3) |
+| A3 | Every failure carries `error.code` (15 codes today) and `received` / `allowed` / `hint` where knowable | Shipped 0.2.1–0.2.2 |
+| A4 | `schema --json` works outside a repo and publishes exit codes, env, errors, shapes and commands | Shipped 0.2.1 |
+| A5 | `schema --json` covers **every** shipped command — today it lists 40 entries and omits e.g. `sprint add/edit/start/list/burndown`, `template *`, `completion`, `ui`, `task parent/unblock/cancel/delete` | **Gap**, Planned (G3) |
+| A6 | Response size independent of history: `task show` 982 B; `board --json --summary` (1,000 tasks: 275 KB vs 855 KB full); `--fields` (200 tasks: 130,799 B → 11,015 B) | Shipped 0.2.1 / 0.4.1 |
+| A7 | `board --json` in full stops growing with history (pagination or projection) | Planned (G5) |
+| A8 | Responses of any size arrive complete through a pipe (synchronous write; regression test past 128 KiB) | Shipped (Probe C fix) |
+| A9 | Agents read files, write only through the CLI; `KAD-N` is not in events, so the CLI is the only bridge from a human's reference to data | Shipped (I7, Probe C finding 2) |
+| A10 | `KADENCE_SOURCE=agent` separates a person from their agent sharing one git identity | Shipped |
+| A11 | 0.x fixture corpus: events from every 0.x release fold to the same state | Planned (G3) |
+| A12 | No `retryable` field | Open — no user has asked |
+
+---
+
+## 9. Invariants and performance budget
+
+Numbered as in [state-machine.md](design/state-machine.md). Each has tests; a failing one is fixed in code, never in the test.
+
+| ID | Invariant | Why it exists |
+|---|---|---|
+| **I1** | The same events fold to the same state, whatever order the files are read in | Two developers on one commit must see one board; conflicts are surfaced, not rejected, or state would depend on merge order |
+| **I2** | Ordering comes from the ULID, never from `ts` | Clocks disagree between machines |
+| **I6** | Deleting `.kadence/state.json` changes nothing | It is a cache, never a source of truth |
+| **I7** | A task's identity is its ULID; `KAD-N` is derived while folding and never stored | Probe A: `add/add` ID collisions are silent wrong references (E3, E6) |
+
+**200 ms is a hard budget for non-interactive commands** (the TUI is exempt; blessed is lazy and CI checks it never enters `dist/cli.js`). Core stays synchronous with zero runtime dependencies (ADR-003, ADR-005).
+
+| Measure | Value | Source |
+|---|---|---|
+| Startup (`--version`) | 60–70 ms; commands ≈ 95–100 ms | README, CHANGELOG 0.4 |
+| 10k events, cold, one file per event | 199 ms — **at the budget** | `test/perf.test.ts`, CHANGELOG 0.4 |
+| 10k events, cold compacted / warm | 21 ms / 12 ms | same |
+| `ready`, branch range, cold with archive | < 200 ms (test) | `test/perf.test.ts` |
+| Flow, CFD, attention | < 50 ms (test) | same |
+| Journal at 10k events | < 5 MB (test) | same |
+
+**Inference:** without compaction a 10k-event repo sits on the budget; `compact` is therefore part of the performance requirement, not an optimisation. Re-measure after any core change.
+
+---
+
+## 10. Risks
+
+| Risk | Kind | Early warning | Mitigation | Source |
+|---|---|---|---|---|
+| **The owner never sends outreach; shipping replaces talking** | Tiger | < 40 touches by Sep 22; more `src/` commits than touches (27 vs 0, Sep 8–16) | Send before code; feature freeze until 40 sent; freeze except bug fixes to Oct 19 | strategy §4, §9 |
+| Bet fails: nobody names context loss | Tiger | < 2 dated stories in first 3 calls | Oct 19 gate → lead with conflict-freedom for switchers, or importers only | strategy §4 |
+| Pilots never get a second author | Tiger | day 7 shows one actor | Install with two people present; first handoff via `decision` + `prime` | strategy §9 |
+| Beads ships a plain-file mode | Tiger | markdown-backend RFC with a working branch exists | Speed to G1, not code; merge proof and zero deps become the headline | roadmap-to-1.0 §10 |
+| A vendor ships committed, project-scoped memory | Tiger | vendor announcement | Differentiation narrows to cross-vendor and cost analytics | roadmap-to-1.0 §8 |
+| Drift claim over-promises: the journal only knows what gets written | Product | tech lead's pushback | Say the limit in copy; `attention` report surfaces staleness | tech-lead-feedback |
+| TUI and outside-world boundaries ship bugs past a green suite (5 so far) | Quality | — | Test at real size; run `kadence ui` by hand before release (G7) | CLAUDE.md |
+| Bulk delete by `KAD-N` in a loop hits wrong rows (labels shift) | Product sharp edge | — | Delete by ULID or one at a time; documented | CHANGELOG notes |
+| Compaction on two branches | Product sharp edge | — | Compact, merge, then compact elsewhere; `doctor` planned | inventory §4 |
+| Solo maintainer; name taken by a WordPress builder | Elephant / paper tiger | — | Kill criteria written in advance (§12); outreach does not go through search | roadmap-to-1.0 §10, strategy §9 |
+| Rebase or squash rewrites event history | Open | — | Rebase test before 1.0 | SPEC §9 |
+
+---
+
+## 11. Open questions
+
+| # | Question | Answered by | When |
+|---|---|---|---|
+| Q1 | Do multi-author / multi-vendor teams lose enough context to keep a journal? | Probe B | 2026-10-19 |
+| Q2 | Does a second author appear without the owner pushing? | Concierge pilots | 2026-11-13 |
+| Q3 | Would Beads / Backlog.md users switch, not just complain? | `/from-beads` fake door, Oct 19 importer gate | Nov 9 / Oct 19 |
+| Q4 | How much time does the journal save an agent task? No speed claim until measured | Probe E | 0.5 |
+| Q5 | Is `board --json` fixed by pagination or projection? | G3/G5 design | 0.7 |
+| Q6 | Rebase strategy; identity across one person's machines | Tests + ADR | before 1.0-rc |
+| Q7 | Should DoD be per task type; is `task ac remove` needed? | Pilot feedback | P2 |
+| Q8 | Owner decisions still open: 8 vs 10 GTM hours, the Sep 22 gate wording, warm follow-up rule, what a Probe B "no" does to the project | Owner | strategy §7 |
+
+---
+
+## 12. Release plan 0.5 → 1.0
+
+Versions are ordered by gates, not dates, except where [strategy §4](product/strategy.md) sets one. Feature work is subordinate to discovery until **2026-10-19**.
+
+| Release | Outcome | Contents | Gate that opens it |
+|---|---|---|---|
+| **0.4.2 — before Pilot 0** | The repeated-`--rejected` crash is not on npm when a stranger first runs `decision add` | the fix already in the working tree; release notes do **not** lead with the unreleased reports | before **Sep 25** |
+| **0.5 — the second author** (cut by **Nov 6**) | A team that has never heard of us gets from README to a journal an agent reads — and a teammate writes to it — alone | Teammate path: `npx` fallback when `kadence` is missing on their machine; the `init` section teaches `decision add --why`, `note`, `claim`; a first run that leads with context, not sprints (`prime`, `task add` warning, `--help` order, README quickstart); `schema --json` lists every shipped command (A5); documented removal of everything `init` touches; first-run fixes from pilots (R7.2); skill package (R1.7). Unreleased reports ride along **present, not advertised** — report freeze until Oct 19 ([product-icp-fit](product/product-icp-fit-2026-09.md), [strategy §1](product/strategy.md)) | Execution gate Sep 22 passed; pilot hesitations logged (from Sep 25); runs on the Nov 13 self-serve test and Nov 17 Show HN |
+| **0.6 — the doors in** | A team on Backlog.md or Beads carries its history over in one command | Backlog.md importer (Dec 11), Beads importer; `/compare` pages only once importers exist; MCP package only for a named user who cannot run a CLI | **Oct 19:** ≥ 2 interviewees on a file tracker describe switching cost; `/from-beads` ≥ 2 bookings by Nov 9. Otherwise importers → Later |
+| **0.7 → 1.0-rc — hardening** | Others can depend on the format | G3: fixture corpus, compatibility suite, deprecation policy, complete `schema --json` (A5, A11); G5: `board --json` bounded (A7), `doctor`, real-size compaction in CI; G4: Windows CI, Homebrew tap; single binary measured once; G7: `init` length test, TUI checklist on the RC | Pilots gate Nov 13 and public-proof gate Nov 20 read; kill-clock review **2027-01-18** says continue |
+| **1.0.0** | Someone we do not control depends on it, and we can be held to the contract | `1.0.0-rc.1` sits with no contract change for a stated period, then 1.0; sponsorship turned on | **All of G1–G7** ([roadmap-to-1.0 §2](product/roadmap-to-1.0.md)). G1 (≥ 5 public repos with 2 authors at day 14 + ≥ 5 Probe B conversations) realistic **Q2 2027** (strategy §3). G1 and G3 are not lowered |
+
+**If the bet fails (Oct 19 stop row):** 0.5 still ships (first run, docs), 0.6 narrows to importers for switchers, and the product becomes a conflict-free journal with sprint cost for a narrower segment. **Kill criteria** (all four true on 2027-01-18: < 20 visible inits, 0 public second-author repos, 0 inbound, nobody named context loss unprompted) → README says "finished portfolio piece" ([strategy §4](product/strategy.md)).
+
+---
+
+## 13. Self-assessment
+
+- **Strongest section:** §8–§9. The contract and invariants are shipped, tested and measured.
+- **Weakest section:** §2.3 and §6. The bet and every user-side metric sit at zero observations; this PRD documents a product built ahead of its evidence for the third time (0.2, 0.4, unreleased reports).
+- **Assumptions to test first:** E9 (context loss is felt, Q1) · a second author appears unprompted (Q2) · the README first run works without the owner (strategy F).
+- **Next step:** not code. The outreach in [strategy §2](product/strategy.md), against the Sep 22 gate.

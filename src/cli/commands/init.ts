@@ -65,23 +65,47 @@ export function runInit(cwd: string, version = 'dev', options: InitOptions = {})
   for (const name of INSTRUCTION_FILES) ensureInstructionFile(root, name, version);
 
   const hookNote = options.hooks === true ? `\n\n${installSessionHook(root)}` : '';
+  // A repository already using Claude Code is one flag away from every session
+  // starting with prime. Say so once, and only where it applies.
+  const hookHint =
+    options.hooks !== true && existsSync(join(root, '.claude')) && !hasSessionHook(root)
+      ? '\n\nkadence init --hooks adds prime at session start.'
+      : '';
+
+  const toCommit = ['.kadence/', 'AGENTS.md', 'CLAUDE.md'];
+  if (options.hooks === true && hasSessionHook(root)) toCommit.push('.claude/settings.json');
 
   return {
     ok: true,
     alreadyInitialized: already,
     root,
     message: already
-      ? `kadence is already initialised.${hookNote}`
+      ? `kadence is already initialised.${hookNote}${hookHint}`
       : 'kadence is ready.\n\n' +
         '  kadence task add "first task"\n' +
+        '  kadence decision add "What we chose" --why "Why we chose it"\n' +
         '  kadence board\n\n' +
+        `Commit ${toCommit.join(', ')} so a teammate's agent finds them.\n` +
         'Files were created but not committed — that call is yours.' +
-        hookNote,
+        hookNote +
+        hookHint,
   };
 }
 
-/** The command the hook runs, and the one line that identifies it as ours. */
-const HOOK_COMMAND = 'kadence prime';
+/**
+ * The command the hook runs.
+ *
+ * POSIX sh, because `.claude/settings.json` is committed and a teammate's
+ * machine may not have kadence yet. Without the check a missing binary fails
+ * every session start with a shell error; with it the agent is told, in one
+ * line, what to ask the human. Never `npx`: that would put the network in the
+ * path of every session (DEC-12).
+ */
+export const HOOK_COMMAND =
+  'if command -v kadence >/dev/null 2>&1; then kadence prime; else ' +
+  "echo 'kadence is not installed on this machine: ask the human to run npm install -g kadence. The team journal is in .kadence/.'; fi";
+/** Commands earlier versions installed. Still ours: replaced in place, never duplicated. */
+const OUR_HOOK_COMMANDS: readonly string[] = ['kadence prime', HOOK_COMMAND];
 /**
  * `startup` and not the omitted matcher, which would fire on resume, clear,
  * compact and fork as well — four more copies of the same preamble in one
@@ -131,10 +155,21 @@ function installSessionHook(root: string): string {
     ? (hooks['SessionStart'] as HookGroup[])
     : [];
 
-  const already = sessionStart.some((group) =>
-    (group.hooks ?? []).some((entry) => entry.command === HOOK_COMMAND),
+  const ours = sessionStart.flatMap((group) =>
+    (Array.isArray(group.hooks) ? group.hooks : []).filter(
+      (entry) => typeof entry.command === 'string' && OUR_HOOK_COMMANDS.includes(entry.command),
+    ),
   );
-  if (already) return `The SessionStart hook is already in ${path}.`;
+  if (ours.some((entry) => entry.command === HOOK_COMMAND)) {
+    return `The SessionStart hook is already in ${path}.`;
+  }
+  if (ours.length > 0) {
+    // An older hook of ours: upgrade it where it stands, keeping its neighbours
+    // and their order.
+    for (const entry of ours) entry.command = HOOK_COMMAND;
+    writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+    return `Updated the SessionStart hook in ${path}: it now prints an install hint where kadence is missing.`;
+  }
 
   let group = sessionStart.find((g) => g.matcher === HOOK_MATCHER);
   if (group === undefined) {
@@ -149,7 +184,27 @@ function installSessionHook(root: string): string {
 
   mkdirSync(dir, { recursive: true });
   writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
-  return `Added a SessionStart hook to ${path}: every session now starts with \`${HOOK_COMMAND}\`.`;
+  return `Added a SessionStart hook to ${path}: every session now starts with \`kadence prime\`.`;
+}
+
+/** Whether `.claude/settings.json` already carries a SessionStart hook of ours. Never throws. */
+function hasSessionHook(root: string): boolean {
+  const path = join(root, '.claude', 'settings.json');
+  if (!existsSync(path)) return false;
+  try {
+    const settings = JSON.parse(readFileSync(path, 'utf8')) as {
+      hooks?: { SessionStart?: HookGroup[] };
+    } | null;
+    const groups = settings?.hooks?.SessionStart;
+    if (!Array.isArray(groups)) return false;
+    return groups.some(
+      (g) =>
+        Array.isArray(g?.hooks) &&
+        g.hooks.some((e) => typeof e?.command === 'string' && OUR_HOOK_COMMANDS.includes(e.command)),
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** state.json is a derived cache and must never reach git (ADR-005). */

@@ -61,6 +61,21 @@ import { TASK_TYPES, PRIORITIES } from '../core/projection.js';
 import { SORT_KEYS } from '../core/query.js';
 
 /**
+ * cac hands a single flag back as a string and a repeat as an array, so every
+ * option read straight into a string operation is one repeated flag away from a
+ * TypeError. These two say what a repeat means, once, instead of each call site
+ * guessing: `last` for a flag whose second use is a correction, `joined` for one
+ * whose second use is a second value.
+ */
+function last(value: string | string[]): string {
+  return Array.isArray(value) ? (value.at(-1) ?? '') : value;
+}
+
+function joined(value: string | string[]): string {
+  return Array.isArray(value) ? value.join('; ') : value;
+}
+
+/**
  * Writes to a file descriptor and does not return until the bytes are gone.
  *
  * `process.stdout.write` is asynchronous when stdout is a pipe — which is how
@@ -168,13 +183,14 @@ function rawFlag(name: string, argv: readonly string[] = process.argv): string |
  */
 const TASK_ACTIONS = [
   'add', 'list', 'show', 'edit', 'move', 'assign', 'comment', 'log',
-  'parent', 'block', 'unblock', 'claim', 'release', 'ac', 'cancel', 'delete',
+  'parent', 'block', 'unblock', 'claim', 'release', 'ac', 'doc', 'cancel', 'delete',
 ] as const;
 const SPRINT_ACTIONS = [
   'create', 'add', 'edit', 'start', 'close', 'status', 'list', 'burndown',
 ] as const;
 const TEMPLATE_ACTIONS = ['save', 'list', 'delete'] as const;
 const MILESTONE_ACTIONS = ['create', 'add', 'list', 'close'] as const;
+const DECISION_ACTIONS = ['add', 'list', 'show'] as const;
 
 /**
  * Usage errors all look the same, so they are built in one place — including
@@ -331,10 +347,10 @@ cli
       action: string | undefined,
       arg: string | undefined,
       options: {
-        why?: string;
-        rejected?: string;
-        task?: string;
-        supersedes?: string;
+        why?: string | string[];
+        rejected?: string | string[];
+        task?: string | string[];
+        supersedes?: string | string[];
         doc?: string | string[];
         all?: boolean;
         json?: boolean;
@@ -357,10 +373,23 @@ cli
           }
           emit(
             runDecisionAdd(cwd, process.env, arg as string, {
-              ...(options.why !== undefined ? { why: options.why } : {}),
-              ...(options.rejected !== undefined ? { rejected: options.rejected } : {}),
-              ...(options.task !== undefined ? { task: options.task } : {}),
-              ...(options.supersedes !== undefined ? { supersedes: options.supersedes } : {}),
+              // Repeats mean different things per flag, and both readings are
+              // the honest one. A second `--why`, `--task` or `--supersedes` is
+              // a correction, so the last wins. A second `--rejected` is a
+              // second alternative that was turned down — a decision record
+              // exists to list those — so they are kept, joined rather than
+              // stored as an array because `rejected` is a string in
+              // `kadence/v1` and the contract only ever gains fields.
+              //
+              // Before this, all four went into `.trim()` as arrays and threw
+              // `o.rejected.trim is not a function`. Found by recording a real
+              // decision about this repository with two rejected options.
+              ...(options.why !== undefined ? { why: last(options.why) } : {}),
+              ...(options.rejected !== undefined ? { rejected: joined(options.rejected) } : {}),
+              ...(options.task !== undefined ? { task: last(options.task) } : {}),
+              ...(options.supersedes !== undefined
+                ? { supersedes: last(options.supersedes) }
+                : {}),
               ...(docs !== undefined ? { docs } : {}),
             }),
             json,
@@ -371,7 +400,7 @@ cli
           emit(
             runDecisionList(cwd, process.env, {
               ...(options.all === true ? { all: true } : {}),
-              ...(options.task !== undefined ? { task: options.task } : {}),
+              ...(options.task !== undefined ? { task: last(options.task) } : {}),
             }),
             json,
           );
@@ -384,7 +413,10 @@ cli
           break;
         default:
           emit(
-            usage(`Unknown action "${action}".\nAvailable: add, list, show`),
+            usage(`Unknown action "${action}".\nAvailable: add, list, show`, {
+              ...(action === undefined ? {} : { received: action }),
+              allowed: DECISION_ACTIONS,
+            }),
             json,
           );
       }
@@ -452,23 +484,49 @@ cli
 
 cli
   .command('report [name]', `Reports folded from the journal: ${REPORTS.join(' | ')}`)
-  .option('--since <days>', 'Window ending today, in calendar days (default 30d)')
+  .option('--list', 'Name every report and what each one answers')
+  .option('--since <days>', 'flow, cfd, attention: window ending today, in calendar days (default 30d)')
+  .option('--sprint <name>', 'burndown: a sprint by name, rather than the active one')
+  .option('--html', 'Write one self-contained page instead of printing; charts included, no network')
+  .option('--file <path>', 'html: where to write it (default kadence-<report>.html)')
   .option('--json', 'Machine-readable output for agents')
+  .example('  kadence report --list               every report, and what it answers')
   .example('  kadence report flow                 cycle time, throughput, aging work')
   .example('  kadence report flow --since 90d')
   .example('  kadence report cfd                  tasks per column, per day')
   .example('  kadence report attention            work in flight that nobody is moving')
-  .action((name: string | undefined, options: { since?: string | number; json?: boolean }) => {
-    emit(
-      runReport(process.cwd(), process.env, name, {
-        // Read from argv, not from cac: it coerces before we see it, so `007`
-        // arrives as 7 and `1e2` as 100 — neither is what was typed.
-        ...(options.since === undefined ? {} : { since: rawFlag('since') ?? String(options.since) }),
-        json: options.json === true,
-      }),
-      options.json === true,
-    );
-  });
+  .example('  kadence report burndown             the active sprint against an even burn')
+  .example('  kadence report velocity             committed against finished, sprint by sprint')
+  .example('  kadence report workload             who is carrying what right now')
+  .example('  kadence report flow --html          the same numbers as a page, with charts')
+  .example('  kadence report cfd --html --file docs/cfd.html')
+  .action(
+    (
+      name: string | undefined,
+      options: {
+        since?: string | number;
+        json?: boolean;
+        html?: boolean;
+        file?: string;
+        list?: boolean;
+        sprint?: string;
+      },
+    ) => {
+      emit(
+        runReport(process.cwd(), process.env, name, {
+          // Read from argv, not from cac: it coerces before we see it, so `007`
+          // arrives as 7 and `1e2` as 100 — neither is what was typed.
+          ...(options.since === undefined ? {} : { since: rawFlag('since') ?? String(options.since) }),
+          ...(options.list === true ? { list: true } : {}),
+          ...(options.sprint === undefined ? {} : { sprint: String(options.sprint) }),
+          ...(options.html === true ? { html: true } : {}),
+          ...(options.file === undefined ? {} : { file: String(options.file) }),
+          json: options.json === true,
+        }),
+        options.json === true,
+      );
+    },
+  );
 
 cli
   .command('compact', 'Fold old months into one file each; cold start on a long journal drops from ~200 ms to ~20 ms')
@@ -1247,6 +1305,26 @@ cli
     const r = await runUi(process.cwd(), process.env);
     if (!r.ok) emit(r, false);
   });
+
+/**
+ * The order `kadence --help` lists commands in: how a session meets them, not
+ * the order they were written. Start a session, the daily loop, planning,
+ * reading back, maintenance. cac prints `cli.commands` as it holds them, so
+ * sorting the array is the whole mechanism; matching is by name and does not
+ * depend on it. A command missing from this list goes last rather than
+ * disappearing — test/command-surface.test.ts pins the order.
+ */
+const HELP_ORDER = [
+  'init', 'prime', 'ready', 'task', 'decision', 'note', 'board', 'ui', 'schema',
+  'sprint', 'milestone', 'template',
+  'report', 'stats',
+  'compact', 'completion',
+];
+const helpRank = (name: string): number => {
+  const i = HELP_ORDER.indexOf(name);
+  return i === -1 ? HELP_ORDER.length : i;
+};
+cli.commands.sort((a, b) => helpRank(a.name) - helpRank(b.name));
 
 cli.help();
 cli.version(__VERSION__);

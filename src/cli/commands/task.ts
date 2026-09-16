@@ -259,7 +259,15 @@ export function runTaskAdd(
   // Read before the append, and reusing the fold `--parent` may already have
   // done: `task add` runs dozens of times a day under a 200 ms budget, and a
   // second full read of the journal to learn the list is empty is not free.
-  const dod = options.noDod === true ? [] : (existing ?? loadState(ctx.root, ctx.actor).state).dod;
+  //
+  // The same fold answers whether a sprint is active, for the estimate warning
+  // below, so it is read at most once and only when one of the two needs it.
+  const folded =
+    existing ??
+    (options.noDod !== true || options.estimate === undefined
+      ? loadState(ctx.root, ctx.actor).state
+      : null);
+  const dod = options.noDod === true || folded === null ? [] : folded.dod;
   for (const text of dod) {
     append(ctx.root, {
       id: ulid(),
@@ -272,10 +280,14 @@ export function runTaskAdd(
     });
   }
 
+  // Only inside an active sprint. Outside one, "will not count towards velocity"
+  // nags a team about a feature it never chose (T111).
+  const active =
+    options.estimate === undefined ? folded?.sprints.find((s) => s.status === 'active') : undefined;
   const warning =
-    options.estimate === undefined
-      ? '\nWithout an estimate this task will not count towards velocity. Add --estimate.'
-      : '';
+    active === undefined
+      ? ''
+      : `\nWithout an estimate this task adds no points to sprint "${active.name}". Add --estimate.`;
   const standard = dod.length === 0 ? '' : `\n${dod.length} acceptance criteria from the board's definition of done.`;
 
   return {

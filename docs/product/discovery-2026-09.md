@@ -1,5 +1,7 @@
 # Where discovery actually stands — and what to change in the product
 
+> **Superseded 2026-09-16 by [strategy.md](strategy.md).** Kept as history; where the two disagree, strategy.md wins.
+
 - **Date:** 2026-09-07 (ADR count refreshed 2026-09-09; every other row re-checked and unchanged)
 - **Inputs:** [Probe A](../research/probe-a-results.md),
   [Probe C](../research/probe-c-agent-cost.md),

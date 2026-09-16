@@ -1,5 +1,7 @@
 # Позиціонування — kadence
 
+> **Superseded 2026-09-16 by [strategy.md](strategy.md).** Kept as history; where the two disagree, strategy.md wins.
+
 - **Дата:** 2026-09-04 (переписано після [перегляду позиціонування](positioning-review-2026-09.md))
 - **Метод:** Geoffrey Moore, *Crossing the Chasm*
 - **Статус:** робоче. Спирається на дані Probe A і на ринковий скан вересня 2026; ставка на цінність історії чекає на Probe B
