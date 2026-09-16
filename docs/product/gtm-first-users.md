@@ -1,5 +1,7 @@
 # Go-to-market: the first users — kadence
 
+> **Superseded 2026-09-16 by [strategy.md](strategy.md).** Kept as history; where the two disagree, strategy.md wins.
+
 - **Date:** 2026-09-08
 - **Method:** `gtm-strategy` (seven components), `gtm-icp` (eight dimensions, qualification rubric), `gtm-acquisition-channels` (test / scale / kill per channel). Validator output in §11.
 - **Decision this supports:** how kadence gets from zero known users to G1 — five repositories we do not control with two authors 14 days after `init` ([roadmap-to-1.0 §2](roadmap-to-1.0.md)) — and how each step leaves a public trace.
@@ -226,6 +228,23 @@ Read `north-star-log.md`, `probe-b-candidates.md`, `channel-tests.md` and the si
 ---
 
 ## 7. Sequence — twelve weeks from 2026-09-08
+
+> **Status 2026-09-16 — week 0 did not happen.** Between Sep 8 and Sep 16 the
+> repository got 27 commits and 0.4.0/0.4.1; no candidate list existed, no post
+> went out, no message was sent. This is risk #1 in §8 arriving exactly as
+> written. The Sep 22 date does not move; weeks 0 and 1 compress into six days:
+>
+> | Day | Work | ≈ h |
+> |---|---|---|
+> | Wed 16 | Verify the booking link. Publish the DOU post + one Telegram channel ([outreach §1](../research/probe-b-outreach.md)). Send A1–A5 | 2 |
+> | Thu 17 | Send A6–A10 and B1–B6. X/LinkedIn post. Ask the workplace team for pilot 0 | 1.5 |
+> | Fri 18 | Confirm bookings as they arrive. Pilot 0 `init`, hesitations into [probe-b-results.md](../research/probe-b-results.md) | 1.5 |
+> | Mon 21 | Count. Fewer than 3 bookings from the post → the second Telegram post (C2 rule) | 0.5 |
+> | **Tue 22** | **Five booked, or the paragraph in [probe-b-candidates.md](../research/probe-b-candidates.md) saying why** | 0.5 |
+>
+> Weeks 2–12 below shift by nothing: conversations were always Sep 22 – Oct 5.
+> Kit: [candidates](../research/probe-b-candidates.md) (16 contactable, each with a public source) ·
+> [messages and the 30-minute English cut](../research/probe-b-outreach.md) · [results skeleton](../research/probe-b-results.md).
 
 Not a T-90 launch: there is no launch, there is a sequence with thresholds, and each step opens only when the previous one's threshold is passed or its failure is written down. Hours are the GTM budget for the week; engineering is outside them. **Only one date is a commitment — 22 September, from plan-to-1.0.** The rest are the order, placed on a calendar so that slipping is visible.
 

@@ -1,72 +1,137 @@
 # Jobs to be Done — kadence
 
-- **Дата:** 2026-09-02
-- **Сегмент:** розробник, який працює переважно в терміналі й щодня використовує AI-агента для написання коду
-- **Статус доказів:** інтерв'ю не проводилися
+- **Date:** 2026-09-16 (rewrite of the 2026-09-02 Ukrainian version, which is in git history)
+- **Segment:** teams of **3–8 developers** on shared repositories where **≥ 2 people use a coding agent daily** (Claude Code, Cursor, Codex) — [strategy.md §1](../product/strategy.md). Sharpened by the [discovery verdict](discovery-verdict-2026-09.md): *repositories where more than one human, or more than one agent vendor, works.*
+- **Evidence status: pre-interview.** 0 interviews, 0 pilots, 0 external users. Every job below is a hypothesis with a label saying how it was reached. Probe B ([interview script](interview-script.md), verdict due **2026-10-19**) is what confirms or removes them.
+- **Companion:** [product-icp-fit-2026-09.md](../product/product-icp-fit-2026-09.md) maps these jobs to personas and to every capability.
 
-## Як читати цей документ
+## What changed since 2026-09-02
 
-JTBD, заповнений без інтерв'ю, — це гіпотези, а не знання. Тому кожен пункт має мітку джерела:
+| Then | Now | Why |
+|---|---|---|
+| Segment: one terminal developer with an agent | A 3–8 team with several agent users | Discovery verdict: Claude Code's Tasks, Auto Memory and Auto Dream cover the solo developer on one machine; value appears only with a second human, machine or vendor |
+| Emotional anchor: "don't fear merge conflicts" (unknown frequency) | Conflict-freedom is **proof, not pitch** | Probe A measured it: 20 of 130 repositories, about one merge in two hundred |
+| Gain: velocity counted from real events | **Present, not advertised** | Zero requests for velocity, points or burndown across 1,076 Beads issues and Backlog.md's history |
+| "Give the agent task context" | "Give the *next* session — anyone's, any vendor's — the decisions and the why" | Positioning moved to shared context (2026-09-04); `decision`, `prime`, `note` shipped |
 
-- **[К]** — виведено з поведінки конкурентів: те, що троє незалежних команд збудували, майже напевно хтось просив
-- **[К−]** — виведено з того, чого конкуренти **не** збудували: сигнал слабший, але значущий
-- **[С]** — підкріплено вимірами спайку
-- **[Г]** — чиста гіпотеза автора, доказів немає
+## How to read the labels
 
-Мітка **[Г]** на пункті означає: якщо інтерв'ю його не підтвердить, він зникає.
+- **[M]** measured by our own probes or tests — *Fact*
+- **[E]** demand stated in public by users of the category (issues, reactions), from the discovery verdict — *Fact that it was said; Inference that it applies to our segment*
+- **[C]** built independently by competitors, so someone likely asked — *Inference*
+- **[C−]** conspicuously **not** built or not requested — *weaker Inference*
+- **[N1]** one unsolicited conversation with a tech lead in the segment, 2026-09-10, who had not run the tool ([feedback](tech-lead-feedback-2026-09-10.md)) — *Inference, n = 1*
+- **[H]** the author's hypothesis, no evidence — *Assumption*. **If interviews do not confirm an [H] item, it is deleted.**
 
-## Ситуація
+## Situation
 
-Робота виникає, коли розробник веде задачу від «взяв у роботу» до «змерджив», не покидаючи терміналу, і при цьому частину роботи виконує агент, якому щоразу треба пояснювати контекст.
+The job arises **when work passes between sessions that do not share a memory**: a teammate picks up a task, a second agent vendor opens the same repository, the same person's agent starts again tomorrow, a new hire's agent reads the repo for the first time. The code shows what exists and `git log` shows when; neither says what was tried, rejected, or is blocked and why. **[C]** Beads, Backlog.md, Spec Kit and Claude Code Tasks all exist to cover part of this; **[E]** `ai-memory` (6,099 stars) is explicitly about "handoff between different agent vendors".
 
-**Що наймають зараз:** GitHub Issues у браузері, `TODO.md` у репо, Backlog.md, git-bug, Linear, або нічого — тримають у голові.
+**What gets hired today [C][E], per team unknown [H]:** a hand-maintained `CLAUDE.md`/`AGENTS.md` (482,304 public repos have a root `AGENTS.md` (GitHub code search, discovery verdict)); `docs/decisions/` ADRs; GitHub Issues or Linear; Claude Code Tasks and Auto Memory (per user, per machine); Beads or Backlog.md; Slack threads and asking the lead; or nothing — re-explaining each session.
 
-## Функціональні роботи
+## Job statements
 
-- Побачити свої задачі, не покидаючи термінал **[К]** — усі троє конкурентів зробили CLI, двоє додали TUI
-- Дати агенту контекст задачі, не переказуючи його вручну **[К]** — Backlog.md зробив MCP, git-issues зробив `.agent.md` і команду `issues next`
-- Розбити велику задачу на дрібні, які агент здатен виконати за один прохід **[К]** — Backlog.md будує весь продукт навколо декомпозиції й трьох чекпоінтів рев'ю
-- Зрозуміти, що змінилося в задачах після `git pull` **[Г]**
-- Дізнатися, скільки насправді зайняла робота, щоб наступного разу оцінити чесніше **[К−]** — жоден конкурент цього не робить
-- Повернутися до старого коміту й побачити тодішній стан проєкту **[С]** технічно можливо у файловій моделі, **[Г]** щодо потреби
+**Main job — tech lead (the buyer and champion).**
+*When a teammate's agent, or mine tomorrow, picks up work someone else started, I want it to already know what was tried, decided and blocked, so nobody re-explains and a rejected approach does not come back.* **[H]**, with **[C][E]** support for the category and **[N1]** confirmation that "drifting state" is felt as a real problem.
 
-## Соціальні роботи
+**Related job — daily developer (the second author).**
+*When I start on something a teammate or their agent touched, I want the current state and the reasons without a meeting, and without taking on reporting chores.* **[H]**
 
-- Виглядати перед командою людиною, яка тримає слово щодо строків **[Г]**
-- Показати на ретроспективі числа, а не враження **[Г]**
-- Не виглядати тим, хто «загубив» задачу колеги при мерджі **[Г]**
+**Related job — the agent (a user, not a buyer).**
+*At session start, get the live state within a bounded token budget, know what to take, and record what I decided or learned where the next session of any vendor will read it.* **[M]** that the mechanism works (`prime` ≤ 40 lines/3 KB, `task show --json` 982 B constant); **[H]** that agents actually write back without being told.
 
-## Емоційні роботи
+**Not the job we serve — manager.**
+*Know whether the sprint is on track and who is overloaded.* **[C−]** nobody in the segment asked; the features exist and are kept off first-run surfaces.
 
-- Не відчувати, що трекер — це податок, який платиш менеджменту **[Г]**
-- Уникнути роздратування від перемикання в браузер посеред роботи **[К]** — самé існування трьох CLI-трекерів це підтверджує
-- Відчувати, що стан проєкту — правда, а не те, що хтось забув оновити **[Г]**
-- Уникнути страху зламати чужу роботу при злитті гілок **[Г]** ← це і є емоційна опора всього продукту, і вона неперевірена
+## Functional jobs
 
-## Болі, ранжовані за гостротою
+| Job | Label | Evidence |
+|---|---|---|
+| Give an agent the state of the work at session start without pasting it | **[C][M]** | Beads `bd prime` and hooks; our `prime` is length-tested |
+| Record *why* a choice was made, and what was rejected, where every agent reads it | **[E][H]** | Spec Kit's most-reacted request after layout is `/speckit.reconcile` for artifact drift (24 reactions); `decisions.md` projects appearing independently in Sept 2026 |
+| Tell two agents or people what is free to take, without a lock or a server | **[E][C]** | Backlog.md: two agents claim the same task before either pushes; Beads `--claim` |
+| Keep task state in the same commit and branch as the code | **[E]** | Beads, 4 reactions: "code changes and issue updates could be in the same commit, same branch, same PR" |
+| Merge branches without resolving task files | **[M][E]** | Probe A: 15% of repos, 89% `CONFLICT (content)`; Backlog.md ID collisions "in production twice" |
+| See which work nobody is watching | **[N1]** | "there is one bottleneck: how many of those signals fit in your head" |
+| Mark how carefully an agent must work on a task (impact) | **[N1]** | impact labels mapped to permission modes |
+| Hand the setup to a teammate in one message | **[H]** | no evidence; follows from the second author being the North Star |
+| Know what work cost (hours, points, velocity) | **[C−]** | zero requests in the segment's trackers |
 
-| # | Біль | Гострота | Частота | Джерело |
+## Social jobs
+
+| Job | Label |
+|---|---|
+| Tech lead: be the one who made the team's agents stop repeating rejected paths — without being seen as imposing process | **[H]** |
+| Tech lead: not be blamed when something added to the shared `CLAUDE.md` breaks a teammate's session | **[H]** |
+| Developer: not look like the person whose agent undid a decision the team already made | **[H]** |
+| Developer: not become measurable per person through the tool | **[H]** — assumption #12 in the [assumptions map](assumptions-map.md) |
+
+## Emotional jobs
+
+| Job | Label |
+|---|---|
+| Feel that the agent starts *informed*, not from scratch | **[C][H]** — the vendor shipped three memory features in three months [E] |
+| Trust that the tool will not corrupt or lose history | **[E]** — Beads after Dolt: "Tasks disappear", "~10 hours of … corruption debugging" |
+| Not feel like caring for the tool instead of doing the work | **[E]** — "I spend a bunch of time caring for beads itself instead of doing beads" (17 reactions) |
+| Avoid the unease that the recorded state is stale | **[N1]** — named unprompted, but attributed to attention, not storage; a journal only knows what gets written to it |
+
+## Pains, ranked by intensity
+
+Intensity and frequency are **our estimates** until Probe B; the label says what backs the pain's existence.
+
+| # | Pain | Intensity | Frequency | Label |
 |---|---|---|---|---|
-| 1 | Контекст задачі доводиться щоразу переказувати агенту | висока | щодня | **[К]** |
-| 2 | Перемикання в браузер розриває роботу | середня | щодня | **[К]** |
-| 3 | Оцінки не мають зворотного зв'язку — ніхто не міряє факт | середня | щоспринту | **[К−]** |
-| 4 | Стан у трекері не збігається з реальністю коду | середня | щотижня | **[Г]** |
-| 5 | Конфлікт при злитті задач | **невідома** | **невідома** | **[Г]** |
+| 1 | Each new session — human or agent — re-derives context; a rejected approach comes back | high | daily per agent user | **[C][H]** — the thesis; strategy §6 assumption B, risk 8.0 |
+| 2 | Tool upkeep: daemons, migrations, databases that break and lose tasks | high where it happens | episodic | **[E]** — Beads Dolt cluster, 38 + 25 + 17 + 4 reactions |
+| 3 | Nobody notices work that stopped moving; signals exceed attention | medium–high | weekly | **[N1]** |
+| 4 | Two agents or people take the same task; sequential IDs collide across clones | medium | rare but silent | **[E][M]** — Backlog.md; Probe A "real but rare" |
+| 5 | Task files conflict on merge | low–medium | ≈ 1 merge in 200 | **[M]** |
+| 6 | Switching to the browser mid-flow | low | daily | **[C]** — three CLI trackers exist; weaker for teams whose agent does the tracking |
+| 7 | Estimates never meet actuals | low for this segment | per sprint | **[C−]** |
 
-**Біль №5 — це головна теза продукту, і в цій таблиці він єдиний, у якого невідомі обидві колонки.** Ми знаємо, що конфлікти технічно виникають, і знаємо, що наш підхід їх усуває **[С]**. Ми не знаємо, як часто це стається в реальних командах і наскільки дратує. Backlog.md вважає, що проблема вирішується дисципліною декомпозиції.
+**The strongest-evidenced pain (2) is not the one the product is positioned on (1).** Pain 2 is stated in public by the category's own users; pain 1 is inferred from what competitors and the vendor built. Probe B must test pain 1 without naming it (strategy §2 rule 1).
 
-Заперечення, яке треба тримати в голові: задачу зазвичай рухає одна людина. Сценарій «троє правлять одну задачу одночасно», який моделював спайк, — це найгірший випадок, а не типовий день.
+## Gains
 
-## Здобутки
+| Gain | Must-have / nice | Label |
+|---|---|---|
+| A fresh agent session quotes the team's decision back without being told | must-have | **[H]** — the moment the self-serve test should reach |
+| Files are the source of truth, in the same commit; no daemon, no second database | must-have | **[E]** |
+| Merges never need task resolution | must-have (as proof) | **[M]** |
+| One constant-size read gives a task's whole history (982 B at 10 or 1000 tasks) | nice | **[M]** |
+| The same answer for every agent vendor (`AGENTS.md` + `CLAUDE.md`, `schema --json`) | must-have for multi-vendor teams | **[E][C]** |
+| "What nobody is looking at" surfaced without a notification system | nice | **[N1]** |
+| Velocity and reports derived with no manual entry | nice, not a reason to arrive | **[C−]** |
 
-- Агент починає роботу вже з контекстом, без вступного абзацу від людини **[К]**
-- Борд відкривається однією командою й не гальмує **[К]**
-- Velocity рахується сам із реальних подій, без ручного заповнення **[К−]**
-- `git checkout` показує тодішні задачі — історія проєкту стає повною **[С]** / **[Г]**
-- Злиття гілок ніколи не вимагає ручного розбору задач **[С]**
+## Adoption factors and firing reasons
 
-## Що з цього випливає
+**Would hire (switch) when** — all **[H]** unless labelled:
+- setup is one command that only writes reviewable files and commits nothing [M that this is true];
+- it is reversible: marked sections and a hook that can be taken out;
+- a teammate's agent works on its first session without the lead explaining anything;
+- the trigger events in strategy §1 happen: a 1 → 3 agent-user team, a new hire, `CLAUDE.md` past ~200 lines, Beads' Dolt migration **[E]**, a Backlog.md ID collision **[E]**.
 
-**Найсильніша робота — не та, навколо якої побудований продукт.** Найкраще підкріплена доказами робота — «дати агенту контекст» **[К]**: її незалежно підтвердили три команди. Робота «не боятися конфліктів» має лише мітку **[Г]**, хоча саме на ній тримається архітектура.
+**Would fire when** — all **[H]** unless labelled:
+- it reads as "Jira, but in the repo" **[N1]** and the first screen asks for sprints and estimates;
+- a teammate's session fails because the binary is missing;
+- a claim over-promises — "the board can never drift from reality" was the example **[N1]**, since corrected in README;
+- per-person numbers make developers feel measured;
+- nobody but the installer ever writes to it (the North Star failing).
 
-Це не означає, що теза хибна. Це означає, що вона стоїть на найслабшому доказовому фундаменті з усього списку — і перевіряти треба її, а не те, що й так очевидно.
+## What follows
+
+1. **The job is a handoff job, not a tracking job.** Every must-have gain is about the *next* reader. Anything that does not help the next session — reports, velocity, exports — is present, not advertised.
+2. **The second author is reached through their agent.** The section `init` writes into `AGENTS.md`/`CLAUDE.md` is the second author's onboarding, so it has to teach writing (`note`, `decision add`), not only reading.
+3. **Evidence is inverted.** The best-evidenced pains (upkeep, lost files, collisions) favour the switcher door; the positioned pain (context loss) is still [H]. If Probe B hears no dated context-loss stories, strategy §4 already says what happens: lead with conflict-free files for switchers.
+4. **[N1] may be a different job.** If interviews raise *attention* ("which work has nobody watching") more than *context*, the main job statement is rewritten and `report attention` stops being a supporting feature.
+
+## What interviews must test
+
+| Hypothesis | Ask (never "would you use") | Deleted if |
+|---|---|---|
+| Main job / pain 1 | "Tell me about the last time an agent or a teammate redid something already decided. What did you do next?" | < 60% of ≥ 5 tell a dated story unprompted (strategy §4) |
+| Workaround exists | "What do you keep in `CLAUDE.md` or elsewhere so that doesn't happen?" | < 3 show one |
+| Upkeep / reversibility | "Have you taken a tool out of the repo? What made you do it?" | nobody has |
+| Second author | "When you add something to the shared `CLAUDE.md`, how do teammates find out?" | the answer is always "they don't need to" |
+| Attention vs context | "What slipped last month that nobody noticed?" | — (this one redirects, not deletes) |
+| Manager pull | "Who asks you for sprint or velocity numbers, and what do you send?" | confirms [C−] if nobody |

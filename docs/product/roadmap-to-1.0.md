@@ -1,5 +1,7 @@
 # The road to 1.0 — kadence
 
+> **2026-09-16:** the go-to-market, SMART targets and dated gates now live in [strategy.md](strategy.md). This document remains the reference for gates G1–G7, the ecosystem, money and the kill criteria.
+
 - **Date:** 2026-09-08
 - **Method:** a destination (Cagan-style narrative, five years), a definition of `1.0.0` as a set of gates, and Now / Next / Later horizons stated as outcomes. Evidence in [ecosystem-and-monetization-2026-09.md](../research/ecosystem-and-monetization-2026-09.md).
 - **Relation to [roadmap.md](roadmap.md):** that document is the next six weeks and stays authoritative for them. This one is the whole arc to 1.0 and the ecosystem around the binary. Where they disagree, the shorter horizon wins, because it is closer to evidence.

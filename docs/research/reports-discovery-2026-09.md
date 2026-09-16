@@ -82,3 +82,18 @@ Every `task.moved` carries `from`, `to`, `ts` and `actor`. `task.created` carrie
 ## What this does not change
 
 The three constraints. The contract: every report is additive within `kadence/v1`. The invariants: every report is a fold, and folds do not depend on read order. The positioning: velocity, and now cycle time, stay out of the headline.
+
+## Addendum, 2026-09-15 — the peers, and what the export became
+
+Re-run before building the export surface, to check the catalogue above against three neighbours the first pass did not read, and to decide what a report looks like as a file.
+
+**Linear Insights** ships seven: issue count, effort, cycle-time scatter, lead-time scatter, triage-time scatter, issue-age scatter, burn-up — all segmentable by status, assignee or label ([docs](https://linear.app/docs/insights)). **Azure DevOps** ships burndown, burnup, CFD, cycle time, lead time, sprint burndown, sprint capacity, sprint overview and velocity as dashboard widgets, and defines cycle time as "after work begins" and lead time as "after it was created" — the same two boundaries this codebase uses ([widget catalog](https://learn.microsoft.com/en-us/azure/devops/report/dashboards/widget-catalog)). **GitHub Projects** ships two primitives and one built-in chart: current charts, historical charts, and a burn-up ([about insights](https://docs.github.com/en/issues/planning-and-tracking-with-projects/viewing-insights-from-your-project/about-insights-for-projects)).
+
+Nothing in the three changes the verdicts in the table above. Two things are worth recording:
+
+- **Coverage is better than it looks, and discoverability is worse.** Of Jira's thirteen board reports kadence already answers six and structurally cannot answer two. But `burndown` lives under `sprint`, workload and group-by live under `stats`, and milestone progress lives under `milestone` — so `kadence report` is not the catalogue it appears to be, and an agent reading `schema --json` cannot find the burndown. Unifying them under `report` is zero new computation and the highest value per line on this list.
+- **`report attention` has no equivalent in any of the four.** The closest is Linear's issue-age scatter, which measures staleness without naming its cause. Everything else here is a re-shaping of what the neighbours already show.
+
+The remaining gaps, in order: **burnup** (the one question burndown structurally cannot answer — whether the goal was missed or the goal grew; needs no new event, though the journal has no `sprint.task_removed`, so scope removal is only visible as reassignment or cancellation and the report has to say so), **time in status** (Jira's control-chart decomposition and Linear's triage time in one fold, from the consecutive `task.moved` pairs `cfdReport` already walks), and **epic rollup** (`task.parent_set` plus estimates; an epic is already just a parent).
+
+**What the export became.** The 2026-09-10 design said "everything goes into the export" — a Reports section inside the board's HTML. Building it showed why that is wrong: a report is a question with a window, and `--since 90d` is half its meaning, while the board export is a snapshot with no window at all. A Reports section could only have shown one arbitrary window. So each report writes its own page instead, `kadence report <name> --html`, and the reasoning is DEC-7. The charts are hand-drawn inline SVG for the reason in DEC-8: every chart library is a script tag, and the page's one promise is that it asks the network for nothing.
