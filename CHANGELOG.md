@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-16
+
 **The second author.** kadence was built for a team, and until now its first
 run spoke to one person with a sprint. This release is the path the second
 person walks: their agent learns to write the why, a machine without kadence
