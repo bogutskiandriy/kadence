@@ -39,14 +39,14 @@
   "keywords": [
     "cli",
     "git",
-    "task",
-    "sprint",
-    "velocity",
-    "kanban",
-    "tui",
-    "project-management",
     "ai-agents",
     "shared-context",
+    "claude-code",
+    "agents-md",
+    "decisions",
+    "task",
+    "kanban",
+    "tui",
     "event-sourcing",
     "offline"
   ],
@@ -54,7 +54,7 @@
     "type": "git",
     "url": "git+https://github.com/bogutskiandriy/kadence.git"
   },
-  "homepage": "https://github.com/bogutskiandriy/kadence#readme",
+  "homepage": "https://kadence.guru",
   "bugs": {
     "url": "https://github.com/bogutskiandriy/kadence/issues"
   }

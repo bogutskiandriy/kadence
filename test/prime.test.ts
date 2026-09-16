@@ -83,6 +83,25 @@ describe('runPrime', () => {
     expect(r.message).toMatch(/day/i);
   });
 
+  it('says nothing about sprints when no sprint is active', () => {
+    runTaskAdd(dir, env, 'Some work', {});
+    const r = runPrime(dir, env, {});
+    expect(r.message).not.toMatch(/sprint/i);
+    expect(r.message.startsWith('\n')).toBe(false);
+    expect(r.data!['sprint']).toBeNull();
+  });
+
+  it('points at decision add when no decision is in force', () => {
+    const r = runPrime(dir, env, {});
+    expect(r.message).toContain('record why: kadence decision add "…" --why "…"');
+  });
+
+  it('drops the decision hint once a decision is in force', () => {
+    runDecisionAdd(dir, env, 'Use ULIDs everywhere', { why: 'Because' });
+    const r = runPrime(dir, env, {});
+    expect(r.message).not.toMatch(/record why/);
+  });
+
   it('leads with the work that is already mine', () => {
     runTaskAdd(dir, env, 'Mine to finish', {});
     runTaskAdd(dir, env, 'Someone else can start this', {});

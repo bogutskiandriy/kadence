@@ -53,6 +53,15 @@ describe('planning ahead', () => {
     expect((list[1]!['taskIds'] as unknown[]).length).toBe(1);
   });
 
+  it('an unestimated task added to a sprint is named by the sprint, not by velocity', () => {
+    runSprintCreate(dir, env, 'Sprint 1');
+    runTaskAdd(dir, env, 'No points yet', {});
+    const r = runSprintAdd(dir, env, 'KAD-1', {});
+
+    expect(r.message).toContain('adds no points to sprint "Sprint 1"');
+    expect(r.message).not.toContain('velocity');
+  });
+
   it('without a sprint name the task goes to the active one', () => {
     runSprintCreate(dir, env, 'Sprint 1');
     runSprintCreate(dir, env, 'Sprint 2');

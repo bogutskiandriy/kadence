@@ -94,20 +94,25 @@ export function burndown(
   const span = Math.max(days.length - 1, 1);
   let remaining = committed;
 
+  const rows = days.map((date, i) => {
+    const completed = completedOn.get(date) ?? 0;
+    remaining -= completed;
+    return {
+      date,
+      remaining: Math.max(0, remaining),
+      ideal: Math.max(0, committed - (committed / span) * i),
+      completed,
+    };
+  });
+
   return {
     sprintName: sprint.name,
     committed,
-    finalRemaining: sprint.status === 'closed' ? null : null,
-    days: days.map((date, i) => {
-      const completed = completedOn.get(date) ?? 0;
-      remaining -= completed;
-      return {
-        date,
-        remaining: Math.max(0, remaining),
-        ideal: Math.max(0, committed - (committed / span) * i),
-        completed,
-      };
-    }),
+    // What the sprint did not finish, and only once it cannot change again.
+    // Both branches of this used to read `null`, so the one number the field
+    // exists for was never in the response — including in `--json`.
+    finalRemaining: sprint.status === 'closed' ? (rows[rows.length - 1]?.remaining ?? 0) : null,
+    days: rows,
   };
 }
 

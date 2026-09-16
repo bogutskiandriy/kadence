@@ -13,6 +13,7 @@ import { runInit } from '../src/cli/commands/init.js';
 import { runTaskAdd, runTaskShow, serializeTask } from '../src/cli/commands/task.js';
 import { SUMMARY_FIELDS } from '../src/cli/commands/board.js';
 import { eventIdsOnBranch } from '../src/core/git.js';
+import { flowHtml, cfdHtml } from '../src/export/report-html.js';
 import { attentionReport } from '../src/core/attention.js';
 import { flowReport, cfdReport } from '../src/core/flow.js';
 import { readyTasks } from '../src/core/query.js';
@@ -247,6 +248,36 @@ describe(`performance on ${EVENT_COUNT} events`, () => {
     console.log(`  report flow: ${msFlow.toFixed(1)} ms, report cfd: ${msCfd.toFixed(1)} ms (90-day window)`);
     expect(msFlow).toBeLessThan(50);
     expect(msCfd).toBeLessThan(50);
+  }, 120_000);
+
+  it('drawing the pages costs a fraction of the budget, and they stay small', () => {
+    // The charts are strings built from the fold, so the risk is not the fold —
+    // it is the page. A cumulative flow diagram over the longest window the
+    // command accepts writes a row per day per column, and that is the one
+    // that could grow without anyone noticing.
+    const state = loadOrBuild(root).state;
+    const today = new Date('2026-12-31T00:00:00.000Z');
+    const flow = flowReport(state, today, 90);
+    const cfd = cfdReport(state, today, 730);
+    let flowPage = '';
+    let cfdPage = '';
+    const msFlow = measure(() => {
+      flowPage = flowHtml(flow, today);
+    });
+    const msCfd = measure(() => {
+      cfdPage = cfdHtml(cfd, today);
+    });
+    const kb = (text: string): number => Buffer.byteLength(text) / 1024;
+    // eslint-disable-next-line no-console
+    console.log(
+      `  flow page: ${msFlow.toFixed(1)} ms, ${kb(flowPage).toFixed(0)} KB · ` +
+        `cfd page (730 days): ${msCfd.toFixed(1)} ms, ${kb(cfdPage).toFixed(0)} KB`,
+    );
+    expect(msFlow).toBeLessThan(50);
+    expect(msCfd).toBeLessThan(50);
+    // A page a browser opens instantly and a mail client will still carry.
+    expect(kb(flowPage)).toBeLessThan(100);
+    expect(kb(cfdPage)).toBeLessThan(500);
   }, 120_000);
 
   it('attention over 10k events costs a fraction of the budget', () => {

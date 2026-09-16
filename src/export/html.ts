@@ -2,6 +2,7 @@ import type { ProjectState, Task } from '../core/projection.js';
 import { TERMINAL_STATUS, CANCELLED_STATUS } from '../core/projection.js';
 import { sprintReport } from '../core/velocity.js';
 import type { Burndown } from '../core/burndown.js';
+import { esc } from './page.js';
 
 /**
  * The board as one self-contained HTML file.
@@ -15,16 +16,6 @@ import type { Burndown } from '../core/burndown.js';
  * If a pilot asks for it to be live, the pressure to add a server is back and
  * the kill condition in docs/product/feature-adoption-2026-09.md applies.
  */
-
-/** Everything a person typed goes through this before it reaches the page. */
-function esc(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 /** Light and dark both, from one declaration: the reader's setting decides. */
 const STYLE = `

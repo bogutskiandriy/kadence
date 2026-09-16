@@ -99,6 +99,27 @@ describe('burndown', () => {
   });
 });
 
+describe('finalRemaining', () => {
+  it('is null while the sprint is still open', () => {
+    // An open sprint has no final anything: the number would change tomorrow.
+    const { events, state, sid } = sprintRun();
+    const chart = burndown(state, events, state.sprints.find((s) => s.id === sid)!, '2026-09-04')!;
+    expect(chart.finalRemaining).toBeNull();
+  });
+
+  it('is what was left on the last day once the sprint is closed', () => {
+    // 10 points committed, 5 and 3 finished: 2 carried over. The field was
+    // documented as non-null for a closed sprint and computed as `null : null`,
+    // so it was always null and the one number the field exists for — what the
+    // sprint did not finish — was never in the response.
+    const { events, sid } = sprintRun();
+    const closed = [...events, ev('sprint.closed', sid, {}, '2026-09-04')];
+    const state = project(closed);
+    const chart = burndown(state, closed, state.sprints.find((s) => s.id === sid)!, '2026-09-04')!;
+    expect(chart.finalRemaining).toBe(2);
+  });
+});
+
 describe('renderBurndown', () => {
   it('draws one row per day with the remaining number', () => {
     const { events, state, sid } = sprintRun();

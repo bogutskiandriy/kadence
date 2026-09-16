@@ -94,3 +94,83 @@ function workHours(task: Task, state: ProjectState): number | null {
 function sum(xs: readonly number[]): number {
   return xs.reduce((a, b) => a + b, 0);
 }
+
+/**
+ * Velocity across sprints, newest last.
+ *
+ * `sprintReport` answers "how did that sprint go". This answers the question
+ * teams actually use velocity for — "what can we take on" — and it answers it
+ * the way `flow` answers cycle time: with a range rather than a single number.
+ *
+ * An average of three sprints reads as a promise. The spread is the forecast:
+ * a team at 8, 14 and 9 points has a very different next sprint from one at
+ * 10, 10 and 11, and one number cannot tell them apart. PMI's Agile Practice
+ * Guide puts the settling point at four to eight iterations, which is why a
+ * short series says how short it is rather than quietly looking authoritative.
+ */
+
+export interface VelocityRow {
+  name: string;
+  /** Points taken into the sprint, cancelled work excluded. */
+  committed: number;
+  /** Points finished — velocity in the usual sense. */
+  velocity: number;
+  /** Points that were taken in and did not finish. */
+  carriedOver: number;
+  /** Finished without an estimate: outside velocity, worth saying. */
+  unestimated: number;
+}
+
+export interface VelocitySeries {
+  rows: VelocityRow[];
+  /** Of the velocities, not of anything else. null when nothing has closed. */
+  median: number | null;
+  low: number | null;
+  high: number | null;
+  notes: string[];
+}
+
+/** How many sprints it takes before velocity means anything (PMI, §5.4). */
+const SETTLES_AT = 4;
+
+export function velocitySeries(state: ProjectState, limit = 8): VelocitySeries {
+  const closed = state.sprints
+    .filter((s) => s.status === 'closed')
+    // By the event that closed them, not by when they were created: a sprint
+    // planned first can be closed last, and the series is about finishing.
+    .sort((a, b) => ((a.closedBy ?? '') < (b.closedBy ?? '') ? -1 : 1))
+    .slice(-limit);
+
+  const rows: VelocityRow[] = [];
+  for (const sprint of closed) {
+    const report = sprintReport(state, sprint.id);
+    if (report === null) continue;
+    rows.push({
+      name: report.name,
+      committed: report.committed,
+      velocity: report.velocity,
+      carriedOver: sum(report.carriedOver.map((t) => t.estimate ?? 0)),
+      unestimated: report.unestimated.length,
+    });
+  }
+
+  const notes: string[] = [];
+  if (rows.length === 0) {
+    notes.push('No closed sprint yet. Velocity is what a finished sprint leaves behind.');
+    return { rows: [], median: null, low: null, high: null, notes };
+  }
+
+  const sorted = rows.map((r) => r.velocity).sort((a, b) => a - b);
+  const median = sorted[Math.floor((sorted.length - 1) / 2)]!;
+  if (rows.length < SETTLES_AT) {
+    notes.push(
+      `${rows.length} closed sprint${rows.length === 1 ? '' : 's'}. Velocity takes four to eight ` +
+        'to stabilise, so treat this as a sighting rather than a forecast.',
+    );
+  }
+  const overcommitting = rows.filter((r) => r.committed > r.velocity * 1.5).length;
+  if (overcommitting === rows.length && rows.length >= 2) {
+    notes.push('Every sprint here took in half again more than it finished.');
+  }
+  return { rows, median, low: sorted[0]!, high: sorted[sorted.length - 1]!, notes };
+}

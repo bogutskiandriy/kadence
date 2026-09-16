@@ -53,10 +53,11 @@ That is the whole state of a piece of work, in one call, with no server to ask
 and no context to rebuild. A human reads it in `kadence task show`. An AI agent
 reads the same thing as JSON.
 
-**And it stays one call.** That answer is 948 bytes whether the project holds ten
-tasks or a thousand — while the journal behind it grows from 5 KB to 528 KB. The
-cost of asking does not grow with the history that makes the answer worth having.
-[Measured](docs/research/probe-c-agent-cost.md).
+**And it stays one call.** That answer stays under a kilobyte whether the project
+holds ten tasks or a thousand — while the journal behind it grows from 5 KB to
+528 KB. The cost of asking does not grow with the history that makes the answer
+worth having. [Measured](docs/research/probe-c-agent-cost.md) at 948 bytes in
+0.2; 982 bytes at 0.4, after claims and acceptance criteria joined every record.
 
 ## Why events and not files
 
@@ -76,7 +77,7 @@ journal is append-only, one file per event.
 keeps every step, so «how did we get here» has an answer.
 
 State is still there when you want it — it is folded from the journal on read,
-which is why the board can never drift from the journal. No one maintains a
+which is why the board cannot drift from the journal. No one maintains a
 column by hand, so no column can be stale in the way a task file can.
 
 **What that does not buy you.** A journal records what was written to it. If a
@@ -107,22 +108,53 @@ Full data: [probe-a-results.md](docs/research/probe-a-results.md).
 
 ## In practice
 
-```bash
-kadence init
+**The first ten minutes, for the person who owns `CLAUDE.md`:**
 
-kadence sprint create "Sprint 14"
-kadence task add "Fix login" -d "Broken since 2.3" --type bug --priority high --estimate 3
-kadence task ac add KAD-1 "tests green"
-kadence task comment KAD-1 "Session cookie is fine — the redirect drops it."
-kadence task move KAD-1 done
-kadence sprint close
+```bash
+kadence init --hooks          # .kadence/, a short section in AGENTS.md and CLAUDE.md,
+                              # and a Claude Code hook that runs `kadence prime` at session start
+kadence task add "Fix login" --type bug --priority high
+kadence decision add "Keep sessions in Redis" \
+  --why "Revocation must be instant" --rejected "JWT: cannot revoke before expiry"
 ```
+
+Open a new agent session. The hook runs `kadence prime`, and the agent starts
+knowing what is open, what is ready and **DEC-1 with its reason** — ask it how
+sessions should be stored and it answers from the journal, not from a guess.
+
+```bash
+git add .kadence AGENTS.md CLAUDE.md .claude/settings.json .gitignore
+git commit -m "Keep the team's work next to the code"
+```
+
+kadence never commits for you. Once that commit is pushed, the journal is the
+team's, not yours.
+
+### Adding a teammate
+
+1. **They install it:** `npm install -g kadence` (Node 20 or newer). Nothing is
+   configured per person.
+2. **They pull.** Their agent reads the same section in `CLAUDE.md` or `AGENTS.md`
+   and, through the hook, runs `kadence prime` in its first session. On a machine
+   where kadence is not installed yet, the hook prints one line asking for the
+   install instead of failing.
+3. **One identity per person.** Authorship is `git config user.email`. The same
+   person on two machines with two addresses reads as two people — set the same
+   address everywhere.
+4. **Agents say so.** Put `KADENCE_SOURCE=agent` in the agent's environment; its
+   writes then carry `[agent]` next to the same email, so a person and their agent
+   stay distinguishable.
+
+What you should see afterwards: `kadence task show KAD-1` lists their comment,
+note or move with their address. That second author is the moment the journal
+starts doing its job.
 
 **When several people — or several agents — work the same board:**
 
 ```bash
 kadence ready                  # open, unblocked, nobody else's
 kadence task claim             # take the top of that list, in one step
+kadence note "Redirect drops the cookie, not the session" --task KAD-1
 kadence task release KAD-1
 ```
 
@@ -131,38 +163,21 @@ either pushes; the merge keeps both claims and the task reads `contested` with
 both names. Refusing the second one would make the owner depend on which branch
 merged first, and that is the property the whole design rests on.
 
-**Grouping, and the evidence behind "done":**
+**The board, when you want to look at it:**
 
-```bash
-kadence milestone create "1.0" --due 2026-12-01
-kadence milestone add KAD-1 --milestone 1.0
-kadence board config --dod "tests green,docs updated"   # every new task starts with these
-kadence task ac check KAD-1 1
+```
+$ kadence ui
+
+ kadence  6 open · 2 ready · 1 decision in force
++- backlog (2) -------++- in_progress (1) --++- in_review (1) ----++- done (3) ---------+
+| ^# KAD-1 Auth epic  || . KAD-4 Tokens @dev||!! KAD-7 Crash   [] || v KAD-2 Export     |
+|  * KAD-3 Login form ||                    ||                    || v KAD-5 Docs       |
++---------------------++--------------------++--------------------++--------------------+
+ arrows move  enter details  m status  a assign  e edit  s sprint  R ready  b branch  q quit
 ```
 
-Moving a task to `done` with unchecked criteria **warns and carries on**. The
-checklist is evidence, not a gate: what `done` costs is the team's call, not the
-tool's.
-
-**A snapshot somebody can open, without running anything:**
-
-```bash
-kadence board export --html      # one self-contained file: no server, no network
-kadence board export --md --readme
-```
-
-**When someone asks how long things take** — the answer is a fold over the same
-journal, in the Kanban Guide's own terms:
-
-```bash
-kadence board config --started doing   # the column cycle time counts from, if it is not in_progress
-kadence report flow                    # p50 / p85 / p95 in calendar days, WIP, aging work, blocked days
-kadence report cfd                     # tasks per column, per day
-```
-
-No averages, on purpose. Every line names the window and the column it measured
-from. Velocity is not the pitch here and neither is cycle time; they are what the
-journal happens to know.
+Keyboard, mouse, drag between columns, every field editable in place. It calls
+the same commands the CLI does, so the two can never disagree.
 
 **And what the branch you are on is actually about:**
 
@@ -175,38 +190,30 @@ history and is read when you ask. It narrows the answer between three and
 twenty times, [measured](docs/research/branch-context-2026-09.md) on real board
 sizes.
 
-**The board, when you want to look at it:**
+### Also in the box
 
-```
-$ kadence ui
+Sprints (`sprint create/close`, with points and hours derived from moves),
+milestones, acceptance criteria and a definition of done, templates, custom
+columns, reports folded from the same journal (`report flow`, `cfd`,
+`attention`; burndown, velocity and workload are in the repository and not yet
+on npm), a self-contained HTML or Markdown export, `compact` for long journals,
+and shell completion. None of it is required, and none of it is the point —
+it is what the journal happens to know. Commands and caveats:
+[docs/reports.md](docs/reports.md), and `--help` on each command.
 
- kadence   Sprint 14   9 tasks, 28 points
-+- backlog (2) -------++- in_progress (1) --++- in_review (1) ----++- done (3) ---------+
-| ^# KAD-1 Auth epic  || . KAD-4 Tokens @dev||!! KAD-7 Crash   [] || v KAD-2 Export     |
-|  * KAD-3 Login form ||                    ||                    || v KAD-5 Docs       |
-+---------------------++--------------------++--------------------++--------------------+
- arrows move  enter details  m status  a assign  e edit  s sprint  R ready  b branch  q quit
-```
+### Removing kadence
 
-Keyboard, mouse, drag between columns, every field editable in place. It calls
-the same commands the CLI does, so the two can never disagree.
+Everything `init` touched, so you can undo it by hand:
 
-**And because the journal has the timestamps, the cost comes out of it for free:**
+| What | Where |
+|---|---|
+| The journal | `.kadence/` — yours to keep or delete; kadence never deletes it |
+| The agent section | between `<!-- kadence:begin -->` and `<!-- kadence:end -->` in `AGENTS.md` and `CLAUDE.md` |
+| The hook (only with `--hooks`) | the `SessionStart` entry that runs `kadence prime` in `.claude/settings.json` |
+| The cache entry | the `.kadence/state.json` line in `.gitignore` |
 
-```
-$ kadence sprint close
-
-Sprint "Sprint 14" closed.
-
-  Velocity:  23 of 28 points
-  Actual:    37h — 1.6h per point
-
-  Carried over (2):
-    · KAD-12  Auth refactor
-```
-
-Nobody fills in a form. Nobody can forget to update it. The number is derived
-from state changes the team already made.
+Then `npm uninstall -g kadence`. Nothing lives outside the repository and your
+global `node_modules`.
 
 ---
 
@@ -218,8 +225,8 @@ Files first. Every command speaks `--json`, every response carries
 Start a session with one command:
 
 ```bash
-kadence prime          # active sprint, your work, what is ready, decisions in force
-kadence ready --json   # five fields per task, not the whole record
+kadence prime          # active sprint, your work, what is ready, decisions in force, recent notes
+kadence ready --json   # seven fields per task, not the whole record
 ```
 
 `prime` is held to forty lines and three kilobytes by a test, because it is paid
@@ -248,16 +255,19 @@ A failure carries `error.code` and, where the valid set is knowable, `allowed` �
 which matters most for statuses, because they are configured per project and no
 documentation can tell an agent what yours are.
 
-An MCP wrapper stays on the roadmap as an **optional package**: it costs about
-700 tokens a session over the CLI path — [we measured it](docs/research/probe-c-agent-cost.md),
-and it is not the saving the industry benchmarks suggest — but it would be a
-second way to say the same thing, and it would not work for agents that have no
-MCP client at all.
+There is no MCP wrapper, and one gets built only as an **optional package**, when
+someone who cannot run a CLI asks for it: it costs about 700 tokens a session
+over the CLI path — [we measured it](docs/research/probe-c-agent-cost.md), and it
+is not the saving the industry benchmarks suggest — it would be a second way to
+say the same thing, and it would not work for agents that have no MCP client at
+all.
 
-Ask for only what you need — a board of a thousand tasks is 803 KB in full, and
-a tenth of that with the fields an agent actually reads:
+Ask for only what you need — a board of a thousand tasks is 855 KB in full,
+275 KB with `--summary`, and 104 KB with the three fields an agent actually
+reads:
 
 ```bash
+kadence board --json --summary
 kadence board --json --fields label,status,assignee
 ```
 
@@ -275,8 +285,16 @@ one; that is how a reversed decision keeps looking authoritative.
 `decision list` returns what is still in force, `--all` adds the history, and
 `task show --json` carries the decisions made about that task.
 
-Documents stay plain markdown — `kadence task doc KAD-1 docs/design.md` records
-only the link, which is the part git cannot express.
+Something learned that was never a choice is a note, not a decision — no `--why`,
+no number, and `prime` shows the latest:
+
+```bash
+kadence note "The staging clock runs 40 s behind" --task KAD-1
+```
+
+Documents stay plain markdown — `kadence task doc add KAD-1 docs/design.md`
+records only the link, which is the part git cannot express. If the file does
+not exist it is created from a template; an existing one is never overwritten.
 
 Bulk works everywhere and is all or nothing: `kadence task move KAD-1,KAD-2 done`
 either moves both or changes nothing. A typo does not leave half a board.
@@ -302,24 +320,35 @@ true.
 
 **Verified.** The merge thesis, on real git branches. Performance and size, by
 tests that fail if they regress. That the conflict problem exists in the wild —
-measured, not assumed. 898 tests, including an end-to-end run through the
-installed binary.
+measured, not assumed. 998 tests in the repository today, including an
+end-to-end run through the installed binary.
 
 **Not verified.** That teams and their AI agents actually lose enough context to want
 this. The bet rests on reasoning and on the industry naming the problem out
-loud — not on our own users. That research is
-[designed](docs/research/interview-script.md) and not yet run.
+loud — not on our own users. That research, Probe B, is
+[designed](docs/research/interview-script.md) and not yet run: as of
+2026-09-16, [zero conversations](docs/research/probe-b-results.md) and no
+external users. [The strategy](docs/product/strategy.md) says what happens next
+and on which dates.
 
-**On the roadmap, not shipped.** The optional MCP package, kept as a response to
-someone who cannot use the CLI rather than as an inevitability.
+**Not built, on purpose.** An MCP package — only if someone who cannot run a CLI
+asks for it, not as an inevitability.
+
+**In the repository, not yet released.** `report burndown`, `report velocity`,
+`report workload`, `report --list` and `report <name> --html`. `npm install`
+gives you 0.4.1 without them.
 
 `kadence context <task>` was dropped: we measured what `task show --json` already
-returns and it is the whole history of one piece of work, 948 bytes, constant.
+returns and it is the whole history of one piece of work, under a kilobyte,
+constant.
 The only thing left to add was a different format, and nobody has asked for one.
 
 **Known limits.** Conflicts are real but rare: roughly one merge in two hundred.
 Terminal interaction is covered by manual testing; only the key router is
-unit-tested.
+unit-tested. Deleting several tasks by `KAD-N` in one loop removes the wrong
+ones, because labels are derived and renumber as earlier tasks go — delete by
+ULID, or one at a time. There is no `task ac remove`, so a board-wide Definition
+of Done lands on every new task unless it is added with `--no-dod`.
 
 ---
 
@@ -345,8 +374,9 @@ revisit it: [docs/decisions/](docs/decisions/).
 
 ```bash
 npm install
-npm test          # 898 tests
-npm run build     # 35 KB bundle
+npm test            # 998 tests; builds dist/cli.js first
+npm run typecheck
+npm run build       # one 111 KB bundle, blessed kept external (82 KB at 0.4.1)
 ```
 
 `CLAUDE.md` documents the invariants, the boundaries, and the decisions that

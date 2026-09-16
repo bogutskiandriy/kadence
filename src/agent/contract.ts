@@ -30,8 +30,9 @@ the CLI. No server required.
     kadence task add "title" -d "..." --type bug --estimate 3
     kadence task move KAD-42 in_progress
     kadence task assign KAD-42 you@example.com
-    kadence sprint status --json         current sprint progress
     kadence note "text" --task KAD-42   something learned; a choice is a decision
+    kadence decision list --json         why the current choices were made
+    kadence decision add "..." --why "..."  a choice, with its reason
 
 ## JSON contract
 
@@ -64,6 +65,19 @@ network and no lock, so the same input always fails the same way.
 
 Set \`KADENCE_SOURCE=agent\` so events record your authorship. Without it an
 event is marked as human — we do not guess.
+
+## Adding a teammate
+
+Nothing to invite and no account to create — the journal travels with git.
+
+1. They install the CLI: \`npm install -g kadence\`.
+2. They \`git pull\`; \`.kadence/\`, \`AGENTS.md\` and \`CLAUDE.md\` come with it.
+3. One \`git config user.email\` per person, the same on all their machines —
+   that address is who they are in the journal.
+4. Their agent runs with \`KADENCE_SOURCE=agent\` in its environment.
+
+Afterwards \`kadence task show KAD-42\` shows the lead who did what, and whether
+a person or their agent did it.
 
 ## Why to ask rather than read the files
 
@@ -124,20 +138,22 @@ export function agentsSection(version: string): string {
 ${provenance(version)}
 ## Project tasks — kadence
 
-Tasks live in \`.kadence/\` as plain files. Read them directly or via the CLI:
+Tasks, notes and decisions live in \`.kadence/\` as plain files, shared through git.
 
-    kadence prime                  start here: sprint, your work, what is ready
-    kadence board --json --summary the board's state, without the history
-    kadence board --json           the whole board, history included
-    kadence task list --json       all tasks
-    kadence task move KAD-1 done  change state
+    kadence prime                       start here: sprint, your work, what is ready
+    kadence board --json --summary      the board's state, without the history
+    kadence task list --json            all tasks
+    kadence decision list --json        why the current choices were made
+    kadence schema --json               the contract: commands, fields, error codes
 
-    kadence schema --json          the contract: commands, fields, error codes
-    kadence decision list --json   why the current choices were made
+    kadence task claim                  take the top of ready before starting
+    kadence task move KAD-1 done        change state
+    kadence note "…" --task KAD-1       something learned, for the next session
+    kadence decision add "…" --why "…"  a choice between approaches, and its reason
 
 \`--json\` responses carry \`schema: "kadence/v1"\`; stdout is JSON only. A failure
-carries \`error.code\` and, where knowable, \`allowed\`.
-When acting as an agent, set \`KADENCE_SOURCE=agent\`.
+carries \`error.code\` and, where knowable, \`allowed\`. As an agent, set \`KADENCE_SOURCE=agent\`.
+If \`kadence\` is not on PATH, ask the human to run \`npm install -g kadence\` (\`npx kadence prime\` needs network — their call).
 
 Details: \`.kadence/README.md\`
 ${AGENTS_END}`;
@@ -522,21 +538,43 @@ export function buildContract(version: string): Record<string, unknown> {
       {
         name: 'report flow',
         summary:
-          'WIP, throughput per week, cycle / lead / response time as p50 p85 p95 in calendar days, aging work against p85, created vs resolved, blocked days. Names the window and the started boundary it used.',
-        flags: ['--since', '--json'],
+          'WIP, throughput per week, cycle / lead / response time as p50 p85 p95 in calendar days, aging work against p85, created vs resolved, blocked days. Names the window and the started boundary it used. `--html` writes the same numbers as one self-contained page with charts, and answers with the path rather than the report.',
+        flags: ['--since', '--html', '--file', '--json'],
         json: true,
       },
       {
         name: 'report cfd',
-        summary: 'Cumulative flow: tasks per column at the end of each day in the window.',
-        flags: ['--since', '--json'],
+        summary:
+          'Cumulative flow: tasks per column at the end of each day in the window. `--html` writes it as a stacked area chart in one self-contained page.',
+        flags: ['--since', '--html', '--file', '--json'],
         json: true,
       },
       {
         name: 'report attention',
         summary:
-          'Work past the started boundary that nobody is moving: stalled, unowned, held by a stale claim, or blocked by something already done. `--since` is days of silence, default 7.',
-        flags: ['--since', '--json'],
+          'Work past the started boundary that nobody is moving: stalled, unowned, held by a stale claim, or blocked by something already done. `--since` is days of silence, default 7. `--html` writes it as one self-contained page.',
+        flags: ['--since', '--html', '--file', '--json'],
+        json: true,
+      },
+      {
+        name: 'report burndown',
+        summary:
+          'One sprint against an even burn, day by day. The active sprint by default; `--sprint <name>` for a closed one. The same fold as `sprint burndown`, under the verb the catalogue lives at.',
+        flags: ['--sprint', '--html', '--file', '--json'],
+        json: true,
+      },
+      {
+        name: 'report velocity',
+        summary:
+          'Points committed against points finished, per closed sprint, newest last. Reported as a range — low, median, high — not as an average: the spread between sprints is the forecast, and a series shorter than four sprints says so.',
+        flags: ['--html', '--file', '--json'],
+        json: true,
+      },
+      {
+        name: 'report workload',
+        summary:
+          'Open tasks, open points, work in progress and blocked work per owner, with a row for unassigned work. No hours and no capacity: the journal has neither.',
+        flags: ['--html', '--file', '--json'],
         json: true,
       },
       {
@@ -597,6 +635,82 @@ export function buildContract(version: string): Record<string, unknown> {
       { name: 'sprint status', summary: 'Current sprint progress.', json: true },
       { name: 'sprint create', summary: 'Start a sprint.', args: ['name'], json: true },
       { name: 'sprint close', summary: 'Close it and report velocity.', json: true },
+      // Added 2026-09-16 (T115). These shipped without an entry, so an agent
+      // that trusted this list never learned they exist. test/command-surface
+      // now fails when a command or action the CLI accepts has no entry here.
+      {
+        name: 'sprint add',
+        summary: 'Put a task in a sprint: the active one, or `--sprint <name>`.',
+        args: ['ref'],
+        flags: ['--sprint', '--json'],
+        json: true,
+      },
+      {
+        name: 'sprint edit',
+        summary: 'Rename a sprint or change its description and dates. The active sprint when no name is given.',
+        args: ['name'],
+        flags: ['--name', '--description', '--start', '--end', '--json'],
+        json: true,
+      },
+      {
+        name: 'sprint start',
+        summary:
+          'Start a planned sprint; with no name, the oldest planned one. Fails with conflicting_state while another is active.',
+        args: ['name'],
+        json: true,
+      },
+      { name: 'sprint list', summary: 'Every sprint with its status.', json: true },
+      {
+        name: 'sprint burndown',
+        summary: 'One sprint against an even burn, folded from the journal. The active sprint when no name is given; `burndown` is null when there is none.',
+        args: ['name'],
+        json: true,
+      },
+      {
+        name: 'task parent',
+        summary: 'Set a task’s parent; `none` detaches it.',
+        args: ['ref', 'parent'],
+        json: true,
+      },
+      { name: 'task unblock', summary: 'Remove a recorded blocker.', args: ['ref', 'blocker'], json: true },
+      {
+        name: 'task cancel',
+        summary: 'Cancel a task. It stays in history and does not count as missed work. Accepts several refs.',
+        args: ['refs'],
+        json: true,
+      },
+      {
+        name: 'task delete',
+        summary:
+          'Drop a task from the board. The journal is append-only: this writes a `task.deleted` event and the earlier events stay. Accepts several refs.',
+        args: ['refs'],
+        json: true,
+      },
+      {
+        name: 'template save',
+        summary: 'Save default fields under a name, for `task add --template <name>`.',
+        args: ['name'],
+        flags: ['--description', '--type', '--priority', '--assignee', '--label', '--estimate', '--json'],
+        json: true,
+      },
+      { name: 'template list', summary: 'Saved templates and their fields. Also the bare `template`.', json: true },
+      { name: 'template delete', summary: 'Remove a template.', args: ['name'], json: true },
+      {
+        name: 'completion',
+        summary: 'Print the shell completion script for `--shell`, or the shell in $SHELL.',
+        flags: ['--shell', '--json'],
+        json: true,
+      },
+      {
+        name: 'completion install',
+        summary: 'Write the completion script where the shell looks. Refuses to overwrite a file kadence did not write unless --force.',
+        flags: ['--shell', '--force', '--json'],
+        json: true,
+      },
+      {
+        name: 'ui',
+        summary: 'Interactive kanban board for a person at a terminal. No --json: an agent reads `board --json` instead.',
+      },
     ],
   };
 }

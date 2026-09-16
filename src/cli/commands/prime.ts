@@ -36,6 +36,8 @@ const ATTENTION_LIMIT = 3;
 /** Days of silence. The same default `report attention` uses. */
 const ATTENTION_IDLE_DAYS = 7;
 const TITLE_LIMIT = 60;
+/** Shown only when no decision is in force. */
+const DECISION_HINT = 'record why: kadence decision add "…" --why "…"';
 
 /** The four ways to go deeper, so nothing above has to be exhaustive. */
 const COMMANDS = [
@@ -107,16 +109,17 @@ export function runPrime(
     .map((n) => ({ text: n.text, by: n.by, task: labelOf(state, n.task) }));
 
   const lines: string[] = [];
-  lines.push(
-    sprint === undefined
-      ? 'No active sprint.'
-      : `Sprint: ${sprint.name}${left === null ? '' : `, ${left} day(s) left`}`,
-  );
+  // Only when there is one. Sprints are optional, and "No active sprint." at the
+  // top of every session tells a team that never uses them that it is doing
+  // something wrong (T110).
+  if (sprint !== undefined) {
+    lines.push(`Sprint: ${sprint.name}${left === null ? '' : `, ${left} day(s) left`}`, '');
+  }
 
   // The count is the real one, not the shown one: "Yours (5)" while seven are
   // hidden is the kind of number that makes a reader stop trusting the rest.
   const minePart = allMine.length > ours.length ? `${ours.length} of ${allMine.length}` : `${ours.length}`;
-  lines.push('', allMine.length === 0 ? 'Nothing claimed by you.' : `Yours (${minePart}):`);
+  lines.push(allMine.length === 0 ? 'Nothing claimed by you.' : `Yours (${minePart}):`);
   for (const t of ours) lines.push(`  ${t.label} ${t.status}  ${short(t.title)}`);
 
   // A count, not a list: `ready` prints the list, and printing it twice is how
@@ -138,6 +141,10 @@ export function runPrime(
   if (decisions.length > 0) {
     lines.push('', 'Decisions in force:');
     for (const d of decisions) lines.push(`  ${d.label} ${short(d.title)}`);
+  } else {
+    // One line, and only while the journal holds no reasons at all: the empty
+    // state is where the habit either starts or does not.
+    lines.push('', DECISION_HINT);
   }
   if (notes.length > 0) {
     lines.push('', 'Recent notes:');

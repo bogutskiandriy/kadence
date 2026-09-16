@@ -9,7 +9,7 @@ import type { FlowEvent } from '../src/core/event.js';
 import { createUlid } from '../src/core/ulid.js';
 import { runInit } from '../src/cli/commands/init.js';
 import { runTaskAdd, runTaskMove } from '../src/cli/commands/task.js';
-import { runReport, parseSince } from '../src/cli/commands/report.js';
+import { runReport, parseSince, REPORTS } from '../src/cli/commands/report.js';
 
 /**
  * Flow metrics: the four the Kanban Guide mandates, from timestamps the
@@ -323,7 +323,7 @@ describe('runReport', () => {
       const r = runReport(dir, env, name, {});
       expect(r.ok).toBe(false);
       expect(r.error!.code).toBe('invalid_argument');
-      expect(r.error!.allowed).toEqual(['flow', 'cfd', 'attention']);
+      expect(r.error!.allowed).toEqual([...REPORTS]);
     }
   });
 

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runInit } from '../src/cli/commands/init.js';
+import { runInit, HOOK_COMMAND } from '../src/cli/commands/init.js';
 
 /**
  * `.claude/settings.json` is the user's file, not ours.
@@ -42,7 +42,7 @@ describe('init --hooks', () => {
     expect(sessionStart[0]!['matcher']).toBe('startup');
     const entries = sessionStart[0]!['hooks'] as Array<Record<string, unknown>>;
     expect(entries[0]!['type']).toBe('command');
-    expect(entries[0]!['command']).toBe('kadence prime');
+    expect(entries[0]!['command']).toBe(HOOK_COMMAND);
   });
 
   it('keeps hooks that were already there, of any event', () => {
@@ -90,7 +90,7 @@ describe('init --hooks', () => {
     >;
     expect(sessionStart).toHaveLength(1);
     const entries = sessionStart[0]!['hooks'] as Array<Record<string, unknown>>;
-    expect(entries.map((e) => e['command'])).toEqual(['greet.sh', 'kadence prime']);
+    expect(entries.map((e) => e['command'])).toEqual(['greet.sh', HOOK_COMMAND]);
   });
 
   it('is idempotent — running it twice leaves one hook', () => {

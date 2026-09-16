@@ -1,0 +1,90 @@
+# Reports, sprints and exports
+
+Everything here is folded from the same journal the rest of kadence reads. None
+of it is required to use kadence, and none of it is the pitch: it is what the
+journal happens to know. Every command has its own `--help`.
+
+## Sprints and cost
+
+```bash
+kadence sprint create "Sprint 14"
+kadence task add "Fix login" --estimate 3
+kadence sprint add KAD-1
+kadence sprint burndown                # the active sprint, rebuilt for any day
+kadence sprint close
+```
+
+```
+Sprint "Sprint 14" closed.
+
+  Velocity:  23 of 28 points
+  Actual:    37h — 1.6h per point
+```
+
+Nobody fills in a form. The hours are derived from state changes the team
+already made; `kadence task log KAD-1 -30m` exists only to correct them.
+
+## Milestones and the evidence behind "done"
+
+```bash
+kadence milestone create "1.0" --due 2026-12-01
+kadence milestone add KAD-1 --milestone 1.0
+kadence board config --dod "tests green,docs updated"   # every new task starts with these
+kadence task ac add KAD-1 "migration reversible"
+kadence task ac check KAD-1 1
+```
+
+Moving a task to `done` with unchecked criteria **warns and carries on**. The
+checklist is evidence, not a gate.
+
+## Flow
+
+```bash
+kadence board config --started doing   # the column cycle time counts from, if it is not in_progress
+kadence report flow                    # p50 / p85 / p95 in calendar days, WIP, aging work, blocked days
+kadence report cfd                     # tasks per column, per day
+kadence report attention               # work in flight nobody is moving: stalled, unowned, stale claims, dead blockers
+kadence stats                          # counts by status and owner, open blockers, contested claims
+```
+
+**In the repository, not yet on npm:**
+
+```bash
+kadence report --list                  # every report, and what each one answers
+kadence report burndown                # the active sprint against an even burn
+kadence report velocity                # committed against finished, sprint by sprint, as a range
+kadence report workload                # who is carrying what, unassigned work included
+kadence report flow --html             # the same numbers as a page, with charts
+```
+
+No averages, on purpose. `report velocity` comes back as a range — low, median,
+high — and a series shorter than four sprints says so. Every line names the
+window and the column it measured from. `--html` writes one self-contained file:
+charts as inline SVG, no script, no request at open time, and every chart is
+followed by the rows it was drawn from.
+
+## Exports
+
+```bash
+kadence board export --html      # one self-contained file: no server, no network
+kadence board export --md --readme
+```
+
+A one-way publisher to GitHub Issues lives in this repository as
+`packages/github` (`@kadence/github`). **It is not published to npm yet**, so
+`npx @kadence/github` does not work today. It reads `kadence board --json`,
+calls `gh`, and never reads back; the core still opens no socket
+([ADR-012](decisions/012-network-only-in-packages.md)).
+
+## The rest
+
+```bash
+kadence task list --tree               # epics and their children; --status, --search, --overdue, --sort
+kadence template save bug --type bug --priority high   # then: task add --template bug
+kadence board config --statuses "todo,doing,review,done"
+kadence compact --dry-run              # fold old months into one file each, so a long journal starts cold faster
+kadence completion install --shell zsh # also bash and fish
+```
+
+Compact on one branch and merge before compacting on another: an archived month
+is a single file.
