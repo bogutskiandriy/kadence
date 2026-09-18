@@ -1,0 +1,1 @@
+{"id":"01M2TR315SQXXDNT31E3H0D86C","type":"note.recorded","entity":"01M2TR315SQXXDNT31E3H0D86C","actor":"bogutski2005@gmail.com","ts":"2026-09-18T17:12:39.354Z","source":"agent","data":{"text":"task add --json returns no label, so an agent creating six tasks needs a second call (task list --label …) to learn KAD-N for each; confirmed while filing the stress-audit fixes"}}
