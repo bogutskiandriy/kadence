@@ -53,6 +53,32 @@ describe('a task carries the documents that explain it', () => {
     expect(shown()['docs']).toEqual(['docs/later.md']);
   });
 
+  // A wiki page is the first thing people reach for, and path resolution
+  // quietly folded `https://` into `https:/…` — a string that is neither a URL
+  // nor a file, recorded for good in an append-only journal. Documents live in
+  // the repository, so the refusal points there.
+  it('refuses a URL instead of recording it as a mangled path', () => {
+    const url = 'https://acme.atlassian.net/wiki/spaces/ENG/pages/123/Auth';
+    const r = runTaskDoc(dir, env, 'KAD-1', url);
+
+    expect(r.ok).toBe(false);
+    expect(r.error?.code).toBe('invalid_argument');
+    expect(r.message).toMatch(/kadence doc add .* --task KAD-1/);
+    expect(shown()['docs']).toEqual([]);
+  });
+
+  it('task doc add creates nothing on disk for a URL', () => {
+    const r = runTaskDoc(dir, env, 'KAD-1', 'https://acme.atlassian.net/wiki/x', true);
+
+    expect(r.ok).toBe(false);
+    expect(existsSync(join(dir, 'https:'))).toBe(false);
+  });
+
+  it('still takes a file whose name merely contains a colon', () => {
+    const r = runTaskDoc(dir, env, 'KAD-1', 'docs/notes:v2.md');
+    expect(r.ok, r.message).toBe(true);
+  });
+
   it('refuses to link to a task that does not exist', () => {
     const r = runTaskDoc(dir, env, 'KAD-9', 'A.md');
     expect(r.ok).toBe(false);

@@ -758,11 +758,29 @@ export function runTaskShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): C
   // part of the context an agent cannot recover from the code.
   const notes = state.notes.filter((n) => n.task === task.id);
 
+  // Documentation arrives with the task, without a search term — which is the
+  // whole argument for linking it (Probe D). Titles and sizes only: the body is
+  // one `doc show` away, and an agent decides from the size whether to fetch it.
+  const documentation = state.documents
+    .filter((d) => d.tasks.includes(task.id))
+    .map((d) => ({
+      id: d.id,
+      label: d.label,
+      title: d.title,
+      bytes: Buffer.byteLength(d.body, 'utf8'),
+      updatedAt: d.updatedAt,
+      conflicted: d.conflicts.length > 0,
+    }));
+  const docLines =
+    documentation.length === 0
+      ? ''
+      : `\n\nDocumentation:\n${documentation.map((d) => `  ${d.label}  ${d.title}   kadence doc show ${d.label}`).join('\n')}`;
+
   return {
     ok: true,
     exitCode: 0,
     warnings,
-    message: renderTaskDetail(task, notes),
+    message: renderTaskDetail(task, notes) + docLines,
     data: {
       schema: 'kadence/v1',
       ok: true,
@@ -770,6 +788,7 @@ export function runTaskShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): C
         ...serializeTask(task, null, state),
         decisions,
         notes: notes.map((n) => ({ id: n.id, text: n.text, at: n.at, by: n.by, source: n.source })),
+        documentation,
       },
     },
   };
@@ -1091,6 +1110,9 @@ function docTemplate(title: string, label: string): string {
  * `resolve()` is the only form that catches every escape: `..` segments, an
  * absolute path, and a symlink-free path that simply points elsewhere.
  */
+/** A scheme and `//`: `resolve()` would fold it into a path that is neither. */
+const URL_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
+
 export function repoRelative(
   root: string,
   input: string,
@@ -1099,6 +1121,17 @@ export function repoRelative(
   const trimmed = input.trim();
   if (trimmed.length === 0) {
     return failure(2, 'invalid_argument', 'A path is required.', { hint });
+  }
+  // `resolve()` folds `https://host` into `https:/host` — neither a URL nor a
+  // file — and the journal would keep it forever. Documents live in the
+  // repository, so a URL is refused before it can become a path.
+  if (URL_RE.test(trimmed)) {
+    return failure(
+      2,
+      'invalid_argument',
+      `${input} is a URL. kadence links documents that live in the repository:\n  ${hint}`,
+      { received: input, hint },
+    );
   }
   const full = resolve(root, trimmed);
   const rel = relative(root, full);
@@ -1135,6 +1168,17 @@ export function runTaskDoc(
   const task = findTask(state, ref);
   if (task === undefined) return taskNotFound(ref);
 
+  // A wiki link is the first thing people reach for. kadence keeps
+  // documentation in the journal (ADR-014), so that is where the refusal points.
+  if (URL_RE.test(path.trim())) {
+    return failure(
+      2,
+      'invalid_argument',
+      `${path} is a URL. kadence keeps documentation in the repository's journal, not as links:\n` +
+        `  kadence doc add "${task.title}" --file <path> --task ${task.label}`,
+      { received: path, hint: `kadence doc add "…" --body "…" --task ${task.label}` },
+    );
+  }
   const resolved = repoRelative(ctx.root, path, 'kadence task doc KAD-1 docs/design.md');
   if ('exitCode' in resolved) return resolved;
   const { rel, full } = resolved;

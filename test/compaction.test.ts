@@ -58,6 +58,37 @@ describe('compact', () => {
     expect(existsSync(join(eventsDir(root), '2026-01'))).toBe(true);
   });
 
+  // A teammate on an older kadence compacting a month that holds events from a
+  // newer one. parse() skips those as "from the future", and the month
+  // directory used to be deleted after the known events were archived — the
+  // newer events with it. Found in review of ADR-014, whose doc.* events are
+  // the first new types to reach shared repositories.
+  it('leaves a month alone when it holds an event this version cannot read', () => {
+    append(root, at('2026-01'));
+    const future = { ...at('2026-01'), type: 'from.the_future' } as unknown as FlowEvent;
+    const monthDir = join(eventsDir(root), '2026-01');
+    writeFileSync(join(monthDir, `${future.id}.json`), JSON.stringify(future), 'utf8');
+    append(root, at('2026-09'));
+
+    const r = compact(root, '2026-09');
+
+    expect(r.archivedMonths).toEqual([]);
+    expect(r.skipped.some((p) => p.endsWith('2026-01'))).toBe(true);
+    expect(existsSync(join(monthDir, `${future.id}.json`))).toBe(true);
+  });
+
+  it('leaves a month alone when one of its files is damaged, rather than deleting it', () => {
+    append(root, at('2026-01'));
+    const monthDir = join(eventsDir(root), '2026-01');
+    writeFileSync(join(monthDir, '01ZZZZZZZZZZZZZZZZZZZZZZZZ.json'), '{"id":', 'utf8');
+    append(root, at('2026-09'));
+
+    const r = compact(root, '2026-09');
+
+    expect(r.archivedMonths).toEqual([]);
+    expect(existsSync(join(monthDir, '01ZZZZZZZZZZZZZZZZZZZZZZZZ.json'))).toBe(true);
+  });
+
   it('loses no events', () => {
     for (let i = 0; i < 5; i++) append(root, at('2026-01'));
     append(root, at('2026-09'));

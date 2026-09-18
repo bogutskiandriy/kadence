@@ -100,6 +100,23 @@ describe('the schema cannot drift from the code', () => {
     }
   });
 
+  it('every required document field is present in every doc command that answers with one', () => {
+    run(['task', 'add', 'Task']);
+    const required = json(['schema', '--json']).contract.shapes.document.required as string[];
+    const answers = {
+      add: json(['doc', 'add', 'Auth', '--body', 'How login works.', '--json']).document,
+      edit: json(['doc', 'edit', 'DOC-1', '--body', 'Revised.', '--json']).document,
+      link: json(['doc', 'link', 'DOC-1', 'KAD-1', '--json']).document,
+      show: json(['doc', 'show', 'DOC-1', '--json']).document,
+      list: (json(['doc', 'list', '--json']).documents as Record<string, unknown>[])[0],
+    };
+    for (const [command, doc] of Object.entries(answers)) {
+      for (const field of required) {
+        expect(Object.keys(doc as object), `doc ${command} must carry ${field}`).toContain(field);
+      }
+    }
+  });
+
   it('every required ready field is present in a real ready list', () => {
     run(['task', 'add', 'Task', '--estimate', '3', '--label', 'impact-high']);
     const required = json(['schema', '--json']).contract.shapes.ready.required;

@@ -238,11 +238,14 @@ export function compactionPlan(root: string, keepFromMonth: string): CompactionP
       (readArchive(join(archiveDir(root), `${entry.name}.json`)) ?? []).map((e) => e.id),
     );
     let count = 0;
+    let unreadable = false;
     for (const file of listJsonFiles(join(base, entry.name))) {
       const e = parse(readFileSync(file, 'utf8')).event;
-      if (e !== null && !already.has(e.id)) count += 1;
+      if (e === null) unreadable = true;
+      else if (!already.has(e.id)) count += 1;
     }
-    if (count === 0) continue;
+    // compact() leaves such a month alone; the plan must not promise otherwise.
+    if (unreadable || count === 0) continue;
     months.push({ month: entry.name, events: count });
     total += count;
   }
@@ -272,9 +275,20 @@ export function compact(root: string, keepFromMonth: string): CompactResult {
     const files = listJsonFiles(monthDir);
     const batch: FlowEvent[] = [];
 
+    let unreadable = false;
     for (const file of files) {
       const r = parse(readFileSync(file, 'utf8'));
       if (r.event !== null) batch.push(r.event);
+      else unreadable = true;
+    }
+    // The directory is deleted once its events are archived, so every file in
+    // it has to be one this version can carry into the archive. An event from
+    // a newer kadence, or a damaged file, would be deleted rather than moved —
+    // the month is left whole instead (found reviewing ADR-014, where doc.*
+    // became the first types an older teammate's compact could meet).
+    if (unreadable) {
+      skipped.push(monthDir);
+      continue;
     }
     if (batch.length === 0) continue;
 

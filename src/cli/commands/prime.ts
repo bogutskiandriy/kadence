@@ -24,6 +24,12 @@ const MINE_LIMIT = 5;
 const DECISION_LIMIT = 5;
 const NOTE_LIMIT = 5;
 /**
+ * Documentation of the work you hold, by title. The one place a document
+ * reaches an agent without a search term, which is the case for linking it at
+ * all (Probe D, ADR-014). Bodies stay one `doc show` away.
+ */
+const DOC_LIMIT = 3;
+/**
  * Three, and only when there are any.
  *
  * This is the only thing kadence pushes: the `SessionStart` hook runs `prime`
@@ -108,6 +114,18 @@ export function runPrime(
     .reverse()
     .map((n) => ({ text: n.text, by: n.by, task: labelOf(state, n.task) }));
 
+  // All of your work, not only the five shown: documentation for the sixth
+  // task is still documentation you hold.
+  const held = new Set(allMine.map((t) => t.id));
+  const allDocumentation = state.documents
+    .flatMap((d) => {
+      const task = d.tasks.find((id) => held.has(id));
+      return task === undefined
+        ? []
+        : [{ label: d.label, title: d.title, task: labelOf(state, task), bytes: Buffer.byteLength(d.body, 'utf8') }];
+    });
+  const documentation = allDocumentation.slice(0, DOC_LIMIT);
+
   const lines: string[] = [];
   // Only when there is one. Sprints are optional, and "No active sprint." at the
   // top of every session tells a team that never uses them that it is doing
@@ -121,6 +139,17 @@ export function runPrime(
   const minePart = allMine.length > ours.length ? `${ours.length} of ${allMine.length}` : `${ours.length}`;
   lines.push(allMine.length === 0 ? 'Nothing claimed by you.' : `Yours (${minePart}):`);
   for (const t of ours) lines.push(`  ${t.label} ${t.status}  ${short(t.title)}`);
+
+  // Nothing linked, nothing printed: a heading over an empty list would teach
+  // every session to skip it.
+  if (documentation.length > 0) {
+    const part =
+      allDocumentation.length > documentation.length
+        ? `${documentation.length} of ${allDocumentation.length}`
+        : `${documentation.length}`;
+    lines.push('', `Documentation for your work (${part}):  (kadence doc show DOC-N)`);
+    for (const d of documentation) lines.push(`  ${d.label} ${short(d.title)}  (${d.task})`);
+  }
 
   // A count, not a list: `ready` prints the list, and printing it twice is how
   // a preamble doubles in size without saying anything new.
@@ -170,6 +199,8 @@ export function runPrime(
       // that gets an ellipsis has no way to ask for the rest.
       mine: ours.map((t) => ({ label: t.label, title: t.title, status: t.status })),
       mineTotal: allMine.length,
+      documentation,
+      documentationTotal: allDocumentation.length,
       ready: ready.length,
       // The rows, not a count: a count of neglected work is a number nobody can
       // act on, and the whole point of the line is that it names something.

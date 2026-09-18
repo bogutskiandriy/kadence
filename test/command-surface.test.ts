@@ -53,7 +53,7 @@ describe('kadence --help', () => {
     // then maintenance. Alphabetical would put `board` before `init`; the
     // registration order put `milestone` first, which nobody reaches for first.
     const ORDER = [
-      'init', 'prime', 'ready', 'task', 'decision', 'note', 'board', 'ui', 'schema',
+      'init', 'prime', 'ready', 'task', 'decision', 'note', 'doc', 'board', 'ui', 'schema',
       'sprint', 'milestone', 'template',
       'report', 'stats',
       'compact', 'completion',

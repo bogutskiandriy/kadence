@@ -14,6 +14,7 @@ import {
   runSprintEdit,
 } from '../src/cli/commands/sprint.js';
 import { runPrime } from '../src/cli/commands/prime.js';
+import { runDocAdd } from '../src/cli/commands/doc.js';
 
 /**
  * `prime` is the one command written to a budget rather than a feature list.
@@ -51,6 +52,10 @@ function busyRepo(): void {
   for (let i = 1; i <= 12; i++) {
     runDecisionAdd(dir, env, `Decision number ${i} with a long title`, { why: 'Because' });
     runNoteAdd(dir, env, `Note number ${i}, also with a reasonably long body`, {});
+  }
+  // More documentation on the claimed task than prime will show.
+  for (let i = 1; i <= 4; i++) {
+    runDocAdd(dir, env, `Document number ${i} with a long title`, { body: 'text', task: 'KAD-1' });
   }
 }
 
@@ -145,7 +150,7 @@ describe('runPrime', () => {
     const data = r.data!;
     expect(data['schema']).toBe('kadence/v1');
     expect(Object.keys(data).sort()).toEqual(
-      ['schema', 'ok', 'sprint', 'mine', 'mineTotal', 'ready', 'attention', 'attentionTotal', 'decisions', 'notes', 'commands'].sort(),
+      ['schema', 'ok', 'sprint', 'mine', 'mineTotal', 'documentation', 'documentationTotal', 'ready', 'attention', 'attentionTotal', 'decisions', 'notes', 'commands'].sort(),
     );
     expect((data['decisions'] as unknown[]).length).toBeLessThanOrEqual(5);
     expect((data['notes'] as unknown[]).length).toBeLessThanOrEqual(5);
