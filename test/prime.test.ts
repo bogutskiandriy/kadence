@@ -263,3 +263,91 @@ describe('runPrime and attention', () => {
     30_000,
   );
 });
+
+/**
+ * A contested claim reaches the agents in it (KAD-41).
+ *
+ * `prime` is the only thing the hook pushes. After a merge, `ready`, `stats`
+ * and `task show` all reported the contest while `prime` gave the agent that
+ * lost `mine: []` — so the one agent that needed to know started the task
+ * anyway, or silently claimed another (stress audit B2).
+ */
+describe('runPrime with a contested claim', () => {
+  const agent = (name: string): NodeJS.ProcessEnv =>
+    ({ KADENCE_SOURCE: 'agent', KADENCE_ACTOR: `tester@example.com#${name}` }) as NodeJS.ProcessEnv;
+
+  it('shows the agent that lost the task it contests, and who holds it', () => {
+    runTaskAdd(dir, env, 'Shared work', {});
+    runTaskClaim(dir, agent('a1'), 'KAD-1', {});
+    runTaskClaim(dir, agent('a2'), 'KAD-1', {});
+    const r = runPrime(dir, agent('a2'), {});
+    expect(r.message).toMatch(/KAD-1.*contested.*tester@example\.com#a1/);
+    const mine = r.data!['mine'] as Array<{ label: string; claimedBy: string; contestedBy: string[] }>;
+    expect(mine.map((t) => t.label)).toEqual(['KAD-1']);
+    expect(mine[0]!.claimedBy).toBe('tester@example.com#a1');
+    expect(mine[0]!.contestedBy).toEqual(['tester@example.com#a2']);
+  });
+
+  it('tells the holder the task is contested, and by whom', () => {
+    runTaskAdd(dir, env, 'Shared work', {});
+    runTaskClaim(dir, agent('a1'), 'KAD-1', {});
+    runTaskClaim(dir, agent('a2'), 'KAD-1', {});
+    const r = runPrime(dir, agent('a1'), {});
+    expect(r.message).toMatch(/KAD-1.*contested.*tester@example\.com#a2/);
+  });
+
+  it('keeps an uncontested claim free of any contest wording', () => {
+    runTaskAdd(dir, env, 'Quiet work', {});
+    runTaskClaim(dir, agent('a1'), 'KAD-1', {});
+    const r = runPrime(dir, agent('a1'), {});
+    expect(r.message).not.toMatch(/contested/);
+    const mine = r.data!['mine'] as Array<{ contestedBy: string[] }>;
+    expect(mine[0]!.contestedBy).toEqual([]);
+  });
+
+  it('puts contested work first, so the cap never hides it', () => {
+    runTaskAdd(dir, env, 'Shared work', {});
+    runTaskClaim(dir, agent('a1'), 'KAD-1', {});
+    runTaskClaim(dir, agent('a2'), 'KAD-1', {});
+    for (let i = 2; i <= 8; i++) {
+      runTaskAdd(dir, env, `Newer ${i}`, {});
+      runTaskClaim(dir, agent('a2'), `KAD-${i}`, {});
+    }
+    const r = runPrime(dir, agent('a2'), {});
+    const mine = r.data!['mine'] as Array<{ label: string }>;
+    expect(mine[0]!.label).toBe('KAD-1');
+  });
+
+  it(`stays inside ${LINE_BUDGET} lines and ${BYTE_BUDGET} bytes with every claim contested`, () => {
+    busyRepo();
+    for (let i = 5; i <= 9; i++) {
+      runTaskClaim(dir, agent('a1-with-a-long-worktree-name'), `KAD-${i}`, {});
+      runTaskClaim(dir, agent('a2-with-a-long-worktree-name'), `KAD-${i}`, {});
+      runTaskClaim(dir, agent('a3-with-a-long-worktree-name'), `KAD-${i}`, {});
+    }
+    const r = runPrime(dir, agent('a2-with-a-long-worktree-name'), {});
+    expect(r.message.split('\n').length).toBeLessThanOrEqual(LINE_BUDGET);
+    expect(Buffer.byteLength(r.message, 'utf8')).toBeLessThanOrEqual(BYTE_BUDGET);
+  });
+});
+
+describe('runPrime when a person’s own agents collide', () => {
+  const agent = (name: string): NodeJS.ProcessEnv =>
+    ({ KADENCE_SOURCE: 'agent', KADENCE_ACTOR: `tester@example.com#${name}` }) as NodeJS.ProcessEnv;
+
+  it('says plainly that their agents collided, instead of listing their own agents as others', () => {
+    runTaskAdd(dir, env, 'Shared work', {});
+    for (const a of ['w1', 'w2', 'w3']) runTaskClaim(dir, agent(a), 'KAD-1', {});
+    const r = runPrime(dir, env, {});
+    expect(r.message).toMatch(/KAD-1.*3 of your agents collided/);
+    expect(r.message).not.toMatch(/also claimed by/);
+  });
+
+  it('keeps naming the other person when the contest is with someone else', () => {
+    runTaskAdd(dir, env, 'Shared work', {});
+    runTaskClaim(dir, agent('w1'), 'KAD-1', {});
+    runTaskClaim(dir, { KADENCE_ACTOR: 'bob@example.com' } as NodeJS.ProcessEnv, 'KAD-1', {});
+    const r = runPrime(dir, env, {});
+    expect(r.message).toMatch(/KAD-1.*also claimed by bob@example\.com/);
+  });
+});

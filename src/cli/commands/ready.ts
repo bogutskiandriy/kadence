@@ -2,6 +2,7 @@ import {
   resolveContext,
   isContext,
   loadState,
+  claimantOf,
   type CommandResult,
 } from './task.js';
 import { readyTasks, describeNothingReady } from '../../core/query.js';
@@ -59,7 +60,7 @@ export function runReady(
   // its columns gets a `ready` that means what its board means.
   const board = { statuses: state.statuses, started: state.started };
   const found = readyTasks(state.tasks, {
-    viewer: ctx.actor,
+    viewer: claimantOf(ctx, env),
     ...board,
     ...(options.assignee === undefined ? {} : { assignee: options.assignee }),
   });

@@ -293,6 +293,8 @@ export function buildContract(version: string): Record<string, unknown> {
     env: {
       KADENCE_SOURCE:
         'Set to "agent" so events record agent authorship. Without it an event counts as human — we do not guess.',
+      KADENCE_ACTOR:
+        'Who holds a claim, when that is not your git email: one of several agents a person runs, e.g. "you@example.com#agent-2". Without it, an agent (KADENCE_SOURCE=agent) in a linked git worktree claims as "email#<worktree>". Events are still authored by the git email.',
       NO_COLOR: 'Any value disables colour.',
     },
     errors: ERROR_CODES.map((code) => ({ code, meaning: ERROR_MEANINGS[code] })),
@@ -402,7 +404,7 @@ export function buildContract(version: string): Record<string, unknown> {
       prime: {
         required: ['sprint', 'mine', 'mineTotal', 'documentation', 'documentationTotal', 'ready', 'attention', 'attentionTotal', 'decisions', 'notes', 'commands'],
         notes: {
-          mine: 'Capped; `mineTotal` is the real count.',
+          mine: 'Capped; `mineTotal` is the real count. Each item: {label, title, status, claimedBy, contestedBy}. A task whose `contestedBy` is non-empty comes first; if `claimedBy` is not you, you lost the claim — talk to the holder before starting.',
           documentation:
             'Documents linked to any work you hold, at most three: {label, title, task, bytes}; `documentationTotal` is the real count. No bodies — `kadence doc show DOC-N` returns one. Always an array.',
           ready: 'A count, not a list. `kadence ready --json` returns the list.',
@@ -473,7 +475,7 @@ export function buildContract(version: string): Record<string, unknown> {
       {
         name: 'task claim',
         summary:
-          'Take a task, or the top of `ready` with no argument. No lock: a second claim is recorded and reported as contested.',
+          'Take a task, or the top of `ready` with no argument. No lock: a second claim is recorded and reported as contested. `claim` in the response is "claimed", "already_yours" or "contested", read from the journal after the write.',
         args: ['ref'],
         json: true,
       },

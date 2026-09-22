@@ -141,6 +141,27 @@ export function describeEmptyResult(filters: TaskFilters): string {
   return `No tasks match ${active.join(' and ')}.\nTry fewer filters:\n  kadence task list`;
 }
 
+/**
+ * Whether a claim held by `claimedBy` is the viewer's own.
+ *
+ * A claimant is a git email, or an email with `#name` for one of that
+ * person's agents (KAD-40). A person owns what their agents hold — it is their
+ * work, done by their tools. The reverse is not true: an agent owns only its
+ * own claims, or two agents of one person would each read the other's task as
+ * theirs and take it, which is the collision this naming exists to prevent.
+ */
+export function holdsClaim(claimedBy: string | null, viewer: string | null): boolean {
+  if (claimedBy === null || viewer === null) return false;
+  if (claimedBy === viewer) return true;
+  return !viewer.includes('#') && claimedBy.startsWith(`${viewer}#`);
+}
+
+/** The person behind a claimant: `alice@x.io#wt-2` is alice. */
+export function personOf(claimant: string): string {
+  const hash = claimant.indexOf('#');
+  return hash === -1 ? claimant : claimant.slice(0, hash);
+}
+
 export interface ReadyOptions {
   /** Whose claim counts as "mine". Absent means every claim is somebody else's. */
   viewer?: string | null;
@@ -189,7 +210,7 @@ export function readyTasks(tasks: readonly Task[], options: ReadyOptions = {}): 
   // `me` with nobody viewing cannot mean anyone, and matching the literal
   // string would quietly return an empty list for a reason nobody could see.
   const wanted =
-    options.assignee === 'me' ? viewer : (options.assignee ?? null);
+    options.assignee === 'me' ? (viewer === null ? null : personOf(viewer)) : (options.assignee ?? null);
 
   const startable = startableStatuses(options);
 
@@ -202,7 +223,7 @@ export function readyTasks(tasks: readonly Task[], options: ReadyOptions = {}): 
     // `blockedBy` only ever names live tasks — the fold prunes ids whose task
     // was deleted — so an id that is not finished is genuinely still blocking.
     if (task.blockedBy.some((id) => !finished.has(id))) return false;
-    if (task.claimedBy !== null && task.claimedBy !== viewer && task.contestedBy.length === 0) {
+    if (task.claimedBy !== null && !holdsClaim(task.claimedBy, viewer) && task.contestedBy.length === 0) {
       return false;
     }
     if (wanted !== null) {
@@ -243,7 +264,7 @@ export function describeNothingReady(
     startable === null ? 0 : open.filter((t) => !startable.has(t.status)).length;
   const blocked = open.filter((t) => t.blockedBy.some((id) => !finished.has(id))).length;
   const claimed = open.filter(
-    (t) => t.claimedBy !== null && t.claimedBy !== viewer && t.contestedBy.length === 0,
+    (t) => t.claimedBy !== null && !holdsClaim(t.claimedBy, viewer) && t.contestedBy.length === 0,
   ).length;
 
   const reasons: string[] = [];

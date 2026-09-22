@@ -1459,20 +1459,87 @@ if (argv[2] === 'task' && argv[3] === 'log' && argv[4] !== undefined && argv[5] 
   emit(r, wantsJson);
 }
 
+/** `--json` anywhere, however often: the parser has not run yet, or has failed. */
+const wantsJson = process.argv.slice(2).includes('--json');
+
 const negativeEstimate = process.argv.findIndex(
   (a, i) => a.startsWith('-') && /^-\d+(\.\d+)?$/.test(a) && process.argv[i - 1] === '--estimate',
 );
 if (negativeEstimate !== -1) {
-  process.stderr.write(
-    `Estimate must be a positive number, got "${process.argv[negativeEstimate]}".\n` +
-      '  kadence task add "Fix login" --estimate 3\n',
+  emit(
+    usage(
+      `Estimate must be a positive number, got "${process.argv[negativeEstimate]}".\n` +
+        '  kadence task add "Fix login" --estimate 3',
+      { received: process.argv[negativeEstimate]! },
+    ),
+    wantsJson,
   );
-  process.exit(2);
+}
+
+/**
+ * Flags whose repeat is a second value rather than a correction. Every other
+ * flag keeps its last value — the rule `decision add` already follows for
+ * `--why` and `--task` (KAD-42). Without this, cac hands a repeat over as an
+ * array, and each handler either crashed on it or wrote it into the journal
+ * for good: `--title a --title b` stored `{"title":["a","b"]}` and reported
+ * success, and `--json --json` read as "not JSON".
+ */
+const REPEATABLE = new Set(['label', 'addLabel', 'removeLabel', 'rejected', 'doc']);
+
+function collapseRepeats(options: Record<string, unknown>): void {
+  for (const [name, value] of Object.entries(options)) {
+    if (name === '--' || REPEATABLE.has(name) || !Array.isArray(value)) continue;
+    options[name] = value.at(-1);
+  }
+}
+
+/**
+ * What the parser said, as an answer an agent can branch on.
+ *
+ * cac throws a `CACError` for an unknown flag, a missing value or extra
+ * arguments, before any handler runs. It used to reach stderr as a bare
+ * sentence and nothing on stdout — the one failure `--json` did not cover.
+ */
+function parserFailure(err: Error): never {
+  // Only the parser's own refusals are usage errors. Anything else is a bug in
+  // kadence, and labelling it `invalid_argument` would send an agent looking
+  // for a typo it did not make.
+  if (err.name !== 'CACError') {
+    writeAll(2, `${err.stack ?? err.message}\n`);
+    process.exit(1);
+  }
+  const command = cli.matchedCommandName;
+  const unknown = /Unknown option `([^`]+)`/.exec(err.message)?.[1];
+  const help = command === undefined ? 'kadence --help' : `kadence ${command} --help`;
+  emit(
+    usage(`${err.message}.\nSee what it takes:\n  ${help}`, unknown === undefined ? {} : { received: unknown }),
+    wantsJson,
+  );
 }
 
 try {
-  cli.parse();
+  cli.parse(process.argv, { run: false });
+  const asked = cli.options['help'] === true || cli.options['version'] === true;
+  if (cli.matchedCommand === undefined && !asked) {
+    const name = cli.args[0];
+    if (name === undefined) {
+      // A bare `kadence` printed nothing and exited 0; help is what it means.
+      cli.outputHelp();
+      process.exit(0);
+    }
+    // An unknown command used to exit 0 with nothing on either stream — the
+    // one outcome an agent cannot tell from success.
+    emit(
+      usage(`Unknown command "${String(name)}".\nSee all commands:\n  kadence --help`, {
+        received: String(name),
+        allowed: cli.commands.map((c) => c.name),
+      }),
+      wantsJson,
+    );
+  }
+  collapseRepeats(cli.options);
+  const pending: unknown = cli.runMatchedCommand();
+  if (pending instanceof Promise) pending.catch((err: unknown) => parserFailure(err as Error));
 } catch (err) {
-  process.stderr.write(`${(err as Error).message}\n`);
-  process.exit(2);
+  parserFailure(err as Error);
 }
