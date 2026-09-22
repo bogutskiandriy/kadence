@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { project } from '../src/core/projection.js';
 import type { FlowEvent, EventType } from '../src/core/event.js';
 import { createUlid } from '../src/core/ulid.js';
@@ -14,6 +14,8 @@ import {
   runTaskMove,
   runTaskShow,
 } from '../src/cli/commands/task.js';
+import { runReady } from '../src/cli/commands/ready.js';
+import { runPrime } from '../src/cli/commands/prime.js';
 
 /**
  * Claims (ADR-011). The rule under test is not "one claim wins" — it is that
@@ -346,4 +348,171 @@ describe('claim commands', () => {
     expect(r.ok).toBe(false);
     expect(r.error!.code).toBe('task_not_found');
   });
+});
+
+/**
+ * Who a claim belongs to (KAD-40). The git email is the author of every event,
+ * and a person shares it with every agent they run — so it cannot also be the
+ * claimant, or ten agents asking for work are one claimant and all get KAD-1.
+ */
+describe('claimant', () => {
+  let dir: string;
+  const agent = (name: string): NodeJS.ProcessEnv =>
+    ({ KADENCE_SOURCE: 'agent', KADENCE_ACTOR: `tester@example.com#${name}` }) as NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'kadence-claimant-'));
+    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: dir });
+    execFileSync('git', ['config', 'user.email', 'tester@example.com'], { cwd: dir });
+    execFileSync('git', ['config', 'user.name', 'Tester'], { cwd: dir });
+    runInit(dir);
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('gives two agents of one person different tasks when each names itself', () => {
+    runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'First', { priority: 'urgent' });
+    runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'Second', {});
+    const a = runTaskClaim(dir, agent('a1'), undefined, {});
+    const b = runTaskClaim(dir, agent('a2'), undefined, {});
+    expect((a.data!['task'] as { label: string }).label).toBe('KAD-1');
+    expect((b.data!['task'] as { label: string }).label).toBe('KAD-2');
+  });
+
+  it('reports a second agent naming the same task as contested, not as already yours', () => {
+    runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'First', {});
+    runTaskClaim(dir, agent('a1'), 'KAD-1', {});
+    const r = runTaskClaim(dir, agent('a2'), 'KAD-1', {});
+    expect(r.data!['claim']).toBe('contested');
+    const task = r.data!['task'] as { claimedBy: string; contestedBy: string[] };
+    expect(task.claimedBy).toBe('tester@example.com#a1');
+    expect(task.contestedBy).toEqual(['tester@example.com#a2']);
+  });
+
+  it('keeps the git email as the author of the event', () => {
+    // Authorship is who wrote the file; the claimant is who holds the work.
+    runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'First', {});
+    runTaskClaim(dir, agent('a1'), 'KAD-1', {});
+    const shown = runTaskShow(dir, {} as NodeJS.ProcessEnv, 'KAD-1');
+    const claim = (shown.data!['task'] as { history: Array<{ type: string; actor: string }> }).history.find(
+      (h) => h.type === 'task.claimed',
+    )!;
+    expect(claim.actor).toBe('tester@example.com');
+    expect((shown.data!['task'] as { claimedBy: string }).claimedBy).toBe('tester@example.com#a1');
+  });
+
+  it('names an agent in a linked worktree after the worktree when nobody set KADENCE_ACTOR', () => {
+    runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'First', {});
+    execFileSync('git', ['add', '-A'], { cwd: dir });
+    execFileSync('git', ['commit', '-q', '-m', 'journal'], { cwd: dir });
+    const wt = join(dir, '..', `${dir.split('/').pop()}-wt-blue`);
+    execFileSync('git', ['worktree', 'add', '-q', wt], { cwd: dir });
+    try {
+      const r = runTaskClaim(wt, { KADENCE_SOURCE: 'agent' } as NodeJS.ProcessEnv, 'KAD-1', {});
+      const name = wt.split('/').pop()!;
+      expect((r.data!['task'] as { claimedBy: string }).claimedBy).toBe(`tester@example.com#${name}`);
+    } finally {
+      rmSync(wt, { recursive: true, force: true });
+    }
+  });
+
+  it('leaves a person in a linked worktree, and an agent in the main checkout, as the git email', () => {
+    runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'First', {});
+    runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'Second', {});
+    execFileSync('git', ['add', '-A'], { cwd: dir });
+    execFileSync('git', ['commit', '-q', '-m', 'journal'], { cwd: dir });
+    const wt = join(dir, '..', `${dir.split('/').pop()}-wt-red`);
+    execFileSync('git', ['worktree', 'add', '-q', wt], { cwd: dir });
+    try {
+      const human = runTaskClaim(wt, {} as NodeJS.ProcessEnv, 'KAD-1', {});
+      expect((human.data!['task'] as { claimedBy: string }).claimedBy).toBe('tester@example.com');
+      const main = runTaskClaim(dir, { KADENCE_SOURCE: 'agent' } as NodeJS.ProcessEnv, 'KAD-2', {});
+      expect((main.data!['task'] as { claimedBy: string }).claimedBy).toBe('tester@example.com');
+    } finally {
+      rmSync(wt, { recursive: true, force: true });
+    }
+  });
+
+  it('says whether the claim was taken, already held, or contested', () => {
+    runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'First', {});
+    expect(runTaskClaim(dir, agent('a1'), 'KAD-1', {}).data!['claim']).toBe('claimed');
+    expect(runTaskClaim(dir, agent('a1'), 'KAD-1', {}).data!['claim']).toBe('already_yours');
+    expect(runTaskClaim(dir, agent('a2'), 'KAD-1', {}).data!['claim']).toBe('contested');
+  });
+
+  it('lets an agent release its own claim and not its sibling’s', () => {
+    runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'First', {});
+    runTaskClaim(dir, agent('a1'), 'KAD-1', {});
+    const wrong = runTaskRelease(dir, agent('a2'), 'KAD-1');
+    expect((wrong.data!['task'] as { claimedBy: string }).claimedBy).toBe('tester@example.com#a1');
+    const right = runTaskRelease(dir, agent('a1'), 'KAD-1');
+    expect((right.data!['task'] as { claimedBy: string | null }).claimedBy).toBeNull();
+  });
+
+  it('shows a person the work their agents hold, and hides it from a sibling agent', () => {
+    runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'First', {});
+    runTaskClaim(dir, agent('a1'), 'KAD-1', {});
+    const person = runReady(dir, {} as NodeJS.ProcessEnv, {});
+    const sibling = runReady(dir, agent('a2'), {});
+    const labels = (r: typeof person) => (r.data!['tasks'] as Array<{ label: string }>).map((t) => t.label);
+    expect(labels(person)).toContain('KAD-1');
+    expect(labels(sibling)).not.toContain('KAD-1');
+    const primed = runPrime(dir, {} as NodeJS.ProcessEnv, {});
+    expect((primed.data!['mine'] as Array<{ label: string }>).map((t) => t.label)).toContain('KAD-1');
+    const siblingPrime = runPrime(dir, agent('a2'), {});
+    expect(siblingPrime.data!['mine']).toEqual([]);
+  });
+});
+
+/**
+ * A claim reports the journal as it stands after the write, not before it.
+ * Built from the state read before the append, eight racing agents were each
+ * told they held a task five of them had lost (stress audit B3).
+ *
+ * What this can promise is narrower than "nobody is ever told wrongly", and the
+ * test holds it to exactly that. Two ULIDs made in the same millisecond order
+ * at random, so an agent that writes *after* another has re-read can still sort
+ * first and win. Only a lock closes that, and ADR-011 is why there is none.
+ * The first version of this test asserted the stronger property; it passed on
+ * its own and failed under the full suite's load, which is how we learned it.
+ */
+describe('claim under a race', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'kadence-race-'));
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    execFileSync('git', ['config', 'user.email', 'tester@example.com'], { cwd: dir });
+    runInit(dir);
+    runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'Only task', {});
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('tells the winner it holds the task, and never tells a loser it won when the loss was visible', async () => {
+    const cli = resolve('dist/cli.js');
+    const runs = Array.from({ length: 8 }, (_, i) =>
+      new Promise<{ name: string; out: string }>((done, fail) => {
+        const name = `tester@example.com#r${i}`;
+        execFile(
+          process.execPath,
+          [cli, 'task', 'claim', 'KAD-1', '--json'],
+          { cwd: dir, env: { ...process.env, KADENCE_SOURCE: 'agent', KADENCE_ACTOR: name } },
+          (err, stdout) => (err ? fail(err) : done({ name, out: stdout })),
+        );
+      }),
+    );
+    const results = (await Promise.all(runs)).map((r) => ({
+      name: r.name,
+      data: JSON.parse(r.out) as { claim: string; task: { claimedBy: string } },
+    }));
+    const holder = (runTaskShow(dir, {} as NodeJS.ProcessEnv, 'KAD-1').data!['task'] as { claimedBy: string })
+      .claimedBy;
+
+    // The winner always hears it: at its re-read nothing earlier exists.
+    expect(results.find((r) => r.name === holder)!.data.claim).toBe('claimed');
+    // Every answer names the holder as it stood after that agent's write, and
+    // "claimed" is only ever said by an agent that saw itself holding.
+    for (const r of results) {
+      if (r.data.claim === 'claimed') expect(r.data.task.claimedBy).toBe(r.name);
+      else expect(r.data.task.claimedBy).not.toBe(r.name);
+    }
+  }, 30_000);
 });

@@ -141,7 +141,7 @@ describe('the cache must not serve a shape from an older version of the code', (
    * that every existing user has a stale cache.
    */
   const PROJECTED_SHAPE = {
-    version: 'kadence-snapshot/11',
+    version: 'kadence-snapshot/12',
     task: [
       'id', 'label', 'title', 'description', 'type', 'priority', 'status', 'labels',
       'assignee', 'reporter', 'sprint', 'milestone', 'parent', 'blockedBy', 'due', 'claimedBy',
@@ -153,6 +153,10 @@ describe('the cache must not serve a shape from an older version of the code', (
       'supersededBy', 'at', 'by', 'source',
     ],
     note: ['id', 'text', 'task', 'at', 'by', 'source'],
+    document: [
+      'id', 'label', 'title', 'body', 'tasks', 'revision', 'revisions', 'conflicts',
+      'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'source',
+    ],
     // Nested records are shape too. `source` reached the event and the note
     // long before it reached these two, and nothing here failed when it did
     // not — so the lists now go one level down.
@@ -166,7 +170,7 @@ describe('the cache must not serve a shape from an older version of the code', (
     // as much a shape change as a new field, and the 0.3.1 bug was a shape
     // change nobody bumped the version for.
     state: [
-      'tasks', 'decisions', 'milestones', 'notes', 'sprints', 'templates', 'statuses', 'dod', 'started', 'startedChanges',
+      'tasks', 'decisions', 'documents', 'milestones', 'notes', 'sprints', 'templates', 'statuses', 'dod', 'started', 'startedChanges',
       'orphanStatuses', 'cycles', 'pending', 'rejected',
     ],
   };
@@ -233,5 +237,14 @@ describe('the cache must not serve a shape from an older version of the code', (
         source: 'agent', data: { title: 'D', why: 'w' } },
     ]);
     expect(Object.keys(state.decisions[0]!).sort()).toEqual([...PROJECTED_SHAPE.decision].sort());
+  });
+
+  it('a projected document has exactly the recorded fields', () => {
+    const id = gen();
+    const state = project([
+      { id, type: 'doc.written', entity: id, actor: 'a@b.c', ts: '2026-09-18T10:00:00.000Z',
+        source: 'agent', data: { title: 'Auth', body: 'How login works.', parents: [] } },
+    ]);
+    expect(Object.keys(state.documents[0]!).sort()).toEqual([...PROJECTED_SHAPE.document].sort());
   });
 });

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 136 32" width="136" height="32" role="img" aria-label="kadence">
+  <title>kadence</title>
+  <!-- Alternative lockup: monospace wordmark, for terminal-adjacent surfaces. -->
+  <g fill="currentColor">
+    <rect x="0" y="4" width="5" height="24"/>
+    <rect x="8" y="4" width="2" height="24"/>
+    <circle cx="14.75" cy="12" r="1.75"/>
+    <circle cx="14.75" cy="20" r="1.75"/>
+    <text x="27" y="27" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="22" letter-spacing="-0.5">kadence</text>
+  </g>
+</svg>

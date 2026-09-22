@@ -138,12 +138,13 @@ export function agentsSection(version: string): string {
 ${provenance(version)}
 ## Project tasks — kadence
 
-Tasks, notes and decisions live in \`.kadence/\` as plain files, shared through git.
+Tasks, notes, decisions and documentation live in \`.kadence/\` as plain files, shared through git.
 
     kadence prime                       start here: sprint, your work, what is ready
     kadence board --json --summary      the board's state, without the history
     kadence task list --json            all tasks
     kadence decision list --json        why the current choices were made
+    kadence doc list --json             documentation: how things work now, revised
     kadence schema --json               the contract: commands, fields, error codes
 
     kadence task claim                  take the top of ready before starting
@@ -240,6 +241,7 @@ export const ERROR_CODES = [
   'conflicting_state',
   'nothing_ready',
   'milestone_not_found',
+  'doc_not_found',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -261,6 +263,7 @@ const ERROR_MEANINGS: Record<ErrorCode, string> = {
   conflicting_state:
     'The arguments were understood, but the current state does not allow it \u2014 a closed sprint, or one already started.',
   milestone_not_found: 'No milestone carries that name, MS-N label or ULID.',
+  doc_not_found: 'No document carries that ULID or DOC-N label.',
   nothing_ready:
     'Nothing can be started right now: the board is empty, or every open task is blocked or claimed by someone else. The message says which.',
 };
@@ -290,6 +293,8 @@ export function buildContract(version: string): Record<string, unknown> {
     env: {
       KADENCE_SOURCE:
         'Set to "agent" so events record agent authorship. Without it an event counts as human — we do not guess.',
+      KADENCE_ACTOR:
+        'Who holds a claim, when that is not your git email: one of several agents a person runs, e.g. "you@example.com#agent-2". Without it, an agent (KADENCE_SOURCE=agent) in a linked git worktree claims as "email#<worktree>". Events are still authored by the git email.',
       NO_COLOR: 'Any value disables colour.',
     },
     errors: ERROR_CODES.map((code) => ({ code, meaning: ERROR_MEANINGS[code] })),
@@ -397,9 +402,11 @@ export function buildContract(version: string): Record<string, unknown> {
         },
       },
       prime: {
-        required: ['sprint', 'mine', 'mineTotal', 'ready', 'attention', 'attentionTotal', 'decisions', 'notes', 'commands'],
+        required: ['sprint', 'mine', 'mineTotal', 'documentation', 'documentationTotal', 'ready', 'attention', 'attentionTotal', 'decisions', 'notes', 'commands'],
         notes: {
-          mine: 'Capped; `mineTotal` is the real count.',
+          mine: 'Capped; `mineTotal` is the real count. Each item: {label, title, status, claimedBy, contestedBy}. A task whose `contestedBy` is non-empty comes first; if `claimedBy` is not you, you lost the claim — talk to the holder before starting.',
+          documentation:
+            'Documents linked to any work you hold, at most three: {label, title, task, bytes}; `documentationTotal` is the real count. No bodies — `kadence doc show DOC-N` returns one. Always an array.',
           ready: 'A count, not a list. `kadence ready --json` returns the list.',
           attention: 'Work in flight that nobody is moving, at most three, `attentionTotal` is the real count. Empty when there is nothing \u2014 and then the human output says nothing at all. `kadence report attention --json` returns the rest.',
         },
@@ -418,6 +425,18 @@ export function buildContract(version: string): Record<string, unknown> {
             '"human" or "agent", from KADENCE_SOURCE at the time of writing. Never guessed: without the variable an event counts as human.',
           listing:
             '`decision list` hides superseded decisions unless --all is passed: a reversed reason presented as current is worse than no memory.',
+        },
+      },
+      document: {
+        required: ['id', 'label', 'title', 'bytes', 'revisions', 'tasks', 'updatedAt', 'updatedBy', 'source', 'conflicted'],
+        notes: {
+          label: 'DOC-N, derived from ULID order during the fold, exactly like KAD-N. It can change when a branch merges.',
+          body: 'Present in `doc show` only. `doc list` and `task show` carry the size in `bytes` so a caller can decide whether to read it.',
+          conflicts:
+            'Present in `doc show` only, always an array. Non-empty means two revisions were written on top of the same one; `body` shows the later, each entry here carries another. `doc edit` settles it.',
+          tasks: 'KAD-N labels of the tasks this document explains.',
+          documentation:
+            '`task show` carries `documentation[]` — {id, label, title, bytes, updatedAt, conflicted} for each document linked to the task, never bodies.',
         },
       },
       error: {
@@ -456,7 +475,7 @@ export function buildContract(version: string): Record<string, unknown> {
       {
         name: 'task claim',
         summary:
-          'Take a task, or the top of `ready` with no argument. No lock: a second claim is recorded and reported as contested.',
+          'Take a task, or the top of `ready` with no argument. No lock: a second claim is recorded and reported as contested. `claim` in the response is "claimed", "already_yours" or "contested", read from the journal after the write.',
         args: ['ref'],
         json: true,
       },
@@ -533,6 +552,35 @@ export function buildContract(version: string): Record<string, unknown> {
         summary:
           'Link a document to a task; `task doc add <ref> <path>` creates it from a small template and links it in one call. The file stays plain markdown in the repo and is never overwritten.',
         args: ['ref', 'path'],
+        json: true,
+      },
+      {
+        name: 'doc add',
+        summary:
+          'Write documentation into the journal: the current account of a module, contract or process. Not a file and not a note — it is revised, and readers get the latest. Text from --body, --file, or --stdin. Past 16 KiB it is written with a warning.',
+        args: ['title'],
+        flags: ['--body', '--stdin', '--file', '--task', '--json'],
+        json: true,
+      },
+      {
+        name: 'doc edit',
+        summary:
+          'Write a new revision; earlier ones stay in the journal. A revision names what it was written on top of; two written on top of the same one are a conflict, shown by `doc show`. An edit with new text settles it — without text it is refused with conflicting_state, so no version is dropped unread. One text source: --body, --file or --stdin.',
+        args: ['ref'],
+        flags: ['--body', '--stdin', '--file', '--title', '--json'],
+        json: true,
+      },
+      { name: 'doc show', summary: 'One document with its body.', args: ['ref'], json: true },
+      {
+        name: 'doc list',
+        summary: 'Documentation without bodies: titles, sizes, the tasks each explains.',
+        flags: ['--task', '--json'],
+        json: true,
+      },
+      {
+        name: 'doc link',
+        summary: 'Attach a document to a task, so it arrives with `task show`.',
+        args: ['ref', 'task'],
         json: true,
       },
       {

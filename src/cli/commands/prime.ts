@@ -1,5 +1,5 @@
-import { resolveContext, isContext, loadState, type CommandResult } from './task.js';
-import { readyTasks } from '../../core/query.js';
+import { resolveContext, isContext, loadState, claimantOf, type CommandResult } from './task.js';
+import { readyTasks, holdsClaim } from '../../core/query.js';
 import { attentionReport, describeSignal } from '../../core/attention.js';
 import type { ProjectState, Task } from '../../core/projection.js';
 
@@ -23,6 +23,12 @@ function labelOf(state: ProjectState, id: string | null): string | null {
 const MINE_LIMIT = 5;
 const DECISION_LIMIT = 5;
 const NOTE_LIMIT = 5;
+/**
+ * Documentation of the work you hold, by title. The one place a document
+ * reaches an agent without a search term, which is the case for linking it at
+ * all (Probe D, ADR-014). Bodies stay one `doc show` away.
+ */
+const DOC_LIMIT = 3;
 /**
  * Three, and only when there are any.
  *
@@ -65,11 +71,47 @@ function daysLeft(endDate: string | null, today: Date): number | null {
   return Math.round((end - now) / 86_400_000);
 }
 
-/** Work already on this person's plate: claimed by them, or in progress. */
-function mine(state: ProjectState, actor: string): Task[] {
+/**
+ * Work already on this plate: claimed, contested, or assigned and in progress.
+ *
+ * A person's plate includes what their agents hold; an agent's holds only its
+ * own claims (`holdsClaim`). Assignment is to a person, so it is compared with
+ * the git email, never with an agent's `#name`.
+ *
+ * A claim you lost is on your plate too (KAD-41). It is the one case where the
+ * journal knows something you are about to get wrong: without it here, the
+ * agent that lost read `mine: []` and either started the task anyway or took
+ * another, while every other command already reported the contest.
+ */
+function mine(state: ProjectState, claimant: string, person: string): Task[] {
   return state.tasks.filter(
-    (t) => t.claimedBy === actor || (t.assignee === actor && t.status === state.started),
+    (t) =>
+      holdsClaim(t.claimedBy, claimant) ||
+      t.contestedBy.some((c) => holdsClaim(c, claimant)) ||
+      (t.assignee === person && t.status === state.started),
   );
+}
+
+/**
+ * The contest on one line, from where the reader stands.
+ *
+ * Inline rather than a section of its own: a contested task is already in
+ * `Yours`, and a second heading would spend two of the forty lines to say it
+ * twice.
+ */
+function contestNote(task: Task, claimant: string): string {
+  if (task.contestedBy.length === 0) return '';
+  // A person whose own agents all took the same task is not in a contest with
+  // anyone: listing their agents as "also claimed by" reads as other people.
+  const claims = [task.claimedBy, ...task.contestedBy];
+  if (!claimant.includes('#') && claims.every((c) => holdsClaim(c, claimant))) {
+    const allAgents = claims.every((c) => c !== claimant);
+    return `  [contested: ${claims.length} of your ${allAgents ? 'agents' : 'claims'} collided \u2014 keep one, release the rest]`;
+  }
+  if (holdsClaim(task.claimedBy, claimant)) {
+    return `  [contested: also claimed by ${task.contestedBy.join(', ')}]`;
+  }
+  return `  [contested: ${task.claimedBy ?? 'nobody'} holds it \u2014 talk before starting]`;
 }
 
 export function runPrime(
@@ -85,12 +127,16 @@ export function runPrime(
 
   const sprint = state.sprints.find((s) => s.status === 'active');
   const left = sprint === undefined ? null : daysLeft(sprint.endDate, today);
-  const allMine = mine(state, ctx.actor);
-  // The newest first: "what am I working on" is answered by the most recent
-  // thing taken, not the oldest one still open.
-  const ours = [...allMine].reverse().slice(0, MINE_LIMIT);
+  const claimant = claimantOf(ctx, env);
+  const allMine = mine(state, claimant, ctx.actor);
+  // Contested first, then the newest: "what am I working on" is answered by the
+  // most recent thing taken, but a contest is what must not fall past the cap.
+  const ours = [...allMine]
+    .reverse()
+    .sort((a, b) => Number(b.contestedBy.length > 0) - Number(a.contestedBy.length > 0))
+    .slice(0, MINE_LIMIT);
   const ready = readyTasks(state.tasks, {
-    viewer: ctx.actor,
+    viewer: claimant,
     statuses: state.statuses,
     started: state.started,
   });
@@ -108,6 +154,18 @@ export function runPrime(
     .reverse()
     .map((n) => ({ text: n.text, by: n.by, task: labelOf(state, n.task) }));
 
+  // All of your work, not only the five shown: documentation for the sixth
+  // task is still documentation you hold.
+  const held = new Set(allMine.map((t) => t.id));
+  const allDocumentation = state.documents
+    .flatMap((d) => {
+      const task = d.tasks.find((id) => held.has(id));
+      return task === undefined
+        ? []
+        : [{ label: d.label, title: d.title, task: labelOf(state, task), bytes: Buffer.byteLength(d.body, 'utf8') }];
+    });
+  const documentation = allDocumentation.slice(0, DOC_LIMIT);
+
   const lines: string[] = [];
   // Only when there is one. Sprints are optional, and "No active sprint." at the
   // top of every session tells a team that never uses them that it is doing
@@ -120,7 +178,18 @@ export function runPrime(
   // hidden is the kind of number that makes a reader stop trusting the rest.
   const minePart = allMine.length > ours.length ? `${ours.length} of ${allMine.length}` : `${ours.length}`;
   lines.push(allMine.length === 0 ? 'Nothing claimed by you.' : `Yours (${minePart}):`);
-  for (const t of ours) lines.push(`  ${t.label} ${t.status}  ${short(t.title)}`);
+  for (const t of ours) lines.push(`  ${t.label} ${t.status}  ${short(t.title)}${contestNote(t, claimant)}`);
+
+  // Nothing linked, nothing printed: a heading over an empty list would teach
+  // every session to skip it.
+  if (documentation.length > 0) {
+    const part =
+      allDocumentation.length > documentation.length
+        ? `${documentation.length} of ${allDocumentation.length}`
+        : `${documentation.length}`;
+    lines.push('', `Documentation for your work (${part}):  (kadence doc show DOC-N)`);
+    for (const d of documentation) lines.push(`  ${d.label} ${short(d.title)}  (${d.task})`);
+  }
 
   // A count, not a list: `ready` prints the list, and printing it twice is how
   // a preamble doubles in size without saying anything new.
@@ -168,8 +237,18 @@ export function runPrime(
           : { name: sprint.name, endDate: sprint.endDate, daysLeft: left },
       // Full text in the payload: truncation is a display concern, and an agent
       // that gets an ellipsis has no way to ask for the rest.
-      mine: ours.map((t) => ({ label: t.label, title: t.title, status: t.status })),
+      // `claimedBy` and `contestedBy` so an agent can tell a task it holds from
+      // one it lost, without a second call. Always present.
+      mine: ours.map((t) => ({
+        label: t.label,
+        title: t.title,
+        status: t.status,
+        claimedBy: t.claimedBy,
+        contestedBy: t.contestedBy,
+      })),
       mineTotal: allMine.length,
+      documentation,
+      documentationTotal: allDocumentation.length,
       ready: ready.length,
       // The rows, not a count: a count of neglected work is a number nobody can
       // act on, and the whole point of the line is that it names something.

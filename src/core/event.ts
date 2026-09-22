@@ -43,6 +43,8 @@ export const EVENT_TYPES = [
   'milestone.closed',
   'decision.recorded',
   'note.recorded',
+  'doc.written',
+  'doc.linked',
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -108,8 +110,26 @@ export function validate(input: unknown): string[] {
     }
   }
 
+  // A document revision without text is not documentation, and `parents` is
+  // what tells a revision from a conflict — a malformed one would fold to a
+  // head that should not exist (ADR-014).
+  if (e['type'] === 'doc.written') {
+    const data = (e['data'] ?? {}) as Record<string, unknown>;
+    for (const field of ['title', 'body'] as const) {
+      const value = data[field];
+      if (typeof value !== 'string' || value.trim().length === 0) bad.push(`data.${field}`);
+    }
+    const parents = data['parents'];
+    if (!Array.isArray(parents) || !parents.every((p) => typeof p === 'string' && ULID_RE.test(p))) {
+      bad.push('data.parents');
+    }
+  }
+
   return bad;
 }
+
+/** Text fields written as an array of lines when they span several (ADR-014 adds `body`). */
+const LINE_FIELDS = ['description', 'body'] as const;
 
 /**
  * An event as JSON.
@@ -125,16 +145,15 @@ export function validate(input: unknown): string[] {
  * one changed line instead of a rewritten event.
  */
 export function serialize(event: FlowEvent): string {
-  const description = event.data?.['description'];
-  if (typeof description !== 'string' || !description.includes('\n')) {
-    return JSON.stringify(event);
-  }
+  const multiline = LINE_FIELDS.filter((field) => {
+    const value = event.data?.[field];
+    return typeof value === 'string' && value.includes('\n');
+  });
+  if (multiline.length === 0) return JSON.stringify(event);
 
-  const readable = {
-    ...event,
-    data: { ...event.data, description: description.split('\n') },
-  };
-  return JSON.stringify(readable, null, 2);
+  const data: Record<string, unknown> = { ...event.data };
+  for (const field of multiline) data[field] = (data[field] as string).split('\n');
+  return JSON.stringify({ ...event, data }, null, 2);
 }
 
 export interface ParseResult {
@@ -179,14 +198,12 @@ function normalizeDescription(raw: unknown): unknown {
   const data = e['data'];
   if (typeof data !== 'object' || data === null) return raw;
 
-  const description = (data as Record<string, unknown>)['description'];
-  if (!Array.isArray(description)) return raw;
+  const lines = LINE_FIELDS.filter((field) => Array.isArray((data as Record<string, unknown>)[field]));
+  if (lines.length === 0) return raw;
 
-  return {
-    ...e,
-    data: {
-      ...(data as Record<string, unknown>),
-      description: description.filter((x) => typeof x === 'string').join('\n'),
-    },
-  };
+  const joined: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+  for (const field of lines) {
+    joined[field] = (joined[field] as unknown[]).filter((x) => typeof x === 'string').join('\n');
+  }
+  return { ...e, data: joined };
 }

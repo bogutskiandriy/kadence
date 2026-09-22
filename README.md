@@ -320,7 +320,7 @@ true.
 
 **Verified.** The merge thesis, on real git branches. Performance and size, by
 tests that fail if they regress. That the conflict problem exists in the wild —
-measured, not assumed. 998 tests in the repository today, including an
+measured, not assumed. 1060 tests in the repository today, including an
 end-to-end run through the installed binary.
 
 **Not verified.** That teams and their AI agents actually lose enough context to want
@@ -374,7 +374,7 @@ revisit it: [docs/decisions/](docs/decisions/).
 
 ```bash
 npm install
-npm test            # 998 tests; builds dist/cli.js first
+npm test            # 1060 tests; builds dist/cli.js first
 npm run typecheck
 npm run build       # one 111 KB bundle, blessed kept external (82 KB at 0.4.1)
 ```

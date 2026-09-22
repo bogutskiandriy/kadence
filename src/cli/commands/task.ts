@@ -6,6 +6,7 @@ import {
   currentBranch,
   defaultBaseBranch,
   eventIdsOnBranch,
+  linkedWorktreeName,
 } from '../../core/git.js';
 import { append, dataDir, readAll } from '../../core/store.js';
 import { ulid } from '../../core/ulid.js';
@@ -163,6 +164,27 @@ export function resolveContext(cwd: string, env: NodeJS.ProcessEnv): Context | C
   // We never guess the source: without the variable an event counts as human.
   const source = env['KADENCE_SOURCE'] === 'agent' ? 'agent' : 'human';
   return { root, actor, source };
+}
+
+/**
+ * Who holds the work a claim takes — not always who writes the event (KAD-40).
+ *
+ * The git email is the author of every event, and a person shares it with
+ * every agent they run. As a claimant it made ten agents one person: all of
+ * them took KAD-1, each was told it was theirs, and no merge could show the
+ * collision because there was none to show.
+ *
+ * `KADENCE_ACTOR` names the claimant outright. Without it, an agent in a linked
+ * worktree is `email#<worktree>` — the commonest way to run agents in
+ * parallel, fixed without anyone configuring anything. A person, and an agent
+ * in the main checkout, stay the git email: nothing changes for them.
+ */
+export function claimantOf(ctx: Context, env: NodeJS.ProcessEnv): string {
+  const named = env['KADENCE_ACTOR']?.trim();
+  if (named !== undefined && named.length > 0) return named;
+  if (ctx.source !== 'agent') return ctx.actor;
+  const worktree = linkedWorktreeName(ctx.root);
+  return worktree === null ? ctx.actor : `${ctx.actor}#${worktree}`;
 }
 
 export function isContext(v: Context | CommandResult): v is Context {
@@ -758,11 +780,29 @@ export function runTaskShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): C
   // part of the context an agent cannot recover from the code.
   const notes = state.notes.filter((n) => n.task === task.id);
 
+  // Documentation arrives with the task, without a search term — which is the
+  // whole argument for linking it (Probe D). Titles and sizes only: the body is
+  // one `doc show` away, and an agent decides from the size whether to fetch it.
+  const documentation = state.documents
+    .filter((d) => d.tasks.includes(task.id))
+    .map((d) => ({
+      id: d.id,
+      label: d.label,
+      title: d.title,
+      bytes: Buffer.byteLength(d.body, 'utf8'),
+      updatedAt: d.updatedAt,
+      conflicted: d.conflicts.length > 0,
+    }));
+  const docLines =
+    documentation.length === 0
+      ? ''
+      : `\n\nDocumentation:\n${documentation.map((d) => `  ${d.label}  ${d.title}   kadence doc show ${d.label}`).join('\n')}`;
+
   return {
     ok: true,
     exitCode: 0,
     warnings,
-    message: renderTaskDetail(task, notes),
+    message: renderTaskDetail(task, notes) + docLines,
     data: {
       schema: 'kadence/v1',
       ok: true,
@@ -770,6 +810,7 @@ export function runTaskShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): C
         ...serializeTask(task, null, state),
         decisions,
         notes: notes.map((n) => ({ id: n.id, text: n.text, at: n.at, by: n.by, source: n.source })),
+        documentation,
       },
     },
   };
@@ -1091,6 +1132,9 @@ function docTemplate(title: string, label: string): string {
  * `resolve()` is the only form that catches every escape: `..` segments, an
  * absolute path, and a symlink-free path that simply points elsewhere.
  */
+/** A scheme and `//`: `resolve()` would fold it into a path that is neither. */
+const URL_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
+
 export function repoRelative(
   root: string,
   input: string,
@@ -1099,6 +1143,17 @@ export function repoRelative(
   const trimmed = input.trim();
   if (trimmed.length === 0) {
     return failure(2, 'invalid_argument', 'A path is required.', { hint });
+  }
+  // `resolve()` folds `https://host` into `https:/host` — neither a URL nor a
+  // file — and the journal would keep it forever. Documents live in the
+  // repository, so a URL is refused before it can become a path.
+  if (URL_RE.test(trimmed)) {
+    return failure(
+      2,
+      'invalid_argument',
+      `${input} is a URL. kadence links documents that live in the repository:\n  ${hint}`,
+      { received: input, hint },
+    );
   }
   const full = resolve(root, trimmed);
   const rel = relative(root, full);
@@ -1135,6 +1190,17 @@ export function runTaskDoc(
   const task = findTask(state, ref);
   if (task === undefined) return taskNotFound(ref);
 
+  // A wiki link is the first thing people reach for. kadence keeps
+  // documentation in the journal (ADR-014), so that is where the refusal points.
+  if (URL_RE.test(path.trim())) {
+    return failure(
+      2,
+      'invalid_argument',
+      `${path} is a URL. kadence keeps documentation in the repository's journal, not as links:\n` +
+        `  kadence doc add "${task.title}" --file <path> --task ${task.label}`,
+      { received: path, hint: `kadence doc add "…" --body "…" --task ${task.label}` },
+    );
+  }
   const resolved = repoRelative(ctx.root, path, 'kadence task doc KAD-1 docs/design.md');
   if ('exitCode' in resolved) return resolved;
   const { rel, full } = resolved;
@@ -1200,6 +1266,7 @@ export function runTaskClaim(
 ): CommandResult {
   const ctx = resolveContext(cwd, env);
   if (!isContext(ctx)) return ctx;
+  const claimant = claimantOf(ctx, env);
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
 
@@ -1215,8 +1282,10 @@ export function runTaskClaim(
     // still allowed: contesting on purpose is a choice, not an accident.
     const options_ = options.assignee === undefined ? {} : { assignee: options.assignee };
     const board = { statuses: state.statuses, started: state.started };
-    const ready = readyTasks(state.tasks, { viewer: ctx.actor, ...board, ...options_ });
-    task = ready.find((t) => t.claimedBy === null || t.claimedBy === ctx.actor);
+    const ready = readyTasks(state.tasks, { viewer: claimant, ...board, ...options_ });
+    // Exactly this claimant, not `holdsClaim`: a person asking for work should
+    // not be handed the task their own agent is already doing.
+    task = ready.find((t) => t.claimedBy === null || t.claimedBy === claimant);
     if (task === undefined) {
       // `describeNothingReady` speaks for `ready`, where a contested task does
       // count. Reusing it here would answer "Nothing ready." about tasks the
@@ -1224,18 +1293,21 @@ export function runTaskClaim(
       // for the person running it.
       const held = ready.filter((t) => t.claimedBy !== null);
       if (held.length > 0) {
-        const names = held.map((t) => `${t.label} (${t.claimedBy})`).join(', ');
+        // Held by one of your agents, or contested — either way already taken.
+        const names = held
+          .map((t) => `${t.label} (${t.claimedBy}${t.contestedBy.length > 0 ? ', contested' : ''})`)
+          .join(', ');
         return failure(
           1,
           'nothing_ready',
           `Nothing free to claim. ${held.length === 1 ? 'The one task' : `All ${held.length} tasks`} ` +
-            `ready for you ${held.length === 1 ? 'is' : 'are'} already contested: ${names}.\n` +
+            `ready for you ${held.length === 1 ? 'is' : 'are'} already claimed: ${names}.\n` +
             'Name one to join the contest on purpose, or pick something else:\n' +
             `  kadence task claim ${held[0]!.label}\n  kadence task list`,
           { hint: `kadence task claim ${held[0]!.label}` },
         );
       }
-      return failure(1, 'nothing_ready', describeNothingReady(state.tasks, ctx.actor, options.assignee, board), {
+      return failure(1, 'nothing_ready', describeNothingReady(state.tasks, claimant, options.assignee, board), {
         hint: 'kadence task list',
       });
     }
@@ -1259,24 +1331,24 @@ export function runTaskClaim(
   // Nothing to write when the journal already says this. A second claim by
   // someone already contesting is discarded by the fold, so appending it only
   // adds a line to every future read.
-  if (task.claimedBy === ctx.actor || task.contestedBy.includes(ctx.actor)) {
+  if (task.claimedBy === claimant || task.contestedBy.includes(claimant)) {
+    const yours = task.claimedBy === claimant;
     return {
       ok: true,
       exitCode: 0,
       warnings,
-      message:
-        task.claimedBy === ctx.actor
-          ? `${task.label} is already yours.`
-          : `${task.label} already carries your contested claim; ${task.claimedBy ?? 'nobody'} holds it.`,
+      message: yours
+        ? `${task.label} is already yours.`
+        : `${task.label} already carries your contested claim; ${task.claimedBy ?? 'nobody'} holds it.`,
       data: {
         schema: 'kadence/v1',
         ok: true,
+        claim: yours ? 'already_yours' : 'contested',
         task: { id: task.id, label: task.label, claimedBy: task.claimedBy, contestedBy: task.contestedBy },
       },
     };
   }
 
-  const held = task.claimedBy;
   append(ctx.root, {
     id: ulid(),
     type: 'task.claimed',
@@ -1284,37 +1356,41 @@ export function runTaskClaim(
     actor: ctx.actor,
     ts: new Date().toISOString(),
     source: ctx.source,
-    data: { by: ctx.actor },
+    data: { by: claimant },
   });
 
-  const contested =
-    held === null
-      ? []
-      : [
-          `${task.label} is contested: ${held} claimed it first and keeps it. ` +
-            'Both claims stay in the journal — talk to them before starting.',
-        ];
+  // Read the journal again rather than predicting it. Another agent on this
+  // checkout may have written its claim between our read and our write, and
+  // the earliest ULID holds whichever of us wrote first. Answering from the
+  // state read before the append told eight racing agents they held a task
+  // five of them had lost (stress audit B3). This is the journal as it stands
+  // after the write — a claim still on another machine shows at the merge.
+  const after = loadState(ctx.root, ctx.actor).state.tasks.find((t) => t.id === task.id) ?? task;
+  const holds = after.claimedBy === claimant;
 
   return {
     ok: true,
     exitCode: 0,
-    warnings: [...warnings, ...contested],
-    message:
-      held === null
-        ? `${task.label} ${task.title} \u2014 claimed by ${ctx.actor}.\n` +
-          'Another machine may have claimed it before your push; the merge will show that.'
-        : `${task.label} claim recorded, contested with ${held}.`,
+    warnings: holds
+      ? warnings
+      : [
+          ...warnings,
+          `${after.label} is contested: ${after.claimedBy ?? 'nobody'} claimed it first and keeps it. ` +
+            'Both claims stay in the journal \u2014 talk to them before starting.',
+        ],
+    message: holds
+      ? `${after.label} ${after.title} \u2014 claimed by ${claimant}.\n` +
+        'Another machine may have claimed it before your push; the merge will show that.'
+      : `${after.label} claim recorded, contested with ${after.claimedBy ?? 'nobody'}.`,
     data: {
       schema: 'kadence/v1',
       ok: true,
+      claim: holds ? 'claimed' : 'contested',
       task: {
-        id: task.id,
-        label: task.label,
-        claimedBy: held ?? ctx.actor,
-        // Built from the folded state, not from this call alone: someone else
-        // may already be contesting, and reporting only ourselves would
-        // disagree with the very next read.
-        contestedBy: held === null ? [] : [...task.contestedBy, ctx.actor],
+        id: after.id,
+        label: after.label,
+        claimedBy: after.claimedBy,
+        contestedBy: after.contestedBy,
       },
     },
   };
@@ -1324,13 +1400,14 @@ export function runTaskClaim(
 export function runTaskRelease(cwd: string, env: NodeJS.ProcessEnv, ref: string): CommandResult {
   const ctx = resolveContext(cwd, env);
   if (!isContext(ctx)) return ctx;
+  const claimant = claimantOf(ctx, env);
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
   const task = findTask(state, ref);
   if (task === undefined) return taskNotFound(ref);
 
-  const holds = task.claimedBy === ctx.actor;
-  const contests = task.contestedBy.includes(ctx.actor);
+  const holds = task.claimedBy === claimant;
+  const contests = task.contestedBy.includes(claimant);
   if (!holds && !contests) {
     // Nothing to write: the journal gains nothing from an event that changes
     // no state, and every extra event is one more line in every fold.
@@ -1353,7 +1430,7 @@ export function runTaskRelease(cwd: string, env: NodeJS.ProcessEnv, ref: string)
     actor: ctx.actor,
     ts: new Date().toISOString(),
     source: ctx.source,
-    data: { by: ctx.actor },
+    data: { by: claimant },
   });
 
   return {
@@ -1370,7 +1447,7 @@ export function runTaskRelease(cwd: string, env: NodeJS.ProcessEnv, ref: string)
         id: task.id,
         label: task.label,
         claimedBy: holds ? null : task.claimedBy,
-        contestedBy: holds ? [] : task.contestedBy.filter((a) => a !== ctx.actor),
+        contestedBy: holds ? [] : task.contestedBy.filter((a) => a !== claimant),
       },
     },
   };

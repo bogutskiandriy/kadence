@@ -266,9 +266,51 @@ export interface Note {
   source: 'human' | 'agent';
 }
 
+/** A revision that lost to a concurrent one, kept so nothing written is lost. */
+export interface DocConflict {
+  /** ULID of the revision event. */
+  revision: string;
+  title: string;
+  body: string;
+  at: string;
+  by: string;
+  source: 'human' | 'agent';
+}
+
+/**
+ * The current account of something — a module, a contract, a process.
+ *
+ * Not a note: a note records a moment and never changes, a document is revised
+ * and the reader wants the latest. Each revision is a whole text naming the
+ * revisions it was written on top of. A revision nobody names is a head; one
+ * head is the text, two are a conflict that is shown rather than resolved
+ * (ADR-014).
+ */
+export interface Doc {
+  /** ULID. Identity; DOC-N is derived during this fold (I7). */
+  id: string;
+  label: string;
+  title: string;
+  body: string;
+  /** ULIDs of the tasks this document explains, in the order they were linked. */
+  tasks: string[];
+  /** ULID of the revision shown — the highest head (I2). */
+  revision: string;
+  revisions: number;
+  /** The other heads, oldest first. Empty unless two people revised one version. */
+  conflicts: DocConflict[];
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  /** Who wrote the revision shown. */
+  source: 'human' | 'agent';
+}
+
 export interface ProjectState {
   tasks: Task[];
   decisions: Decision[];
+  documents: Doc[];
   milestones: Milestone[];
   notes: Note[];
   sprints: Sprint[];
@@ -318,6 +360,76 @@ export interface ProjectState {
 
 
 
+/** A revision the fold can use, or null for one a schema change left malformed. */
+function readRevision(e: FlowEvent): { title: string; body: string; parents: string[] } | null {
+  const title = readText(e.data?.['title']);
+  const body = e.data?.['body'];
+  const parents = e.data?.['parents'];
+  if (title === null || typeof body !== 'string' || body.trim().length === 0) return null;
+  if (!Array.isArray(parents)) return null;
+  return { title, body, parents: parents.filter((p): p is string => typeof p === 'string') };
+}
+
+/**
+ * Revisions to documents.
+ *
+ * Every input arrives in ULID order, so the result cannot depend on the order
+ * the files were read in (I1). Links to deleted tasks are dropped, the rule
+ * notes and decisions follow.
+ */
+function foldDocuments(
+  revisions: Map<string, FlowEvent[]>,
+  links: Map<string, string[]>,
+  live: Set<string>,
+): Doc[] {
+  const docs: Doc[] = [];
+  for (const [id, events] of revisions) {
+    // Once per id: the store dedupes, but the fold must not depend on it (I1).
+    const unique = events.filter((e, i) => events.findIndex((x) => x.id === e.id) === i);
+    const valid = unique
+      .map((e) => ({ e, r: readRevision(e) }))
+      .filter((x): x is { e: FlowEvent; r: { title: string; body: string; parents: string[] } } => x.r !== null);
+    if (valid.length === 0) continue;
+
+    const named = new Set(valid.flatMap((x) => x.r.parents));
+    let heads = valid.filter((x) => !named.has(x.e.id));
+    // Only a hand-edited journal can name a later revision as a parent. Show
+    // the newest text rather than nothing.
+    if (heads.length === 0) heads = [valid[valid.length - 1]!];
+    const current = heads[heads.length - 1]!;
+    const first = valid[0]!;
+
+    docs.push({
+      id,
+      label: '',
+      title: current.r.title,
+      body: current.r.body,
+      tasks: (links.get(id) ?? []).filter((t) => live.has(t)),
+      revision: current.e.id,
+      revisions: valid.length,
+      conflicts: heads.slice(0, -1).map((x) => ({
+        revision: x.e.id,
+        title: x.r.title,
+        body: x.r.body,
+        at: x.e.ts,
+        by: x.e.actor,
+        source: x.e.source,
+      })),
+      createdAt: first.e.ts,
+      createdBy: first.e.actor,
+      updatedAt: current.e.ts,
+      updatedBy: current.e.actor,
+      source: current.e.source,
+    });
+  }
+  // Numbered like KAD-N and DEC-N: from ULID order, so branches agree (I7).
+  docs.sort((a, b) => (a.id < b.id ? -1 : 1));
+  docs.forEach((d, i) => {
+    d.label = `DOC-${i + 1}`;
+  });
+  return docs;
+}
+
 /**
  * The started boundary in force at a given event id.
  *
@@ -345,6 +457,10 @@ export function project(input: readonly FlowEvent[]): ProjectState {
   const templates = new Map<string, Template>();
   const decisions = new Map<string, Decision>();
   const notes: Note[] = [];
+  // Documents fold after the loop: a head is only a head once every revision
+  // of that document has been seen.
+  const docRevisions = new Map<string, FlowEvent[]>();
+  const docLinks = new Map<string, string[]>();
   let statuses: string[] | null = null;
   let dod: string[] = [];
   // Shared with apply() by reference: `task.reopened` resolves its target
@@ -418,6 +534,22 @@ export function project(input: readonly FlowEvent[]): ProjectState {
           by: e.actor,
           source: e.source,
         });
+      }
+      continue;
+    }
+
+    if (e.type === 'doc.written') {
+      const list = docRevisions.get(e.entity) ?? [];
+      list.push(e);
+      docRevisions.set(e.entity, list);
+      continue;
+    }
+    if (e.type === 'doc.linked') {
+      const task = readText(e.data?.['task']);
+      if (task !== null) {
+        const list = docLinks.get(e.entity) ?? [];
+        if (!list.includes(task)) list.push(task);
+        docLinks.set(e.entity, list);
       }
       continue;
     }
@@ -554,9 +686,12 @@ export function project(input: readonly FlowEvent[]): ProjectState {
     if (n.task !== null && !live.has(n.task)) n.task = null;
   }
 
+  const documents = foldDocuments(docRevisions, docLinks, live);
+
   return {
     tasks: ordered,
     decisions: orderedDecisions,
+    documents,
     milestones: orderedMilestones,
     // Already in ULID order: notes are appended as the sorted loop reads them.
     notes,

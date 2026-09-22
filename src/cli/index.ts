@@ -7,6 +7,8 @@ import { runCompact } from './commands/compact.js';
 import { runReport, REPORTS } from './commands/report.js';
 import { runCompletion, SHELLS } from './commands/completion.js';
 import { runNoteAdd, runNoteList } from './commands/note.js';
+import { runDocAdd, runDocEdit, runDocShow, runDocList, runDocLink } from './commands/doc.js';
+import { readFileSync } from 'node:fs';
 import {
   runMilestoneCreate,
   runMilestoneAdd,
@@ -167,6 +169,21 @@ function textFromFlagOrEditor(
  * milestone name than the one the person wrote — and by then the digits are
  * gone. A name is a string, so it is read from argv rather than recovered.
  */
+/**
+ * The last value given for a flag, as typed. For text, where a repeat is a
+ * correction and cac's number conversion would change what gets stored.
+ */
+function rawFlagLast(name: string, argv: readonly string[] = process.argv): string | undefined {
+  let found: string | undefined;
+  const flag = `--${name}`;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === flag) found = argv[i + 1];
+    else if (arg.startsWith(`${flag}=`)) found = arg.slice(flag.length + 1);
+  }
+  return found;
+}
+
 function rawFlag(name: string, argv: readonly string[] = process.argv): string | undefined {
   const flag = `--${name}`;
   for (let i = 0; i < argv.length; i++) {
@@ -191,6 +208,7 @@ const SPRINT_ACTIONS = [
 const TEMPLATE_ACTIONS = ['save', 'list', 'delete'] as const;
 const MILESTONE_ACTIONS = ['create', 'add', 'list', 'close'] as const;
 const DECISION_ACTIONS = ['add', 'list', 'show'] as const;
+const DOC_ACTIONS = ['add', 'edit', 'show', 'list', 'link'] as const;
 
 /**
  * Usage errors all look the same, so they are built in one place — including
@@ -416,6 +434,107 @@ cli
             usage(`Unknown action "${action}".\nAvailable: add, list, show`, {
               ...(action === undefined ? {} : { received: action }),
               allowed: DECISION_ACTIONS,
+            }),
+            json,
+          );
+      }
+    },
+  );
+
+cli
+  .command('doc [action] [arg] [arg2]', 'Documentation: add | edit | show | list | link — kept in the journal, not in files')
+  .option('--body <text>', 'The text')
+  .option('--stdin', 'Read the text from standard input — for text too long for an argument')
+  .option('--file <path>', 'Read the text from a file; the file is not kept or linked')
+  .option('--title <text>', 'A new title, for edit')
+  .option('--task <ref>', 'The task this explains (add), or narrow the list to one task')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence doc add "Auth" --body "How login works." --task KAD-1')
+  .example('  kadence doc edit DOC-1 --file draft.txt')
+  .example('  kadence doc show DOC-1 --json')
+  .example('  kadence doc link DOC-1 KAD-2')
+  .action(
+    (
+      action: string | undefined,
+      arg: string | undefined,
+      arg2: string | undefined,
+      options: {
+        body?: string | string[];
+        stdin?: boolean;
+        file?: string | string[];
+        title?: string | string[];
+        task?: string | string[];
+        json?: boolean;
+      },
+    ) => {
+      const json = options.json === true;
+      const cwd = process.cwd();
+      // Text is read from argv as typed: cac turns `--body 007` into 7 and
+      // `--task 1` into a number that crashed `.trim()` (found in review). A
+      // repeated flag is a correction, so the last one wins, as on decision add.
+      // `--stdin` is its own flag rather than `--body -`: cac reads a lone `-`
+      // as a missing value, which a test through a real process found.
+      const text = (name: string, value: unknown): string | undefined =>
+        value === undefined ? undefined : (rawFlagLast(name) ?? String(last(value as string | string[])));
+      const body = text('body', options.body);
+      const file = text('file', options.file);
+      const task = text('task', options.task);
+      const title = text('title', options.title);
+      const input = {
+        ...(body !== undefined ? { body } : {}),
+        ...(file !== undefined ? { file } : {}),
+        ...(options.stdin === true ? { stdin: readFileSync(0, 'utf8') } : {}),
+      };
+
+      switch (action) {
+        case 'add':
+          if (arg === undefined) {
+            emit(usage('A document needs a title:\n  kadence doc add "Auth" --body "How login works."'), json);
+          }
+          emit(
+            runDocAdd(cwd, process.env, String(arg), {
+              ...input,
+              ...(task !== undefined ? { task } : {}),
+            }),
+            json,
+          );
+          break;
+        case 'edit':
+          if (arg === undefined) {
+            emit(usage('Which document?\n  kadence doc edit DOC-1 --body "…"'), json);
+          }
+          emit(
+            runDocEdit(cwd, process.env, String(arg), {
+              ...input,
+              ...(title !== undefined ? { title } : {}),
+            }),
+            json,
+          );
+          break;
+        case 'show':
+          if (arg === undefined) {
+            emit(usage('Which document?\n  kadence doc show DOC-1'), json);
+          }
+          emit(runDocShow(cwd, process.env, String(arg)), json);
+          break;
+        case undefined:
+        case 'list':
+          emit(
+            runDocList(cwd, process.env, task !== undefined ? { task } : {}),
+            json,
+          );
+          break;
+        case 'link':
+          if (arg === undefined || arg2 === undefined) {
+            emit(usage('A link needs a document and a task:\n  kadence doc link DOC-1 KAD-2'), json);
+          }
+          emit(runDocLink(cwd, process.env, String(arg), String(arg2)), json);
+          break;
+        default:
+          emit(
+            usage(`Unknown action "${action}".\nAvailable: ${DOC_ACTIONS.join(', ')}`, {
+              received: action,
+              allowed: DOC_ACTIONS,
             }),
             json,
           );
@@ -1315,7 +1434,7 @@ cli
  * disappearing — test/command-surface.test.ts pins the order.
  */
 const HELP_ORDER = [
-  'init', 'prime', 'ready', 'task', 'decision', 'note', 'board', 'ui', 'schema',
+  'init', 'prime', 'ready', 'task', 'decision', 'note', 'doc', 'board', 'ui', 'schema',
   'sprint', 'milestone', 'template',
   'report', 'stats',
   'compact', 'completion',
@@ -1340,20 +1459,87 @@ if (argv[2] === 'task' && argv[3] === 'log' && argv[4] !== undefined && argv[5] 
   emit(r, wantsJson);
 }
 
+/** `--json` anywhere, however often: the parser has not run yet, or has failed. */
+const wantsJson = process.argv.slice(2).includes('--json');
+
 const negativeEstimate = process.argv.findIndex(
   (a, i) => a.startsWith('-') && /^-\d+(\.\d+)?$/.test(a) && process.argv[i - 1] === '--estimate',
 );
 if (negativeEstimate !== -1) {
-  process.stderr.write(
-    `Estimate must be a positive number, got "${process.argv[negativeEstimate]}".\n` +
-      '  kadence task add "Fix login" --estimate 3\n',
+  emit(
+    usage(
+      `Estimate must be a positive number, got "${process.argv[negativeEstimate]}".\n` +
+        '  kadence task add "Fix login" --estimate 3',
+      { received: process.argv[negativeEstimate]! },
+    ),
+    wantsJson,
   );
-  process.exit(2);
+}
+
+/**
+ * Flags whose repeat is a second value rather than a correction. Every other
+ * flag keeps its last value — the rule `decision add` already follows for
+ * `--why` and `--task` (KAD-42). Without this, cac hands a repeat over as an
+ * array, and each handler either crashed on it or wrote it into the journal
+ * for good: `--title a --title b` stored `{"title":["a","b"]}` and reported
+ * success, and `--json --json` read as "not JSON".
+ */
+const REPEATABLE = new Set(['label', 'addLabel', 'removeLabel', 'rejected', 'doc']);
+
+function collapseRepeats(options: Record<string, unknown>): void {
+  for (const [name, value] of Object.entries(options)) {
+    if (name === '--' || REPEATABLE.has(name) || !Array.isArray(value)) continue;
+    options[name] = value.at(-1);
+  }
+}
+
+/**
+ * What the parser said, as an answer an agent can branch on.
+ *
+ * cac throws a `CACError` for an unknown flag, a missing value or extra
+ * arguments, before any handler runs. It used to reach stderr as a bare
+ * sentence and nothing on stdout — the one failure `--json` did not cover.
+ */
+function parserFailure(err: Error): never {
+  // Only the parser's own refusals are usage errors. Anything else is a bug in
+  // kadence, and labelling it `invalid_argument` would send an agent looking
+  // for a typo it did not make.
+  if (err.name !== 'CACError') {
+    writeAll(2, `${err.stack ?? err.message}\n`);
+    process.exit(1);
+  }
+  const command = cli.matchedCommandName;
+  const unknown = /Unknown option `([^`]+)`/.exec(err.message)?.[1];
+  const help = command === undefined ? 'kadence --help' : `kadence ${command} --help`;
+  emit(
+    usage(`${err.message}.\nSee what it takes:\n  ${help}`, unknown === undefined ? {} : { received: unknown }),
+    wantsJson,
+  );
 }
 
 try {
-  cli.parse();
+  cli.parse(process.argv, { run: false });
+  const asked = cli.options['help'] === true || cli.options['version'] === true;
+  if (cli.matchedCommand === undefined && !asked) {
+    const name = cli.args[0];
+    if (name === undefined) {
+      // A bare `kadence` printed nothing and exited 0; help is what it means.
+      cli.outputHelp();
+      process.exit(0);
+    }
+    // An unknown command used to exit 0 with nothing on either stream — the
+    // one outcome an agent cannot tell from success.
+    emit(
+      usage(`Unknown command "${String(name)}".\nSee all commands:\n  kadence --help`, {
+        received: String(name),
+        allowed: cli.commands.map((c) => c.name),
+      }),
+      wantsJson,
+    );
+  }
+  collapseRepeats(cli.options);
+  const pending: unknown = cli.runMatchedCommand();
+  if (pending instanceof Promise) pending.catch((err: unknown) => parserFailure(err as Error));
 } catch (err) {
-  process.stderr.write(`${(err as Error).message}\n`);
-  process.exit(2);
+  parserFailure(err as Error);
 }

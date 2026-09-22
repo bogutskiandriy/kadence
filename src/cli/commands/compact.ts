@@ -96,13 +96,23 @@ export function runCompact(
       result.archivedMonths.length > 0
         ? `Archived ${result.archivedMonths.join(', ')} first; those are done.\n`
         : '';
+    // Two causes, two remedies. A month directory holds an event this version
+    // cannot read — usually one written by a newer kadence — and the fix is to
+    // update. An archive that cannot be read is the only copy of what it holds.
+    const monthOnly = result.skipped.every((p) => !p.endsWith('.json'));
+    const remedy = monthOnly
+      ? 'It holds events this version cannot read — most often written by a newer kadence. Update kadence and run this again.'
+      : 'The archive holds every event compacted before it — restore the file from git, ' +
+        'or move it aside if you accept losing what it held, then run this again.';
     return failure(
       1,
       'conflicting_state',
       `${done}Could not read ${names}, so ${result.skipped.length === 1 ? 'that month was' : 'those months were'} left alone. ` +
-        'Nothing was deleted. The archive holds every event compacted before it — restore the file from git, ' +
-        'or move it aside if you accept losing what it held, then run this again.',
-      { received: names, hint: 'git checkout -- .kadence/events/archive/' },
+        `Nothing was deleted. ${remedy}`,
+      {
+        received: names,
+        hint: monthOnly ? 'npm install -g kadence' : 'git checkout -- .kadence/events/archive/',
+      },
     );
   }
 

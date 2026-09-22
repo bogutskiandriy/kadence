@@ -1,0 +1,35 @@
+{
+  "id": "01M2TQ829C3HHXPAXCJ51XY9ZQ",
+  "type": "doc.written",
+  "entity": "01M2TQ829C3HHXPAXCJ51XY9ZQ",
+  "actor": "bogutski2005@gmail.com",
+  "ts": "2026-09-18T16:57:55.756Z",
+  "source": "agent",
+  "data": {
+    "title": "Documentation in the journal: how it works",
+    "body": [
+      "What it is: the current account of something (a module, a contract, a process). Revised; readers get the latest. A note is a moment and never changes; a decision is a choice with a reason. Neither is this.",
+      "",
+      "Where it lives: .kadence/events as doc.written (one whole revision: title, body, parents) and doc.linked (explains a task). No .md file is created. ADR-014.",
+      "",
+      "Write:",
+      "  kadence doc add \"Title\" --body \"…\" | --file <path> | --stdin   [--task KAD-N]",
+      "  kadence doc edit DOC-N --body \"…\"      earlier revisions stay in the journal",
+      "  kadence doc link DOC-N KAD-N",
+      "",
+      "Read (agent-first):",
+      "  kadence prime                   names documentation of the work you hold",
+      "  kadence task show KAD-N --json  documentation[]: label, title, bytes — no bodies",
+      "  kadence doc list --json         the index, no bodies",
+      "  kadence doc show DOC-N --json   one body",
+      "",
+      "Conflicts: two revisions on top of the same one (two branches) are both kept. show gives the latest and lists the other under conflicts. Settle it by writing the merged text; an edit without text is refused (conflicting_state).",
+      "",
+      "Keep it short: past 16 KiB a document is written with a warning. Agents read long text worse; one document per topic.",
+      "",
+      "Before anyone runs compact: everyone updates. kadence 0.5.0 and earlier delete doc.* events when they compact a month.",
+      ""
+    ],
+    "parents": []
+  }
+}

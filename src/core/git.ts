@@ -33,6 +33,21 @@ export function findRepoRoot(cwd: string): string | null {
   return root === null || root.length === 0 ? null : root;
 }
 
+/**
+ * The name of the linked worktree `cwd` is in, or null in the main checkout.
+ *
+ * A linked worktree has its own git dir under the common one
+ * (`.git/worktrees/<name>`); the main checkout's git dir *is* the common one.
+ * One spawn, and only asked for when a claimant has to be derived.
+ */
+export function linkedWorktreeName(cwd: string): string | null {
+  const out = git(cwd, ['rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir']);
+  if (out === null) return null;
+  const [gitDir, commonDir] = out.split('\n');
+  if (gitDir === undefined || commonDir === undefined || gitDir === commonDir) return null;
+  return basename(gitDir);
+}
+
 export function getActorEmail(cwd: string): string | null {
   const email = git(cwd, ['config', 'user.email']);
   return email === null || email.length === 0 ? null : email;
