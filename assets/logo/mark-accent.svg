@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="kadence">
+  <title>kadence</title>
+  <!-- Accent lives on the dots only, never on the bars. -->
+  <g fill="currentColor">
+    <rect x="7.75" y="4" width="5" height="24"/>
+    <rect x="15.75" y="4" width="2" height="24"/>
+  </g>
+  <g fill="#0E6E6E">
+    <circle cx="22.5" cy="12" r="1.75"/>
+    <circle cx="22.5" cy="20" r="1.75"/>
+  </g>
+</svg>
