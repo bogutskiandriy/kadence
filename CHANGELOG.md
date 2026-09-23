@@ -2,6 +2,92 @@
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-09-23
+
+**Documentation in the journal, and an honest answer when something goes
+wrong.** Two halves of the same session. Documentation stops being a filename
+someone has to know and becomes an entity an agent is handed — `DOC-N`, revised,
+conflict-aware. And the three places where kadence told an agent something that
+was not true — a claim it had already lost, a failure with no JSON, a flag
+written twice — now answer straight. The second half came out of a contract
+stress audit run against 0.5.0; the report is in
+`docs/research/contract-stress-audit-2026-09.md`.
+
+### ⚠️ Upgrading — everyone updates before anyone runs `compact`
+
+`compact` in 0.5.0 and earlier archives the events it can parse and then removes
+the whole month directory, which **deletes `doc.*` events written by 0.6.0**.
+An older kadence reads the journal fine; it just must not compact it. From this
+release on, `compact` leaves alone any month holding an event it cannot read.
+If someone compacted with an old binary, `git status` shows the deleted event
+files — restore them, do not re-run.
+
+### Added — documentation is an entity
+
+- **`kadence doc`** — `add`, `edit`, `show`, `list`, `link`. A document is
+  `DOC-N`, stored as `doc.written` revisions in the journal rather than as an
+  `.md` file beside it (ADR-014, superseding that part of ADR-010). Text comes
+  from `--body`, `--file` or `--stdin`; `--file` reads any path and keeps
+  nothing (DEC-15).
+- **A revision names its parents.** Two people revising the same version leave a
+  conflict that is reported and settled by writing text — never a silent loss.
+  `doc edit` with no new text on a conflicted document is refused with
+  `conflicting_state`, because otherwise it would keep whichever version ULID
+  order happened to show and nobody would have read the other.
+- **Agents reach documentation without a search term.** `task show --json`
+  carries `documentation[]` (label, title, bytes, `updatedAt`), `prime` names the
+  documentation of the work you hold, and `doc list --json` carries no bodies.
+  One body arrives only when you ask for it with `doc show`.
+- **A body past 16 KiB is written with a warning, not refused.** Agents read long
+  inputs measurably worse; splitting is the author's call, not ours.
+- **`KADENCE_ACTOR`** names the claimant (DEC-16). Without it, an agent in a
+  linked worktree claims as `email#<worktree>`. A person owns what their agents
+  hold; an agent owns only its own.
+- **`task claim` reports what actually happened** — `claim: claimed |
+  already_yours | contested`, read back out of the journal after the write.
+  Additive to `kadence/v1`.
+
+### Changed
+
+- **`prime` puts contested claims first in *Yours*,** each carrying `claimedBy`
+  and `contestedBy`, so an agent holding a task it no longer owns sees that
+  before it starts working. When every claim is the person's own agents, it says
+  so instead: *N of your agents collided — keep one, release the rest.*
+- **`task doc` stays** for linking files that already exist; new writing goes to
+  `kadence doc`.
+- **A repeated single-value flag keeps its last value** (DEC-18). Only
+  `--label`, `--add-label`, `--remove-label`, `--rejected` and `--doc`
+  accumulate. `--title a --title b` had been storing both and reporting success.
+
+### Fixed — the contract, where it was quiet
+
+- **A parser failure answers in JSON.** An unknown flag, a missing value or an
+  extra argument is thrown by cac before any handler runs, and it used to reach
+  stderr as a bare sentence with nothing on stdout — the one failure `--json`
+  did not cover. It now goes through `failure()`: `invalid_argument` with
+  `received` and `allowed`, exit 2.
+- **An unknown command no longer exits 0 with both streams empty,** and a bare
+  `kadence` prints help instead of nothing. An exception that is not a cac error
+  prints its stack and exits 1, rather than being mislabelled as usage.
+- **`compact` no longer deletes events it cannot parse** along with their month
+  directory — see Upgrading.
+- **`task doc` recorded a URL as the mangled path `https:/…`** and `task doc add`
+  created a directory named `https:` (KAD-33).
+- **`--body -` was read as a missing value and `--body 007` became `7`.**
+  `--stdin` is its own flag now, and text flags are read raw from argv. Two text
+  sources at once are refused rather than one winning silently.
+- **`doc link` returned a partial document;** it returns the full shape, pinned
+  in the schema contract.
+
+### Measured
+
+- `claim` re-reads the journal after writing: ~121 ms median at 400 events,
+  against ~105 ms for a plain read. An agent without `KADENCE_ACTOR` pays one
+  git spawn (~10 ms) in `ready`, `prime` and `claim` to detect a linked
+  worktree.
+- `ready` and `prime` now sit at the edge of the 200 ms budget as this
+  repository's own journal grows. Recorded as a note, not yet as a fix.
+
 ## [0.5.0] — 2026-09-16
 
 **The second author.** kadence was built for a team, and until now its first

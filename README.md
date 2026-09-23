@@ -292,9 +292,23 @@ no number, and `prime` shows the latest:
 kadence note "The staging clock runs 40 s behind" --task KAD-1
 ```
 
-Documents stay plain markdown — `kadence task doc add KAD-1 docs/design.md`
-records only the link, which is the part git cannot express. If the file does
-not exist it is created from a template; an existing one is never overwritten.
+**Documentation lives in the journal too.** How something works now, revised as
+it changes — an entity, `DOC-N`, not a filename an agent has to guess:
+
+```bash
+kadence doc add "How auth works" --file notes/auth.md --task KAD-1
+kadence doc show DOC-1 --json
+```
+
+A revision names the revisions it was written on top of, so two people editing
+the same version leave a conflict that is reported and settled by writing text,
+never a silent overwrite. Agents are handed it without searching: `task show`
+carries `documentation[]` and `prime` names the documentation of the work you
+hold — both without bodies, so the body arrives only when asked for.
+
+A markdown file that already exists is still linked, not swallowed:
+`kadence task doc add KAD-1 docs/design.md` records the link, which is the part
+git cannot express.
 
 Bulk works everywhere and is all or nothing: `kadence task move KAD-1,KAD-2 done`
 either moves both or changes nothing. A typo does not leave half a board.
