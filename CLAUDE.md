@@ -6,11 +6,15 @@ constraints or it does not belong here.
 
 ## Read first
 
-- `SPEC.md` — modules, acceptance criteria, boundaries
-- `docs/decisions/` — ten ADRs, each recording what was **measured** and what
-  would make us revisit it
-- `docs/review-stage-2.md` — debt deliberately left, with reasoning
-- `tasks/todo.md` — what shipped and why, milestone by milestone
+- `SPEC.md` on the owner's disk — modules, acceptance criteria, boundaries.
+  Not in git (DEC-20); `kadence schema --json` is the committed contract
+- `kadence decision list` — every decision with its reason and the
+  alternatives that lost. This is the committed record; the ADRs behind it
+  are working papers and live on disk only (`docs/decisions/`, see
+  `.gitignore`), so a fresh clone will not have them
+- `CHANGELOG.md` — what shipped, release by release
+- `docs/` and `tasks/` on the owner's disk — the long form: ADRs, design
+  notes, review debt, milestone plans. Not in git, by decision DEC-20
 
 ## Use the skills
 
@@ -33,8 +37,8 @@ already made and paid for.
 
 ## Invariants — do not break these silently
 
-Numbered as in `docs/design/state-machine.md`. Each has tests; if one starts
-failing, the fix is the code, not the test.
+Numbered as in `docs/design/state-machine.md` (on disk, not in git). Each has
+tests; if one starts failing, the fix is the code, not the test.
 
 - **I1** The same events always fold to the same state, whatever order the
   files are read in.
@@ -106,18 +110,22 @@ labels are derived and shift as earlier tasks go, and `decision add` crashed on
 a repeated `--rejected` because cac returns an array for a repeat. Both with a
 green suite.
 
-**Always through the wrapper, never through `kadence` on PATH:**
+**Always the build in this working tree, never `kadence` on PATH:**
 
 ```bash
-node scripts/kadence.mjs prime          # start here; the hook runs it per session
-node scripts/kadence.mjs ready          # what can be started now
-node scripts/kadence.mjs task claim     # take the top of ready
+npm run build                       # after any change to src/
+node dist/cli.js prime              # start here; the hook runs it per session
+node dist/cli.js ready              # what can be started now
+node dist/cli.js task claim         # take the top of ready
 ```
 
-The wrapper runs the build in this working tree and rebuilds it when `src/` is
-newer, so you drive the code you just changed. The global install is a
-different version — it was 0.1.5 here while the repository was at 0.4.1, so
-`kadence prime` in this directory ran a binary with no `prime` command.
+Drive the code you just changed. The global install is a different version —
+it was 0.1.5 here while the repository was at 0.4.1, so `kadence prime` in this
+directory ran a binary with no `prime` command.
+
+`scripts/kadence.mjs` on the owner's disk does the two steps in one and is what
+the session hook calls; it is not in git (DEC-20), so a fresh clone uses the
+two commands above.
 
 **During a change:**
 
@@ -167,7 +175,7 @@ A fifth bug, same family, different boundary: every `--json` response over
 128 KiB came back truncated when stdout was a pipe — which is how agents read
 it — because `process.exit()` does not wait for an asynchronous write. Writing
 to a file looked fine. 418 tests passed over it, because every fixture was
-small. Found by [Probe C](docs/research/probe-c-agent-cost.md).
+small. Found by Probe C.
 
 **The rule is not "run the TUI by hand" — it is that anything crossing into the
 outside world needs a test at real size**, not a convenient one.
@@ -184,8 +192,8 @@ interviews, still has not been run.
 Probe A established that conflicts in task files are real but rare (15% of
 repositories, one merge in two hundred), which is why conflict-freedom is proof
 and not the headline. Sprint velocity is now a **consequence** of the journal,
-not the pitch — see `docs/product/positioning.md` and the reasoning in
-`docs/product/positioning-review-2026-09.md`.
+not the pitch — the reasoning is in `docs/product/positioning.md` and
+`docs/product/positioning-review-2026-09.md`, both on disk only.
 
 Say so when it matters. The README does, and so should any plan built on that
 assumption.

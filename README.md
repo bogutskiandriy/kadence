@@ -56,7 +56,7 @@ reads the same thing as JSON.
 **And it stays one call.** That answer stays under a kilobyte whether the project
 holds ten tasks or a thousand — while the journal behind it grows from 5 KB to
 528 KB. The cost of asking does not grow with the history that makes the answer
-worth having. [Measured](docs/research/probe-c-agent-cost.md) at 948 bytes in
+worth having. Measured at 948 bytes in
 0.2; 982 bytes at 0.4, after claims and acceptance criteria joined every record.
 
 ## Why events and not files
@@ -102,7 +102,9 @@ merged in every order. Zero conflicts, every author preserved, identical final
 state. That is an [integration test](test/integration/merge.test.ts), not a
 claim.
 
-Full data: [probe-a-results.md](docs/research/probe-a-results.md).
+The measurement itself is a working paper and is not published (see
+`.gitignore`); the mechanism it measures is proved here by
+`test/integration/merge.test.ts`.
 
 ---
 
@@ -187,7 +189,7 @@ kadence task list --branch
 
 Nothing is stored for that: which tasks belong to a branch lives in git's
 history and is read when you ask. It narrows the answer between three and
-twenty times, [measured](docs/research/branch-context-2026-09.md) on real board
+twenty times, measured on real board
 sizes.
 
 ### Also in the box
@@ -198,8 +200,8 @@ columns, reports folded from the same journal (`report flow`, `cfd`,
 `attention`; burndown, velocity and workload are in the repository and not yet
 on npm), a self-contained HTML or Markdown export, `compact` for long journals,
 and shell completion. None of it is required, and none of it is the point —
-it is what the journal happens to know. Commands and caveats:
-[docs/reports.md](docs/reports.md), and `--help` on each command.
+it is what the journal happens to know. `--help` on each command is the
+reference, and `kadence doc list` is what the journal knows about itself.
 
 ### Removing kadence
 
@@ -257,7 +259,7 @@ documentation can tell an agent what yours are.
 
 There is no MCP wrapper, and one gets built only as an **optional package**, when
 someone who cannot run a CLI asks for it: it costs about 700 tokens a session
-over the CLI path — [we measured it](docs/research/probe-c-agent-cost.md), and it
+over the CLI path — we measured it, and it
 is not the saving the industry benchmarks suggest — it would be a second way to
 say the same thing, and it would not work for agents that have no MCP client at
 all.
@@ -340,10 +342,10 @@ end-to-end run through the installed binary.
 **Not verified.** That teams and their AI agents actually lose enough context to want
 this. The bet rests on reasoning and on the industry naming the problem out
 loud — not on our own users. That research, Probe B, is
-[designed](docs/research/interview-script.md) and not yet run: as of
-2026-09-16, [zero conversations](docs/research/probe-b-results.md) and no
-external users. [The strategy](docs/product/strategy.md) says what happens next
-and on which dates.
+designed and not yet run: as of
+2026-09-16, zero conversations and no external users. What happens next, and
+on which dates, is recorded in this repository's own journal — `kadence
+decision list` and `kadence note list`.
 
 **Not built, on purpose.** An MCP package — only if someone who cannot run a CLI
 asks for it, not as an inevitability.
@@ -382,7 +384,10 @@ branches writing at once produce two different files, and git merges them
 without a conflict by construction.
 
 Design decisions, each recording what was measured and what would make us
-revisit it: [docs/decisions/](docs/decisions/).
+revisit it, are in the journal that ships with this repository — `kadence
+decision list`, or `kadence decision show DEC-3` for one in full. The longer
+write-ups behind them are working papers and are kept out of git on purpose;
+the decision, its reason and the alternatives that lost are in the events.
 
 ## Contributing
 

@@ -16,8 +16,9 @@ duplicate.
 
 **It never reads anything back.** Editing the issue on GitHub edits the issue,
 not the task, and the next publish overwrites your text. If you want the
-reverse direction, the answer is no. The reasoning is recorded as ADR-012 in
-the kadence repository, under `docs/decisions/`.
+reverse direction, the answer is no. The reasoning is ADR-012 — network code
+lives only in packages — and it is recorded as an event in the kadence
+repository's journal: `kadence decision list`.
 
 ## Why it is a separate package
 

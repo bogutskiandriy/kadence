@@ -318,7 +318,7 @@ command was renamed, and `--json` responses gain keys rather than losing them.
 - **`kadence task claim` / `task release`** — take a task, or give it back.
   `claim` with no argument takes the top of `ready`, which is one step instead
   of two. There is **no lock**, and the message says so: two machines can each
-  claim before either pushes. See [ADR-011](docs/decisions/011-claims-as-events.md).
+  claim before either pushes. See ADR-011.
 - **`kadence note "text" [--task KAD-1]`** and `note list` — something learned
   that was never a choice. Deliberately not a decision: no `--why`, no
   `supersedes`, no number. The help says when to reach for `decision add`
@@ -354,7 +354,7 @@ command was renamed, and `--json` responses gain keys rather than losing them.
   events fold differently depending on where they were written. A detached HEAD
   and an unknown base both fail by name rather than reporting no work.
   The measurement that justified the flag, including what would make it wrong,
-  is in [branch-context-2026-09.md](docs/research/branch-context-2026-09.md).
+  is in branch-context-2026-09.md.
 - **Acceptance criteria** — `task ac add|check|uncheck|list`. The number is a
   position in the folded list, assigned like `KAD-N` and never stored, so two
   branches can each add a criterion and merge without renumbering. Moving a task
@@ -395,7 +395,7 @@ command was renamed, and `--json` responses gain keys rather than losing them.
 
 What the neighbours call reports is, here, a fold over timestamps the journal
 already carries. The reasoning, the sources and the verdict per report are in
-[reports-discovery-2026-09.md](docs/research/reports-discovery-2026-09.md).
+reports-discovery-2026-09.md.
 Velocity and cycle time stay out of the headline; they are a consequence, served
 to the person who asks.
 
@@ -426,7 +426,7 @@ to the person who asks.
 
 Each of these was a standing "no". Each is now tried in the shape that survives
 the three constraints, and each has a kill condition written before the code, in
-[feature-adoption-2026-09.md](docs/product/feature-adoption-2026-09.md).
+feature-adoption-2026-09.md.
 
 - **`kadence board export --html`** — the board, the sprint, the burndown,
   milestones and decisions in force, as **one self-contained file**. No script
@@ -444,7 +444,7 @@ the three constraints, and each has a kill condition written before the code, in
   trusts. A marker in the issue body makes a second publish an edit rather than
   a duplicate, and the issue itself says that edits made there are overwritten.
   Nothing is ever read back. See
-  [ADR-012](docs/decisions/012-network-only-in-packages.md), written before the
+  ADR-012, written before the
   code. Every test runs against a recorded `gh`, never the real one.
 - **`kadence task doc add KAD-1 docs/design.md`** — creates the file from a
   four-line template and records the link in one call. It never overwrites: a
@@ -475,7 +475,7 @@ the three constraints, and each has a kill condition written before the code, in
   adding different labels merged without a conflict and one label vanished with
   no warning. Not a merge failure — a fold storing *state* in an event, the
   exact mistake the product exists to avoid. Reasoning in
-  [ADR-013](docs/decisions/013-labels-as-deltas.md).
+  ADR-013.
 - **`labels` in `ready --json`**, the seventh field, and in the guaranteed set.
 
 Source for this slice: a tech lead's feedback of 2026-09-10 — drift comes not
@@ -662,7 +662,7 @@ is additive within `kadence/v1`, which the contract permits at any version.
 The journal held what happened. It now holds **why** — and the reasoning cannot
 quietly go stale, because superseding a decision is one event rather than two
 edits somebody has to remember to make. Reasoning in
-[ADR-010](docs/decisions/010-decisions-as-events.md).
+ADR-010.
 
 ### Added
 
@@ -687,7 +687,7 @@ edits somebody has to remember to make. Reasoning in
   explains this task, and that is the only thing recorded. A missing file is a
   warning, not a refusal — it may arrive in a later commit.
 
-  Measured before building ([Probe D](docs/research/probe-d-docs-linkage.md)):
+  Measured before building (Probe D):
   across five real questions, grep finds the answering document every time and
   buries it among 10–35 candidates. The link saves the sifting, not the search.
 
@@ -758,8 +758,8 @@ published package rather than the source.
 The agent contract, made real. `schema: "kadence/v1"` used to be a version
 string that nothing checked; now the contract is published, the failures are
 machine-readable, and the responses can be narrowed to what an agent actually
-reads. Reasoning in [ADR-009](docs/decisions/009-the-agent-contract.md),
-measurements in [Probe C](docs/research/probe-c-agent-cost.md).
+reads. Reasoning in ADR-009,
+measurements in Probe C.
 
 ### Added
 
@@ -830,7 +830,7 @@ asked for.
 - Developer tooling (`.claude/`, `.serena/`) is no longer committed: 381 files
   and 3.8 MB of it, against 94 files of actual product. What belongs in git and
   what does not is written down in
-  [ADR-007](docs/decisions/007-what-goes-into-git.md), and `.gitignore` now
+  ADR-007, and `.gitignore` now
   also covers `.env`, coverage output and editor leftovers.
 
 ## [0.1.3] — 2026-09-03
