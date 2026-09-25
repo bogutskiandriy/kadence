@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, renameSync, readdirSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, readdirSync, mkdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { dataDir, eventsDir, readAll } from './store.js';
 import { project, type ProjectState } from './projection.js';
@@ -27,12 +27,38 @@ import { project, type ProjectState } from './projection.js';
  */
 export const SNAPSHOT_VERSION = 'kadence-snapshot/12';
 
+/**
+ * What the journal was found to be worth reporting, at build time.
+ *
+ * It lives here because it is the only reason `loadState` used to read the
+ * journal a second time: the state came from this cache, and then every command
+ * re-read all 10k files to count two numbers for a warning (KAD-45).
+ *
+ * Caching it is sound for the same reason caching the state is: it is derived
+ * from exactly the files the fingerprint covers, so whatever invalidates one
+ * invalidates the other. They are written together and served together, and
+ * the answer to any doubt about either is the same — delete it (I6).
+ */
+export interface JournalHealth {
+  /** Events that could not be parsed. */
+  corrupted: number;
+  /** Corrupted plus readable, so the message can give a ratio. */
+  total: number;
+  /** Events from a newer kadence. Not damage — a reason to update. */
+  unknownTypes: number;
+  /** Corruption wide enough that the journal itself is suspect, not one file. */
+  systemic: boolean;
+}
+
 interface Snapshot {
   version: string;
   /** Highest ULID among the events at build time. */
   lastEventId: string;
   /** Event count. Together with lastEventId it also catches mid-journal deletions. */
   eventCount: number;
+  /** Total bytes across every event file, so content changes invalidate too. */
+  eventBytes: number;
+  health: JournalHealth;
   state: ProjectState;
 }
 
@@ -53,14 +79,16 @@ export interface LoadResult {
    * written by someone other than the current user came from outside.
    */
   incomingEvents: number;
+  /** What the journal was found to be. Served from the cache on a warm read. */
+  health: JournalHealth;
 }
 
 /**
  * Returns state from the cache, or rebuilds it from the journal.
  *
- * The cheap part is walking file names: it never reads contents, so answering
- * "did anything change" costs an order of magnitude less than reading the
- * journal itself.
+ * The cheap part is walking the directory: names, count and sizes, never
+ * contents. Answering "did anything change" that way costs 5 ms warm at 10k
+ * events, against 200 for reading the journal itself.
  */
 export function loadOrBuild(root: string, currentActor?: string): LoadResult {
   const fingerprint = scanFingerprint(eventsDir(root));
@@ -70,43 +98,81 @@ export function loadOrBuild(root: string, currentActor?: string): LoadResult {
     cached !== null &&
     cached.version === SNAPSHOT_VERSION &&
     cached.lastEventId === fingerprint.lastEventId &&
-    cached.eventCount === fingerprint.count
+    cached.eventCount === fingerprint.count &&
+    cached.eventBytes === fingerprint.bytes
   ) {
-    return { state: cached.state, fromCache: true, incomingEvents: 0 };
+    return { state: cached.state, fromCache: true, incomingEvents: 0, health: cached.health };
   }
 
   const read = readAll(root);
   const state = project(read.events);
+  const health: JournalHealth = {
+    corrupted: read.corrupted.length,
+    total: read.corrupted.length + read.events.length,
+    unknownTypes: read.unknownTypes,
+    systemic: read.systemicCorruption,
+  };
 
   const incomingEvents =
     cached === null || currentActor === undefined
       ? 0
       : countIncoming(read.events, cached, currentActor);
 
-  writeSnapshot(root, {
-    version: SNAPSHOT_VERSION,
-    lastEventId: fingerprint.lastEventId,
-    eventCount: fingerprint.count,
-    state,
-  });
-  return { state, fromCache: false, incomingEvents };
+  // A damaged journal is not cached.
+  //
+  // The size in the fingerprint already catches the ordinary repair, because
+  // restoring a truncated or overwritten file changes its length. It does not
+  // catch a repair that lands on the same number of bytes, and a corrupted file
+  // is precisely the file someone is about to edit — the warning tells them to.
+  // Reporting damage that is already fixed is worse than being slow, so a
+  // damaged journal pays a full read until it stops being damaged.
+  if (health.corrupted === 0) {
+    writeSnapshot(root, {
+      version: SNAPSHOT_VERSION,
+      lastEventId: fingerprint.lastEventId,
+      eventCount: fingerprint.count,
+      eventBytes: fingerprint.bytes,
+      health,
+      state,
+    });
+  }
+  return { state, fromCache: false, incomingEvents, health };
 }
 
 interface Fingerprint {
   lastEventId: string;
   count: number;
+  /**
+   * Total bytes across every event file.
+   *
+   * Names alone answer "was anything added or removed", which is all an
+   * append-only journal of immutable files should ever need. It is not all that
+   * happens to files: a truncated write, a damaged disk, or the `git checkout
+   * .kadence/` that the corruption warning itself tells you to run all change
+   * content while leaving every name in place. Without this, that remedy does
+   * not invalidate the cache, so the command that told you to run it keeps
+   * serving the state from before you did.
+   *
+   * It costs one `statSync` per file. ADR-005 declined that on the cost of a
+   * cold walk — 11 ms of names against 34 with sizes, on files just written.
+   * Warm, which is every call that matters, the inodes are already in the
+   * operating system's cache and the whole scan is 5 ms at 10k events. The
+   * measurement that rejected this was of the wrong run.
+   */
+  bytes: number;
 }
 
 /**
- * A fingerprint of the journal taken from file names.
+ * A fingerprint of the journal, taken without opening a file.
  *
  * The highest ULID alone is not enough: `git revert` can remove an event from
  * the middle, leaving the maximum unchanged while the state differs. Hence the
- * count as well.
+ * count as well — and the byte total, for the changes that leave both alone.
  */
 function scanFingerprint(dir: string): Fingerprint {
   let lastEventId = '';
   let count = 0;
+  let bytes = 0;
 
   const walk = (path: string): void => {
     let entries: import('node:fs').Dirent[];
@@ -116,18 +182,22 @@ function scanFingerprint(dir: string): Fingerprint {
       return;
     }
     for (const entry of entries) {
+      const full = join(path, entry.name);
       if (entry.isDirectory()) {
-        walk(join(path, entry.name));
+        walk(full);
       } else if (entry.name.endsWith('.json')) {
         count++;
         const id = entry.name.slice(0, -5);
         if (id > lastEventId) lastEventId = id;
+        // A file that vanished between the listing and the stat is a file that
+        // is not there: no throw, and the count below will not match either.
+        bytes += statSync(full, { throwIfNoEntry: false })?.size ?? 0;
       }
     }
   };
 
   walk(dir);
-  return { lastEventId, count };
+  return { lastEventId, count, bytes };
 }
 
 function readSnapshot(root: string): Snapshot | null {
@@ -137,6 +207,18 @@ function readSnapshot(root: string): Snapshot | null {
     const s = raw as Snapshot;
     if (typeof s.version !== 'string' || typeof s.lastEventId !== 'string') return null;
     if (typeof s.eventCount !== 'number' || typeof s.state !== 'object') return null;
+    // A cache written before health was recorded is not wrong, just short of
+    // what the caller now needs. Treated as missing, and rebuilt.
+    const h = s.health as Partial<JournalHealth> | undefined;
+    if (
+      h === undefined ||
+      typeof h.corrupted !== 'number' ||
+      typeof h.total !== 'number' ||
+      typeof h.unknownTypes !== 'number' ||
+      typeof h.systemic !== 'boolean'
+    ) {
+      return null;
+    }
     return s;
   } catch {
     // A corrupt or missing cache is not worth the user's attention.

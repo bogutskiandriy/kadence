@@ -27,7 +27,10 @@ function kadence(args: string[], email?: string): { stdout: string; code: number
 }
 
 function tasks(): Array<{ label: string; title: string; status: string; history: unknown[] }> {
-  return JSON.parse(kadence(['task', 'list', '--json']).stdout).tasks;
+  // `history` by name: `task list` stopped carrying it by default (KAD-44).
+  return JSON.parse(
+    kadence(['task', 'list', '--json', '--fields', 'label,title,status,history']).stdout,
+  ).tasks;
 }
 
 function labelsOf(label: string): string[] {

@@ -10,7 +10,7 @@ import { compact } from '../src/core/store.js';
 import { serialize, type FlowEvent } from '../src/core/event.js';
 import { execFileSync } from 'node:child_process';
 import { runInit } from '../src/cli/commands/init.js';
-import { runTaskAdd, runTaskShow, serializeTask } from '../src/cli/commands/task.js';
+import { loadState, runTaskAdd, runTaskShow, serializeTask } from '../src/cli/commands/task.js';
 import { SUMMARY_FIELDS } from '../src/cli/commands/board.js';
 import { eventIdsOnBranch } from '../src/core/git.js';
 import { flowHtml, cfdHtml } from '../src/export/report-html.js';
@@ -297,6 +297,35 @@ describe(`performance on ${EVENT_COUNT} events`, () => {
     // eslint-disable-next-line no-console
     console.log(`  warm start: ${ms.toFixed(0)} ms`);
     expect(ms).toBeLessThan(WARM_BUDGET_MS);
+  }, 120_000);
+
+  /**
+   * The guardrail above measures `loadOrBuild`. The CLI does not call that — it
+   * calls `loadState`, which called `readAll` unconditionally on top of it, only
+   * to count corrupted and unknown events for a warning. So a warm command read
+   * all 10,103 files anyway, and a cold one read every event twice.
+   *
+   * Measuring the layer below the bug is how it survived a green suite. The
+   * budget here is the same 20 ms, and it is really a detector: reading ten
+   * thousand files cannot be done in twenty milliseconds, whatever the machine
+   * is doing (KAD-45, stress audit §6 F4).
+   */
+  it(`warm loadState — what the CLI actually calls — fits within ${WARM_BUDGET_MS} ms`, () => {
+    loadState(root); // warm-up — the snapshot is written
+    const ms = measure(() => loadState(root));
+    // eslint-disable-next-line no-console
+    console.log(`  warm loadState: ${ms.toFixed(0)} ms`);
+    expect(ms).toBeLessThan(WARM_BUDGET_MS);
+  }, 120_000);
+
+  it('cold loadState reads the journal once, not twice', () => {
+    const build = measureCold(root, () => loadOrBuild(root));
+    const full = measureCold(root, () => loadState(root));
+    // eslint-disable-next-line no-console
+    console.log(`  cold loadOrBuild: ${build.toFixed(0)} ms · cold loadState: ${full.toFixed(0)} ms`);
+    // A second pass over the journal would put this near double. The margin is
+    // wide on purpose: this is a test about one read versus two, not about ms.
+    expect(full).toBeLessThan(build * 1.6);
   }, 120_000);
 });
 

@@ -8,7 +8,7 @@ import {
   eventIdsOnBranch,
   linkedWorktreeName,
 } from '../../core/git.js';
-import { append, dataDir, readAll } from '../../core/store.js';
+import { append, dataDir } from '../../core/store.js';
 import { ulid } from '../../core/ulid.js';
 import type { FlowEvent } from '../../core/event.js';
 import {
@@ -25,7 +25,7 @@ import {
   type Priority,
 } from '../../core/projection.js';
 import { loadOrBuild } from '../../core/snapshot.js';
-import { renderTaskTable, renderTaskTree, renderTaskDetail, colorsEnabled, describeMerge } from '../output.js';
+import { renderTaskTable, renderTaskTree, renderTaskDetail, colorsEnabled, describeMerge, page, pageNote } from '../output.js';
 import {
   filterTasks,
   sortTasks,
@@ -330,25 +330,32 @@ export function loadState(
   root: string,
   currentActor?: string,
 ): { state: ProjectState; warnings: string[] } {
+  // One read, or none.
+  //
+  // This used to call `readAll` as well, purely to count corrupted and unknown
+  // events for the warnings below — so a warm command read all 10k files after
+  // the cache had already answered, and a cold one read every event twice. The
+  // counts now come back with the state, from whichever path produced it
+  // (KAD-45).
   const loaded = loadOrBuild(root, currentActor);
-  const read = readAll(root);
+  const { health } = loaded;
   const warnings: string[] = [];
 
   // The product's main advantage happens silently — so it must be voiced.
   const merged = describeMerge(loaded.incomingEvents);
   if (merged !== null) warnings.push(merged);
 
-  if (read.systemicCorruption) {
+  if (health.systemic) {
     warnings.push(
-      `The journal is badly damaged: ${read.corrupted.length} of ` +
-        `${read.corrupted.length + read.events.length} events are unreadable. ` +
+      `The journal is badly damaged: ${health.corrupted} of ` +
+        `${health.total} events are unreadable. ` +
         'Try: git checkout .kadence/',
     );
-  } else if (read.corrupted.length > 0) {
-    warnings.push(`Skipped ${read.corrupted.length} corrupted event(s).`);
+  } else if (health.corrupted > 0) {
+    warnings.push(`Skipped ${health.corrupted} corrupted event(s).`);
   }
-  if (read.unknownTypes > 0) {
-    warnings.push(`Skipped ${read.unknownTypes} event(s) from a newer format. Update kadence.`);
+  if (health.unknownTypes > 0) {
+    warnings.push(`Skipped ${health.unknownTypes} event(s) from a newer format. Update kadence.`);
   }
 
   return { state: loaded.state, warnings };
@@ -389,6 +396,10 @@ export interface ListOptions extends TaskFilters {
   tree?: boolean;
   /** Comma-separated field names for --json; absent means every field. */
   fields?: string;
+  /** At most this many; `0` for all of them. Absent means DEFAULT_LIST_LIMIT. */
+  limit?: number;
+  /** Where the page starts. Absent means the beginning. */
+  offset?: number;
 }
 
 export function runTaskList(
@@ -467,6 +478,11 @@ export function runTaskList(
 
   const tasks = sort === undefined ? matched : sortTasks(matched, sort as SortKey);
 
+  // One page of them. `tasksTotal` is what matched, never what was returned:
+  // an agent that cannot tell it is holding a slice will answer as though the
+  // slice were the board (KAD-44).
+  const shown = page(tasks, options.limit, options.offset);
+
   // An empty board and an over-narrow query need opposite next steps, so the
   // message distinguishes them.
   if (tasks.length === 0) {
@@ -483,6 +499,8 @@ export function runTaskList(
         schema: 'kadence/v1',
         ok: true,
         tasks: [],
+        tasksTotal: 0,
+        tasksOffset: 0,
         ...(branchInfo === null ? {} : { branch: branchInfo }),
       },
     };
@@ -492,14 +510,27 @@ export function runTaskList(
     ok: true,
     exitCode: 0,
     warnings,
-    message:
+    message: [
       tree === true
-        ? renderTaskTree(tasks, colorsEnabled(env, process.stdout.isTTY === true))
-        : renderTaskTable(tasks, colorsEnabled(env, process.stdout.isTTY === true)),
+        ? renderTaskTree(shown.shown, colorsEnabled(env, process.stdout.isTTY === true))
+        : renderTaskTable(shown.shown, colorsEnabled(env, process.stdout.isTTY === true)),
+      pageNote(shown, 'kadence task list'),
+    ]
+      .filter((l) => l !== null)
+      .join('\n'),
     data: {
       schema: 'kadence/v1',
       ok: true,
-      tasks: tasks.map((t) => serializeTask(t, fields, state)),
+      // No `history` unless it was asked for by name.
+      //
+      // It is 61% of this response at 4000 tasks, and it is the one field the
+      // schema already says belongs to `task show` — the emission had simply
+      // never matched the promise. `--fields id,history` still returns it, and
+      // `task show` is unchanged; what changed is what a caller gets without
+      // asking, which is the call an agent makes (KAD-44).
+      tasks: shown.shown.map((t) => withoutHistory(serializeTask(t, fields, state), fields)),
+      tasksTotal: shown.total,
+      tasksOffset: shown.offset,
       cycles: state.cycles,
       // Present only when the flag was given: the contract only ever gains
       // fields, and a caller that did not ask should see the same response it
@@ -641,6 +672,22 @@ export function parseFields(
  * each field is unchanged, so a narrowed response is a subset, never a variant
  * (Probe C §4, ADR-009).
  */
+/**
+ * The record without `history`, unless the caller named its fields.
+ *
+ * Dropping it from the full record rather than defaulting `fields` to a list:
+ * `fullTask` emits `docs`, which `TASK_FIELDS` does not name, so anything built
+ * from that list would quietly lose a field nobody asked to lose.
+ */
+function withoutHistory(
+  task: Record<string, unknown>,
+  fields: readonly string[] | null,
+): Record<string, unknown> {
+  if (fields !== null) return task;
+  const { history: _history, ...rest } = task;
+  return rest;
+}
+
 export function serializeTask(
   t: Task,
   fields: readonly string[] | null = null,

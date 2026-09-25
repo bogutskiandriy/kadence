@@ -42,6 +42,21 @@ const ATTENTION_LIMIT = 3;
 /** Days of silence. The same default `report attention` uses. */
 const ATTENTION_IDLE_DAYS = 7;
 const TITLE_LIMIT = 60;
+/**
+ * What one free-text field may carry in `--json`.
+ *
+ * The payload deliberately carries more than the text does: an agent has no
+ * line to fit, and an ellipsis it cannot expand is worse than a longer answer.
+ * That reasoning holds for prose a person wrote. It stops holding at 200 KB,
+ * where the one command written to a budget becomes the thing it exists to
+ * prevent — a single note made `prime --json` 200,728 bytes while the text
+ * stayed at 578 (stress audit §3).
+ *
+ * The cap sits where nothing real reaches it: the journal's own notes run 285
+ * characters at the median and 642 at the longest. What is cut says how much
+ * there was, so the agent still knows to go and read it.
+ */
+const JSON_TEXT_LIMIT = 2000;
 /** Shown only when no decision is in force. */
 const DECISION_HINT = 'record why: kadence decision add "…" --why "…"';
 
@@ -57,9 +72,45 @@ export interface PrimeOptions {
   json?: boolean;
 }
 
+/**
+ * Unicode general category Cc: C0 and C1 controls, which is every line
+ * break and every escape.
+ *
+ * Not `\s`: a tab is whitespace and harmless, an ESC is neither.
+ */
+const CONTROL = /\p{Cc}/gu;
+
+/**
+ * One line, at most TITLE_LIMIT characters.
+ *
+ * Collapsing is not cosmetic. `prime` renders prose one person wrote into
+ * another reader's instructions, and it is the one command an agent is handed
+ * without asking for it. The length was capped here; the shape was not. So a
+ * note carrying newlines rendered as sections of its own — and the cheapest
+ * section to forge is the `Go deeper:` block this command ends with. An escape
+ * sequence goes further and repaints the terminal around the output. Same
+ * fault, one character apart (stress audit §3, F9).
+ *
+ * Controls become spaces rather than vanishing: joining `a\nb` into `ab` would
+ * invent a word that nobody wrote.
+ */
 function short(text: string): string {
+  const oneLine = text.replace(CONTROL, ' ').replace(/\s+/gu, ' ').trim();
+  const chars = [...oneLine];
+  return chars.length > TITLE_LIMIT ? `${chars.slice(0, TITLE_LIMIT - 1).join('')}…` : oneLine;
+}
+
+/**
+ * Whole, or its first JSON_TEXT_LIMIT characters.
+ *
+ * Characters, not code units: cutting a string in half through an astral pair
+ * leaves a lone surrogate, and a lone surrogate is not text any more.
+ */
+function capped(text: string): string {
   const chars = [...text];
-  return chars.length > TITLE_LIMIT ? `${chars.slice(0, TITLE_LIMIT - 1).join('')}…` : text;
+  return chars.length > JSON_TEXT_LIMIT
+    ? `${chars.slice(0, JSON_TEXT_LIMIT - 1).join('')}…`
+    : text;
 }
 
 /** Whole days from today to the sprint's end, or null when there is no end. */
@@ -148,11 +199,18 @@ export function runPrime(
     .filter((d) => d.supersededBy === null)
     .slice(-DECISION_LIMIT)
     .reverse()
-    .map((d) => ({ label: d.label, title: d.title }));
+    .map((d) => ({ label: d.label, title: capped(d.title) }));
   const notes = state.notes
     .slice(-NOTE_LIMIT)
     .reverse()
-    .map((n) => ({ text: n.text, by: n.by, task: labelOf(state, n.task) }));
+    // `bytes` is the full length, not the carried one: the same signal
+    // `documentation` gives, and the only way a cut note stays actionable.
+    .map((n) => ({
+      text: capped(n.text),
+      bytes: Buffer.byteLength(n.text, 'utf8'),
+      by: n.by,
+      task: labelOf(state, n.task),
+    }));
 
   // All of your work, not only the five shown: documentation for the sixth
   // task is still documentation you hold.
@@ -162,7 +220,7 @@ export function runPrime(
       const task = d.tasks.find((id) => held.has(id));
       return task === undefined
         ? []
-        : [{ label: d.label, title: d.title, task: labelOf(state, task), bytes: Buffer.byteLength(d.body, 'utf8') }];
+        : [{ label: d.label, title: capped(d.title), task: labelOf(state, task), bytes: Buffer.byteLength(d.body, 'utf8') }];
     });
   const documentation = allDocumentation.slice(0, DOC_LIMIT);
 
@@ -234,14 +292,14 @@ export function runPrime(
       sprint:
         sprint === undefined
           ? null
-          : { name: sprint.name, endDate: sprint.endDate, daysLeft: left },
+          : { name: capped(sprint.name), endDate: sprint.endDate, daysLeft: left },
       // Full text in the payload: truncation is a display concern, and an agent
       // that gets an ellipsis has no way to ask for the rest.
       // `claimedBy` and `contestedBy` so an agent can tell a task it holds from
       // one it lost, without a second call. Always present.
       mine: ours.map((t) => ({
         label: t.label,
-        title: t.title,
+        title: capped(t.title),
         status: t.status,
         claimedBy: t.claimedBy,
         contestedBy: t.contestedBy,

@@ -1,6 +1,7 @@
 import cac from 'cac';
 import { runInit } from './commands/init.js';
 import { runReady } from './commands/ready.js';
+import { runSearch, SEARCH_KINDS } from './commands/search.js';
 import { runPrime } from './commands/prime.js';
 import { runStats } from './commands/stats.js';
 import { runCompact } from './commands/compact.js';
@@ -215,6 +216,32 @@ const DOC_ACTIONS = ['add', 'edit', 'show', 'list', 'link'] as const;
  * the code. An agent that mistypes an action gets `invalid_argument` and, where
  * the set is knowable, the actions that do exist (ADR-009).
  */
+/**
+ * `--limit` and `--offset` as numbers, or the error that says which was wrong.
+ *
+ * `--limit 0` is all of them, so zero is valid here where it is not a count.
+ * Both are validated before any work: a typo should cost nothing.
+ */
+function paging(
+  raw: { limit?: string; offset?: string },
+): { limit?: number; offset?: number; error: CommandResult | null } {
+  const out: { limit?: number; offset?: number } = {};
+  for (const key of ['limit', 'offset'] as const) {
+    const given = raw[key];
+    if (given === undefined) continue;
+    const n = Number(given);
+    if (!Number.isInteger(n) || n < 0) {
+      return {
+        error: usage(`--${key} must be a whole number of 0 or more, got "${given}".`, {
+          received: given,
+        }),
+      };
+    }
+    out[key] = n;
+  }
+  return { ...out, error: null };
+}
+
 function usage(message: string, detail: { received?: string; allowed?: readonly string[] } = {}): CommandResult {
   return failure(2, 'invalid_argument', message, detail);
 }
@@ -308,18 +335,21 @@ cli
 cli
   .command('note [text]', 'Record something learned; `note list` reads them back')
   .option('--task <ref>', 'The task it came out of')
-  .option('--limit <n>', 'At most this many, newest first')
+  .option('--limit <n>', 'At most this many, newest first; 0 for all of them')
+  .option('--offset <n>', 'list: start the page here')
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence note "Tests need a git identity"')
   .example('  kadence note "The redirect drops the cookie" --task KAD-1')
   .example('  kadence note list --limit 5')
-  .action((text: string | undefined, options: { task?: string; limit?: string; json?: boolean }) => {
+  .action(
+    (
+      text: string | undefined,
+      options: { task?: string; limit?: string; offset?: string; json?: boolean },
+    ) => {
     const json = options.json === true;
     const cwd = process.cwd();
-    const limit = options.limit === undefined ? undefined : Number(options.limit);
-    if (limit !== undefined && (!Number.isFinite(limit) || limit < 1)) {
-      emit(usage(`--limit must be a positive number, got "${options.limit}".`), json);
-    }
+    const paged = paging(options);
+    if (paged.error !== null) emit(paged.error, json);
 
     // `note list` reads, anything else is the note's text. One word cannot be
     // both, and `list` is the one people type by reflex.
@@ -327,7 +357,8 @@ cli
       emit(
         runNoteList(cwd, process.env, {
           ...(options.task === undefined ? {} : { task: options.task }),
-          ...(limit === undefined ? {} : { limit }),
+          ...(paged.limit !== undefined ? { limit: paged.limit } : {}),
+          ...(paged.offset !== undefined ? { offset: paged.offset } : {}),
           json,
         }),
         json,
@@ -355,6 +386,8 @@ cli
   .option('--task <ref>', 'The task this decision came out of')
   .option('--supersedes <ref>', 'The decision this one replaces')
   .option('--doc <path>', 'A document that carries the detail; repeat for several')
+  .option('--limit <n>', 'list: at most this many decisions; 0 for all of them')
+  .option('--offset <n>', 'list: start the page here')
   .option('--all', 'Include superseded decisions, hidden by default')
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence decision add "Use ULIDs" --why "Clocks disagree between machines"')
@@ -371,11 +404,15 @@ cli
         supersedes?: string | string[];
         doc?: string | string[];
         all?: boolean;
+        limit?: string;
+        offset?: string;
         json?: boolean;
       },
     ) => {
       const json = options.json === true;
       const cwd = process.cwd();
+      const decisionPage = paging(options);
+      if (decisionPage.error !== null) emit(decisionPage.error, json);
       // cac hands a single flag back as a string and repeats as an array.
       const docs =
         options.doc === undefined
@@ -417,6 +454,8 @@ cli
         case 'list':
           emit(
             runDecisionList(cwd, process.env, {
+              ...(decisionPage.limit !== undefined ? { limit: decisionPage.limit } : {}),
+              ...(decisionPage.offset !== undefined ? { offset: decisionPage.offset } : {}),
               ...(options.all === true ? { all: true } : {}),
               ...(options.task !== undefined ? { task: last(options.task) } : {}),
             }),
@@ -448,6 +487,8 @@ cli
   .option('--file <path>', 'Read the text from a file; the file is not kept or linked')
   .option('--title <text>', 'A new title, for edit')
   .option('--task <ref>', 'The task this explains (add), or narrow the list to one task')
+  .option('--limit <n>', 'list: at most this many documents; 0 for all of them')
+  .option('--offset <n>', 'list: start the page here')
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence doc add "Auth" --body "How login works." --task KAD-1')
   .example('  kadence doc edit DOC-1 --file draft.txt')
@@ -464,11 +505,15 @@ cli
         file?: string | string[];
         title?: string | string[];
         task?: string | string[];
+        limit?: string;
+        offset?: string;
         json?: boolean;
       },
     ) => {
       const json = options.json === true;
       const cwd = process.cwd();
+      const docPage = paging(options);
+      if (docPage.error !== null) emit(docPage.error, json);
       // Text is read from argv as typed: cac turns `--body 007` into 7 and
       // `--task 1` into a number that crashed `.trim()` (found in review). A
       // repeated flag is a correction, so the last one wins, as on decision add.
@@ -520,7 +565,11 @@ cli
         case undefined:
         case 'list':
           emit(
-            runDocList(cwd, process.env, task !== undefined ? { task } : {}),
+            runDocList(cwd, process.env, {
+              ...(task !== undefined ? { task } : {}),
+              ...(docPage.limit !== undefined ? { limit: docPage.limit } : {}),
+              ...(docPage.offset !== undefined ? { offset: docPage.offset } : {}),
+            }),
             json,
           );
           break;
@@ -578,18 +627,43 @@ cli
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence ready')
   .example('  kadence ready --assignee me --json')
-  .action((options: { assignee?: string; limit?: string; json?: boolean }) => {
-    const limit = options.limit === undefined ? undefined : Number(options.limit);
-    if (limit !== undefined && (!Number.isFinite(limit) || limit < 1)) {
-      emit(usage(`--limit must be a positive number, got "${options.limit}".`), options.json === true);
-    }
+  .action((options: { assignee?: string; limit?: string; offset?: string; json?: boolean }) => {
+    const paged = paging(options);
+    if (paged.error !== null) emit(paged.error, options.json === true);
     emit(
       runReady(process.cwd(), process.env, {
         ...(options.assignee === undefined ? {} : { assignee: options.assignee }),
-        ...(limit === undefined ? {} : { limit }),
+        ...(paged.limit !== undefined ? { limit: paged.limit } : {}),
+        ...(paged.offset !== undefined ? { offset: paged.offset } : {}),
         json: options.json === true,
       }),
       options.json === true,
+    );
+  });
+
+cli
+  .command('search <query>', 'Find it across tasks, decisions, notes and documents')
+  .option('--kind <list>', `Narrow to: ${SEARCH_KINDS.join(' | ')}; comma-separated`)
+  .option('--limit <n>', 'At most this many passages')
+  .option('--all', 'Include superseded decisions, left out by default')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence search "why are events append-only"')
+  .example('  kadence search "cookie redirect" --kind task,note')
+  .example('  kadence search "ordering between machines" --json')
+  .action((query: string | undefined, options: { kind?: string; limit?: string; all?: boolean; json?: boolean }) => {
+    const json = options.json === true;
+    const limit = options.limit === undefined ? undefined : Number(options.limit);
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+      emit(usage(`--limit must be a whole number of 1 or more, got "${options.limit}".`), json);
+    }
+    emit(
+      runSearch(process.cwd(), process.env, query, {
+        ...(options.kind === undefined ? {} : { kind: options.kind }),
+        ...(limit === undefined ? {} : { limit }),
+        ...(options.all === true ? { all: true } : {}),
+        json,
+      }),
+      json,
     );
   });
 
@@ -731,6 +805,8 @@ cli
   .option('--template <name>', 'Pre-fill fields from a saved template')
   .option('--no-dod', 'Skip the board\'s definition of done for this task')
   .option('--fields <list>', 'JSON only: comma-separated task fields to return')
+  .option('--limit <n>', 'list: at most this many; 0 for all of them')
+  .option('--offset <n>', 'list: start the page here; use with --limit')
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence task add "Fix login" -d "Broken since 2.3" --type bug --priority high --estimate 3')
   .example('  kadence task list --status in_progress --sort priority')
@@ -791,6 +867,8 @@ cli
         base?: string;
         parent?: string;
         template?: string;
+        limit?: string;
+        offset?: string;
         json?: boolean;
       },
     ) => {
@@ -1080,9 +1158,13 @@ cli
           }
           emit(runTaskDelete(cwd, process.env, arg), json);
           break;
-        case 'list':
+        case 'list': {
+          const paged = paging(options);
+          if (paged.error !== null) emit(paged.error, json);
           emit(
             runTaskList(cwd, process.env, {
+              ...(paged.limit !== undefined ? { limit: paged.limit } : {}),
+              ...(paged.offset !== undefined ? { offset: paged.offset } : {}),
               ...(options.status !== undefined ? { status: options.status } : {}),
               ...(options.search !== undefined ? { search: options.search } : {}),
               ...(options.type !== undefined ? { type: options.type } : {}),
@@ -1105,6 +1187,7 @@ cli
             json,
           );
           break;
+        }
         case 'show':
           if (arg === undefined) {
             emit(usage('Which task?\n  kadence task show KAD-1'), json);
@@ -1165,6 +1248,8 @@ cli
   .option('--file <path>', 'export: where to write it')
   .option('-a, --assignee <who>', 'Only this person\'s tasks; "me" means you')
   .option('--sprint', 'Only tasks in the active sprint')
+  .option('--limit <n>', 'At most this many tasks across the board; 0 for all of them')
+  .option('--offset <n>', 'Start the page here, counted across the columns')
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence board')
   .example('  kadence board --assignee me --sprint')
@@ -1179,7 +1264,10 @@ cli
   .action((action: string | undefined, options: {
       assignee?: string; sprint?: boolean; statuses?: string; dod?: string; started?: string; fields?: string;
       summary?: boolean; html?: boolean; md?: boolean; readme?: boolean; file?: string; json?: boolean;
+      limit?: string; offset?: string;
     }) => {
+    const boardPage = paging(options);
+    if (boardPage.error !== null) emit(boardPage.error, options.json === true);
     if (action === 'export') {
       emit(
         runBoardExport(process.cwd(), process.env, {
@@ -1214,6 +1302,8 @@ cli
         {
           ...(options.assignee !== undefined ? { assignee: options.assignee } : {}),
           ...(options.sprint === true ? { sprint: 'active' as const } : {}),
+          ...(boardPage.limit !== undefined ? { limit: boardPage.limit } : {}),
+          ...(boardPage.offset !== undefined ? { offset: boardPage.offset } : {}),
         },
         // Selection only narrows JSON; the human board renders its own columns.
         options.json === true ? options.fields : undefined,

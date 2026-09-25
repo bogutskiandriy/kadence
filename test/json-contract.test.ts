@@ -84,16 +84,56 @@ describe('the --json contract', () => {
     run(['task', 'add', 'Task', '--estimate', '5']);
     const task = JSON.parse(run(['task', 'list', '--json']).stdout).tasks[0];
     // Fields are only added — existing consumers keep working. The list is
-    // exact on purpose: adding one has to be a deliberate act that shows up
+    // exact on purpose: changing it has to be a deliberate act that shows up
     // here, not something that leaks out of an unrelated change.
+    //
+    // `history` left in 0.7.0, the one removal so far. It was never promised
+    // here — `kadence schema --json` has always placed it in `task show` — and
+    // it was 61% of this response at 4000 tasks, which put the response past
+    // the point where an agent's tool output is silently truncated.
+    // `--fields id,history` still returns it (KAD-44, DEC-23).
     expect(Object.keys(task).sort()).toEqual(
       [
         'assignee', 'blockedBy', 'claimedBy', 'comments', 'contestedBy', 'criteria',
-        'description', 'docs', 'due', 'estimate', 'history', 'id', 'label', 'labels',
+        'description', 'docs', 'due', 'estimate', 'id', 'label', 'labels',
         'loggedHours', 'milestone', 'openCriteria', 'parent', 'priority', 'reporter',
         'sprint', 'status', 'title', 'type',
       ].sort(),
     );
+  });
+
+  /**
+   * `history` is 61% of a list response at 4000 tasks, and the schema never
+   * promised it here: `task show` is where the contract says the events that
+   * produced a state live. It was emitted anyway, and this file pinned it in
+   * place — the prose and the guard had disagreed since the field existed.
+   *
+   * Asking for it still works. What changed is what you get without asking.
+   */
+  it('task list leaves history out — the schema says task show is where it lives', () => {
+    run(['task', 'add', 'Task']);
+    run(['task', 'move', 'KAD-1', 'in_progress']);
+
+    const task = JSON.parse(run(['task', 'list', '--json']).stdout).tasks[0];
+    expect(task).not.toHaveProperty('history');
+  });
+
+  it('task show still carries the history in full', () => {
+    run(['task', 'add', 'Task']);
+    run(['task', 'move', 'KAD-1', 'in_progress']);
+
+    const task = JSON.parse(run(['task', 'show', 'KAD-1', '--json']).stdout).task;
+    expect(Array.isArray(task.history)).toBe(true);
+    expect(task.history.length).toBeGreaterThan(0);
+  });
+
+  it('task list --fields hands history back to anyone who asks for it', () => {
+    run(['task', 'add', 'Task']);
+    run(['task', 'move', 'KAD-1', 'in_progress']);
+
+    const task = JSON.parse(run(['task', 'list', '--json', '--fields', 'id,history']).stdout).tasks[0];
+    expect(Object.keys(task).sort()).toEqual(['history', 'id']);
+    expect(task.history.length).toBeGreaterThan(0);
   });
 
   it('KADENCE_SOURCE=agent marks event authorship', () => {

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ulid } from '../../core/ulid.js';
 import { append } from '../../core/store.js';
+import { page, pageNote } from '../output.js';
 import type { Doc, ProjectState } from '../../core/projection.js';
 import {
   resolveContext,
@@ -310,7 +311,7 @@ export function runDocShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): Co
 export function runDocList(
   cwd: string,
   env: NodeJS.ProcessEnv,
-  options: { task?: string },
+  options: { task?: string; limit?: number; offset?: number },
 ): CommandResult {
   const ctx = resolveContext(cwd, env);
   if (!isContext(ctx)) return ctx;
@@ -331,23 +332,32 @@ export function runDocList(
       warnings,
       message:
         'No documentation yet.\nWrite the first one:\n  kadence doc add "Auth" --body "How login works." --task KAD-1',
-      data: { schema: 'kadence/v1', ok: true, documents: [] },
+      data: { schema: 'kadence/v1', ok: true, documents: [], documentsTotal: 0, documentsOffset: 0 },
     };
   }
-  const width = Math.max(...docs.map((d) => d.label.length));
+  // A page of them, and the real count beside it (KAD-44).
+  const paged = page(docs, options.limit, options.offset);
+  const width = Math.max(...paged.shown.map((d) => d.label.length));
   return {
     ok: true,
     exitCode: 0,
     warnings,
-    message: docs
+    message: paged.shown
       .map((d) => {
         const tasks = d.tasks.map(labels).filter((l): l is string => l !== null);
         const kib = `${Math.max(1, Math.round(bytesOf(d.body) / 1024))} KiB`;
         const flag = d.conflicts.length > 0 ? '  [conflict]' : '';
         return `${d.label.padEnd(width)}  ${d.title}  (${kib}${tasks.length > 0 ? `, ${tasks.join(' ')}` : ''})${flag}`;
       })
-      .join('\n'),
-    data: { schema: 'kadence/v1', ok: true, documents: docs.map((d) => docSummary(d, labels)) },
+      .join('\n')
+      .concat(pageNote(paged, 'kadence doc list') ?? ''),
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      documents: paged.shown.map((d) => docSummary(d, labels)),
+      documentsTotal: paged.total,
+      documentsOffset: paged.offset,
+    },
   };
 }
 
