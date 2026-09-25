@@ -111,7 +111,10 @@ describe('a team uses kadence for a sprint', () => {
       expect(m.status, `merging ${who} conflicted`).toBe(0);
     }
 
-    const task = (json('task', 'list')['tasks'] as Array<Record<string, unknown>>)[0]!;
+    // `history` by name: `task list` stopped carrying it by default (KAD-44).
+    const task = (json('task', 'list', '--fields', 'status,history')['tasks'] as Array<
+      Record<string, unknown>
+    >)[0]!;
     expect(task['status']).toBe('done');
     const authors = (task['history'] as Array<{ actor: string }>).map((h) => h.actor);
     expect(new Set(authors).size).toBeGreaterThanOrEqual(3);

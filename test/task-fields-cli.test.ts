@@ -74,9 +74,13 @@ describe('task assign', () => {
 
   it('writes no event when the assignee is unchanged', () => {
     runTaskAdd(dir, env, 'Task', { assignee: 'dev@example.com' });
-    const before = (runTaskList(dir, env, {}).data!['tasks'] as Array<{ history: unknown[] }>)[0]!.history.length;
+    // `history` by name: `task list` stopped carrying it by default (KAD-44).
+    const entries = (): number =>
+      (runTaskList(dir, env, { fields: 'history' }).data!['tasks'] as Array<{ history: unknown[] }>)[0]!
+        .history.length;
+    const before = entries();
     runTaskAssign(dir, env, 'KAD-1', 'dev@example.com');
-    const after = (runTaskList(dir, env, {}).data!['tasks'] as Array<{ history: unknown[] }>)[0]!.history.length;
+    const after = entries();
     expect(after).toBe(before);
   });
 

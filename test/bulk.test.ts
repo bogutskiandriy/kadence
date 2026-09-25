@@ -7,6 +7,7 @@ import { runInit } from '../src/cli/commands/init.js';
 import {
   runTaskAdd,
   runTaskList,
+  TASK_FIELDS,
   runTaskMove,
   runTaskAssign,
   runTaskEdit,
@@ -26,7 +27,12 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-const tasks = () => runTaskList(dir, env, {}).data!['tasks'] as Array<Record<string, unknown>>;
+// `task list` leaves `history` out since KAD-44. These tests use it as the
+// record of what was written, so they ask for it by name.
+const tasks = () =>
+  runTaskList(dir, env, { fields: TASK_FIELDS.join(',') }).data!['tasks'] as Array<
+    Record<string, unknown>
+  >;
 
 describe('bulk move', () => {
   it('moves several tasks at once', () => {

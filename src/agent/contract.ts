@@ -219,6 +219,28 @@ export const TASK_FIELDS = [
 ] as const;
 
 /**
+ * How many records a list command returns when nobody said.
+ *
+ * Not a performance number. An agent's tool output is cut at roughly 25k
+ * tokens, and it is cut *silently*: what comes back parses, looks whole, and is
+ * missing most of the board, so the agent decides on a fraction while believing
+ * it saw everything. A response that always fits, and always carries its
+ * `…Total`, is one it can act on — narrow the filter, or ask for the rest.
+ *
+ * 100 is the number the measurements support. A lean task list runs 508 bytes
+ * a task without `history`, so 200 would fit the budget — but this repository's
+ * own tasks run 1100 bytes, where the ceiling is 93. 100 sits at the edge for
+ * tasks that dense and leaves room to spare for the rest; 200 is over budget
+ * for anything but the leanest board.
+ *
+ * It is not a guarantee. A repository with long descriptions can pass the
+ * budget below the cap, which is what `--limit` and the filters are for.
+ * `--limit 0` returns everything, for a human at a terminal where truncation
+ * is visible and harmless.
+ */
+export const DEFAULT_LIST_LIMIT = 100;
+
+/**
  * Every failure kadence can name.
  *
  * Agents branch on these, so the list is part of the --json contract: a code may
@@ -330,13 +352,32 @@ export function buildContract(version: string): Record<string, unknown> {
             'Each comment carries `source`: "human" or "agent", from KADENCE_SOURCE at the time of writing. `actor` is the git identity, which a person and their agent share \u2014 `source` is the only field that separates them.',
           required:
             'What a full response carries. With --fields you get exactly what you asked for and nothing else.',
+          paging:
+            'A list command returns one page. <name>Total is how many matched, never how many came back, and <name>Offset is where the page starts \u2014 together they say whether there is more and where to ask for it. The default page is 100; --limit 0 returns everything and --offset N walks. An agent that ignores the total will answer as though the page were the board.',
         },
       },
       board: {
-        required: ['schema', 'ok', 'columns'],
+        required: ['schema', 'ok', 'columns', 'tasksTotal', 'tasksOffset'],
         notes: {
           columns:
             'With --summary each task carries only the state fields, never `history` or `comments`. The response without the flag is unchanged \u2014 the contract only ever gains.',
+        },
+      },
+      search: {
+        required: ['schema', 'ok', 'query', 'hits', 'hitsTotal'],
+        notes: {
+          hits:
+            'Each: {kind, id, label, title, score, span, lines, at, by}, ordered by score. Never more than --limit and often fewer: a passage that shares only a common word with the question is dropped rather than returned, because a model handed something that merely looks relevant fabricates more than one handed nothing.',
+          id:
+            'ULID of the record the passage came from — what to pass to task show, decision show or doc show. `label` is KAD-N, DEC-N or DOC-N, derived while folding, and is for a reader to read (I7). A note has no label and comes back null.',
+          span:
+            '{text, start, end} over the record’s own quotable text, with text.length === end - start. It is a quotation, not a summary: an agent citing it is citing the journal.',
+          lines:
+            'For a document: the lines of the section the passage came from, so `doc show` can be read at the right place. Null for every other kind.',
+          coverage:
+            'How much of the question this record holds, 0 to 1, weighted by how rare each word is — not a ranking and not a probability. Measured over a golden set: where the first hit is right this is 1.00 at the median, where it is wrong 0.62. Below 0.7 the human output says the passage answers part of the question, and an agent should treat it as somewhere to look rather than as the answer.',
+          hitsTotal:
+            'How many passages came back. Zero is an ordinary answer and means the journal has nothing on the question — not that the command failed.',
         },
       },
       ready: {
@@ -404,9 +445,13 @@ export function buildContract(version: string): Record<string, unknown> {
       prime: {
         required: ['sprint', 'mine', 'mineTotal', 'documentation', 'documentationTotal', 'ready', 'attention', 'attentionTotal', 'decisions', 'notes', 'commands'],
         notes: {
-          mine: 'Capped; `mineTotal` is the real count. Each item: {label, title, status, claimedBy, contestedBy}. A task whose `contestedBy` is non-empty comes first; if `claimedBy` is not you, you lost the claim — talk to the holder before starting.',
+          mine: 'Capped; `mineTotal` is the real count. Each item: {label, title, status, claimedBy, contestedBy}. A task whose `contestedBy` is non-empty comes first; if `claimedBy` is not you, you lost the claim — talk to the holder before starting. Every free-text field in this payload carries at most 2000 characters and ends with “…” when it was longer; nothing a person writes comes near that.',
           documentation:
             'Documents linked to any work you hold, at most three: {label, title, task, bytes}; `documentationTotal` is the real count. No bodies — `kadence doc show DOC-N` returns one. Always an array.',
+          decisions:
+            'The five in force, newest first: {label, title}. Titles only — `kadence decision list --json` carries the reasons.',
+          notes:
+            'The last five, newest first: {text, bytes, by, task}. `bytes` is the note’s full length; `text` is capped and ends with “…” when it was longer, so a note too large for a preamble is still known about — `kadence note list --json` returns it whole.',
           ready: 'A count, not a list. `kadence ready --json` returns the list.',
           attention: 'Work in flight that nobody is moving, at most three, `attentionTotal` is the real count. Empty when there is nothing \u2014 and then the human output says nothing at all. `kadence report attention --json` returns the rest.',
         },
@@ -470,6 +515,13 @@ export function buildContract(version: string): Record<string, unknown> {
         summary:
           'What can be started now: not yet started, unblocked, not claimed by anyone else. Priority first, then age. Work already in the started column or past it is left out \u2014 it has begun, so it cannot be started.',
         flags: ['--json', '--assignee', '--limit'],
+        json: true,
+      },
+      {
+        name: 'search',
+        summary:
+          'One question over everything written down: tasks with their criteria and comments, decisions with their reason and the alternative they rejected, notes, and documents cut at their headings. Lexical, not semantic — it finds the words that are there, which on a vocabulary of ULIDs and KAD-N is the stronger method rather than the weaker one. Five passages by default, each carrying the ULID of the record and a quoted span. An empty result means the journal has no answer, which is a result and not a failure.',
+        flags: ['--json', '--kind', '--limit', '--all'],
         json: true,
       },
       {

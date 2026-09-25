@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import { ulid } from '../../core/ulid.js';
 import { append } from '../../core/store.js';
+import { page, pageNote } from '../output.js';
 import type { Decision, ProjectState } from '../../core/projection.js';
 import {
   resolveContext,
@@ -148,6 +149,10 @@ export interface DecisionListOptions {
   /** Include superseded decisions, which are hidden by default. */
   all?: boolean;
   task?: string;
+  /** At most this many; `0` for all of them. Absent means DEFAULT_LIST_LIMIT. */
+  limit?: number;
+  /** Where the page starts. Absent means the beginning. */
+  offset?: number;
 }
 
 export function runDecisionList(
@@ -170,15 +175,22 @@ export function runDecisionList(
   // is worse than an agent with no memory at all.
   if (options.all !== true) decisions = decisions.filter((d) => d.supersededBy === null);
 
+  // A page of them, and the real count beside it (KAD-44).
+  const paged = page(decisions, options.limit, options.offset);
+
   return {
     ok: true,
     exitCode: 0,
     warnings,
-    message: renderDecisions(decisions, state),
+    message: [renderDecisions(paged.shown, state), pageNote(paged, 'kadence decision list')]
+      .filter((l) => l !== null)
+      .join('\n'),
     data: {
       schema: 'kadence/v1',
       ok: true,
-      decisions: decisions.map((d) => serializeDecision(d, state)),
+      decisions: paged.shown.map((d) => serializeDecision(d, state)),
+      decisionsTotal: paged.total,
+      decisionsOffset: paged.offset,
     },
   };
 }

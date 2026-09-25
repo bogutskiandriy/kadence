@@ -6,7 +6,7 @@ import {
   type CommandResult,
 } from './task.js';
 import { readyTasks, describeNothingReady } from '../../core/query.js';
-import { colorsEnabled, boardLine } from '../output.js';
+import { colorsEnabled, boardLine, page, pageNote } from '../output.js';
 import type { Task } from '../../core/projection.js';
 
 /**
@@ -21,6 +21,8 @@ export interface ReadyOptions {
   json?: boolean;
   assignee?: string;
   limit?: number;
+  /** Where the page starts. Absent means the beginning. */
+  offset?: number;
 }
 
 /**
@@ -64,7 +66,9 @@ export function runReady(
     ...board,
     ...(options.assignee === undefined ? {} : { assignee: options.assignee }),
   });
-  const limited = options.limit !== undefined && options.limit > 0 ? found.slice(0, options.limit) : found;
+  // A page of them, and the real count beside it (KAD-44).
+  const paged = page(found, options.limit, options.offset);
+  const limited = paged.shown;
 
   if (limited.length === 0) {
     return {
@@ -74,7 +78,7 @@ export function runReady(
       // An empty list is the same output whether the board is empty, blocked
       // or somebody else's. Those are three different next steps.
       message: describeNothingReady(state.tasks, ctx.actor, options.assignee, board),
-      data: { schema: 'kadence/v1', ok: true, tasks: [] },
+      data: { schema: 'kadence/v1', ok: true, tasks: [], tasksTotal: paged.total, tasksOffset: paged.offset },
     };
   }
 
@@ -88,7 +92,20 @@ export function runReady(
     ok: true,
     exitCode: 0,
     warnings,
-    message: [...lines, '', `Take the first one:\n  kadence task claim ${limited[0]!.label}`].join('\n'),
-    data: { schema: 'kadence/v1', ok: true, tasks: limited.map(serializeReady) },
+    message: [
+      ...lines,
+      pageNote(paged, 'kadence ready'),
+      '',
+      `Take the first one:\n  kadence task claim ${limited[0]!.label}`,
+    ]
+      .filter((l) => l !== null)
+      .join('\n'),
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      tasks: limited.map(serializeReady),
+      tasksTotal: paged.total,
+      tasksOffset: paged.offset,
+    },
   };
 }

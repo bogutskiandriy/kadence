@@ -23,7 +23,10 @@ function externalImports(): Set<string> {
   const found = new Set<string>();
   for (const file of files) {
     const source = readFileSync(file, 'utf8');
-    for (const m of source.matchAll(/(?:from\s*|require\()\s*["']([^"']+)["']/g)) {
+    // `from` has to be the keyword, not the tail of a string: a bundled array
+    // of English words put `"from","` in the output, and the pattern read the
+    // comma between them as a module nobody declared.
+    for (const m of source.matchAll(/(?:(?<!["'\w$.])from\s*|require\()\s*["']([^"']+)["']/g)) {
       const spec = m[1]!;
       // Relative paths are our own chunks; node: builtins cost nothing.
       if (spec.startsWith('.') || spec.startsWith('node:')) continue;

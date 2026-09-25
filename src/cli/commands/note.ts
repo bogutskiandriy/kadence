@@ -1,5 +1,6 @@
 import { ulid } from '../../core/ulid.js';
 import { append } from '../../core/store.js';
+import { page, pageNote } from '../output.js';
 import type { Note, ProjectState } from '../../core/projection.js';
 import {
   resolveContext,
@@ -31,6 +32,8 @@ export interface NoteFields {
 export interface NoteListOptions {
   task?: string;
   limit?: number;
+  /** Where the page starts. Absent means the beginning. */
+  offset?: number;
   json?: boolean;
 }
 
@@ -125,7 +128,9 @@ export function runNoteList(
   // Newest first: a note is read to catch up, and the last thing learned is
   // the thing most likely to matter.
   const newest = [...filtered].reverse();
-  const shown = options.limit !== undefined && options.limit > 0 ? newest.slice(0, options.limit) : newest;
+  // A page of them, and the real count beside it (KAD-44).
+  const paged = page(newest, options.limit, options.offset);
+  const shown = paged.shown;
 
   if (shown.length === 0) {
     return {
@@ -133,7 +138,7 @@ export function runNoteList(
       exitCode: 0,
       warnings,
       message: `No notes yet.\nRecord the first one:\n  kadence note "text"\n\n${WHEN_A_DECISION}`,
-      data: { schema: 'kadence/v1', ok: true, notes: [] },
+      data: { schema: 'kadence/v1', ok: true, notes: [], notesTotal: paged.total, notesOffset: paged.offset },
     };
   }
 
@@ -143,8 +148,16 @@ export function runNoteList(
     ok: true,
     exitCode: 0,
     warnings,
-    message: shown.map((n) => renderNote(n, label)).join('\n'),
-    data: { schema: 'kadence/v1', ok: true, notes: shown.map((n) => serializeNote(n, label)) },
+    message: [shown.map((n) => renderNote(n, label)).join('\n'), pageNote(paged, 'kadence note list')]
+      .filter((l) => l !== null)
+      .join('\n'),
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      notes: shown.map((n) => serializeNote(n, label)),
+      notesTotal: paged.total,
+      notesOffset: paged.offset,
+    },
   };
 }
 

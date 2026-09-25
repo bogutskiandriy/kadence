@@ -1,4 +1,5 @@
 import type { Task, Priority, Cycle, Note } from '../core/projection.js';
+import { DEFAULT_LIST_LIMIT } from '../agent/contract.js';
 
 /**
  * Human-facing output.
@@ -16,6 +17,44 @@ const ANSI = {
   blue: `${ESC}34m`,
   reset: `${ESC}0m`,
 };
+
+export interface Page<T> {
+  shown: T[];
+  /** How many matched before the page was taken. Always the real number. */
+  total: number;
+  /** Where this page starts. With `total` it is everything a caller needs to ask for the next. */
+  offset: number;
+  /** True when there is something after this page. */
+  more: boolean;
+}
+
+/**
+ * One page of them, and the truth about how many there are.
+ *
+ * `limit` absent means the default; `0` means all of them. `total` is never the
+ * page's length — a count that shrank with the page would be the same lie the
+ * page exists to prevent, and the whole point is that a caller can tell it is
+ * holding a slice.
+ *
+ * An offset past the end returns nothing rather than failing: a caller walking
+ * pages should stop, not error, and `total` already told it where the end was.
+ */
+export function page<T>(items: readonly T[], limit?: number, offset = 0): Page<T> {
+  const total = items.length;
+  const start = Math.max(0, offset);
+  const n = limit ?? DEFAULT_LIST_LIMIT;
+  const shown = n <= 0 ? items.slice(start) : items.slice(start, start + n);
+  return { shown: [...shown], total, offset: start, more: start + shown.length < total };
+}
+
+/** The line that tells a reader the list stopped early, or nothing when it did not. */
+export function pageNote(p: Page<unknown>, command: string): string | null {
+  if (!p.more && p.offset === 0) return null;
+  const first = p.offset + 1;
+  const last = p.offset + p.shown.length;
+  const next = p.more ? `  (${command} --offset ${last} for the next)` : '';
+  return `Showing ${first}–${last} of ${p.total}.${next}`;
+}
 
 export function colorsEnabled(env: NodeJS.ProcessEnv, isTty: boolean): boolean {
   // NO_COLOR is the established convention; honour it without exceptions.

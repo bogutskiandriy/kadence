@@ -1,4 +1,4 @@
-import { renderBoard, colorsEnabled } from '../output.js';
+import { renderBoard, colorsEnabled, page, pageNote } from '../output.js';
 import type { Task, ProjectState } from '../../core/projection.js';
 import {
   resolveContext,
@@ -32,6 +32,10 @@ const HIDDEN_FROM_BOARD = 'cancelled';
 export interface BoardFilters {
   assignee?: string;
   sprint?: 'active' | 'all';
+  /** At most this many tasks across the whole board; `0` for all of them. */
+  limit?: number;
+  /** Where the page starts, counted across the columns in their own order. */
+  offset?: number;
 }
 
 /**
@@ -117,17 +121,42 @@ export function runBoard(
         ]
       : [];
 
+  // One page of the board, taken across the columns rather than within each.
+  //
+  // A cap per column would make the total meaningless: ten columns of a hundred
+  // is a thousand tasks, which is the response this exists to bound. Columns
+  // are filled in their own order until the page is full, so the left of the
+  // board is what a reader sees first — the same thing they see on screen
+  // (KAD-44).
+  const flat = Object.entries(columns).flatMap(([column, list]) =>
+    list.map((task) => ({ column, task })),
+  );
+  const paged = page(flat, filters.limit, filters.offset);
+  const shownColumns: Record<string, Task[]> = {};
+  for (const column of Object.keys(columns)) shownColumns[column] = [];
+  for (const { column, task } of paged.shown) shownColumns[column]!.push(task);
+
   return {
     ok: true,
     exitCode: 0,
     warnings: [...warnings, ...orphanWarning],
-    message: renderBoard(columns, colorsEnabled(env, process.stdout.isTTY === true)),
+    message: [
+      renderBoard(shownColumns, colorsEnabled(env, process.stdout.isTTY === true)),
+      pageNote(paged, 'kadence board'),
+    ]
+      .filter((l) => l !== null)
+      .join('\n'),
     data: {
       schema: 'kadence/v1',
       ok: true,
       columns: Object.fromEntries(
-        Object.entries(columns).map(([k, v]) => [k, v.map((t) => serializeTask(t, fields, state))]),
+        Object.entries(shownColumns).map(([k, v]) => [
+          k,
+          v.map((t) => serializeTask(t, fields, state)),
+        ]),
       ),
+      tasksTotal: paged.total,
+      tasksOffset: paged.offset,
     },
   };
 }

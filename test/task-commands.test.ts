@@ -70,9 +70,12 @@ describe('runTaskMove', () => {
   it('writes no event when the state is already the same', () => {
     const id = addTask('Task');
     runTaskMove(dir, env, id, 'done');
-    const before = runTaskList(dir, env, {}).data!['tasks'] as Array<{ history: unknown[] }>;
+    // `history` is asked for by name: `task list` stopped carrying it (KAD-44).
+    const listed = (): Array<{ history: unknown[] }> =>
+      runTaskList(dir, env, { fields: 'history' }).data!['tasks'] as Array<{ history: unknown[] }>;
+    const before = listed();
     const r = runTaskMove(dir, env, id, 'done');
-    const after = runTaskList(dir, env, {}).data!['tasks'] as Array<{ history: unknown[] }>;
+    const after = listed();
     expect(r.ok).toBe(true);
     expect(after[0]!.history.length).toBe(before[0]!.history.length);
   });

@@ -95,6 +95,73 @@ describe('loadOrBuild', () => {
     expect(r.fromCache).toBe(false);
   });
 
+  /**
+   * The third leg of the fingerprint.
+   *
+   * Names and a count answer "was anything added or removed", which is all an
+   * append-only journal of immutable files should need. Files are not always
+   * immutable in practice: a truncated write, a bad disk, and the `git checkout
+   * .kadence/` the corruption warning tells you to run all rewrite content
+   * while leaving every name where it was. Without the byte total, the remedy
+   * the product recommends does not invalidate the cache it needs to.
+   */
+  it('an event rewritten in place invalidates the cache, though every name is unchanged', () => {
+    const a = created('First');
+    append(root, a);
+    const before = loadOrBuild(root);
+    expect(before.state.tasks[0]!.title).toBe('First');
+
+    const path = join(root, '.kadence', 'events', '2026-09', `${a.id}.json`);
+    writeFileSync(path, `${JSON.stringify({ ...a, data: { title: 'Rewritten' } })}\n`);
+
+    const after = loadOrBuild(root);
+    expect(after.fromCache).toBe(false);
+    expect(after.state.tasks[0]!.title).toBe('Rewritten');
+  });
+
+  it('reports a corrupted event and keeps reporting it until it is repaired', () => {
+    const a = created('First');
+    const b = created('Second');
+    append(root, a);
+    append(root, b);
+    loadOrBuild(root);
+
+    // Damage after the cache was built, the way a bad disk would.
+    const path = join(root, '.kadence', 'events', '2026-09', `${b.id}.json`);
+    writeFileSync(path, 'not json at all\n');
+
+    // Twice: a cached count would go stale the moment the file is repaired,
+    // and a repair need not change any name. So damage is never cached.
+    const first = loadOrBuild(root);
+    const second = loadOrBuild(root);
+    expect(first.health.corrupted).toBe(1);
+    expect(second.health.corrupted).toBe(1);
+    expect(second.fromCache).toBe(false);
+  });
+
+  it('caches again once the journal is whole', () => {
+    const a = created('First');
+    append(root, a);
+    const path = join(root, '.kadence', 'events', '2026-09', `${a.id}.json`);
+    writeFileSync(path, 'broken\n');
+    expect(loadOrBuild(root).health.corrupted).toBe(1);
+
+    writeFileSync(path, `${JSON.stringify(a)}\n`);
+    expect(loadOrBuild(root).health.corrupted).toBe(0);
+    expect(loadOrBuild(root).fromCache).toBe(true);
+  });
+
+  it('carries the journal health on a warm read, without opening an event', () => {
+    append(root, created('First'));
+    const cold = loadOrBuild(root);
+    const warm = loadOrBuild(root);
+
+    expect(cold.fromCache).toBe(false);
+    expect(warm.fromCache).toBe(true);
+    expect(warm.health).toEqual(cold.health);
+    expect(warm.health.total).toBe(1);
+  });
+
   it('a damaged state.json is rebuilt silently', () => {
     append(root, created('Task'));
     loadOrBuild(root);
