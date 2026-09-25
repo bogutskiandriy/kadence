@@ -22,6 +22,7 @@ the CLI. No server required.
 ## Commands
 
     kadence prime                        start here — the live state, in 40 lines
+    kadence search "…" --json            find where something was written down
     kadence ready --json                 what can be started right now
     kadence task claim KAD-42           take it; no argument takes the top of ready
     kadence board --json                 the whole board
@@ -141,6 +142,7 @@ ${provenance(version)}
 Tasks, notes, decisions and documentation live in \`.kadence/\` as plain files, shared through git.
 
     kadence prime                       start here: sprint, your work, what is ready
+    kadence search "…" --json           find where something was written down
     kadence board --json --summary      the board's state, without the history
     kadence task list --json            all tasks
     kadence decision list --json        why the current choices were made

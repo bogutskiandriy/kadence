@@ -2,6 +2,106 @@
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-25
+
+**One question over everything written down — and three fixes that had to come
+first.** `kadence search` answers "what do we know about X" across tasks,
+decisions, notes and documents at once. Getting there meant admitting that the
+commands an agent already calls were returning answers it could not use: one
+that could be forged by a note, one that read the whole journal twice on every
+call, and one that returned four thousand tasks into a window that truncates at
+twenty-five thousand tokens.
+
+### ⚠️ Upgrading — three defaults changed
+
+Nothing was renamed or removed from `kadence schema --json`, so `kadence/v1`
+stands. What a caller gets **by default** changed in three places, and a script
+that assumed otherwise needs one flag:
+
+| Was | Is | To get the old answer |
+|---|---|---|
+| `task list --json` carried `history` | it does not | `--fields id,label,history` |
+| list commands returned everything | one page of 100 | `--limit 0` |
+| `prime --json` carried full note text | capped at 2000 characters | `kadence note list --json` |
+
+`history` was never promised there — the schema has always placed it in
+`task show` — but it was emitted, and Hyrum's Law says somebody depended on it.
+It is 61% of that response at 4000 tasks, which put the command past the point
+where an agent's tool output is silently cut in half.
+
+### Added — `kadence search`
+
+- **One query, every kind of record.** Tasks with their descriptions,
+  acceptance criteria and comments; decisions with their reason and the
+  alternative they rejected; notes; documents cut at their headings. Most of
+  that was unreachable by any command before this: `task list --search` covered
+  24% of the journal's prose and only tasks.
+- **Lexical, not semantic, and measured rather than assumed.** BM25,
+  hand-rolled, no dependency, over the folded projection — so labels exist
+  (I7), a superseded decision does not answer as though it were current, and
+  search cannot disagree with `task show`. An embedding model is 200 MB and
+  seconds of cold start against a 200 ms budget and a promise to work offline;
+  on a vocabulary of `ULID`, `KAD-N` and `FlowEvent` it is also the weaker
+  method. 26 ms a query over 829 units; 158 ms end to end (DEC-26).
+- **A hit is something you can cite.** The ULID, never the derived label; the
+  lines a document section came from; and a quoted span whose offsets land on
+  the quoted text, so an agent quotes the journal instead of paraphrasing it.
+- **`coverage` — how much of the question a record actually holds**, 0 to 1,
+  weighted by how rare each word is. Where the first hit is right this is 1.00
+  at the median; where it is wrong, 0.62. Below 0.7 the human output says the
+  passage answers part of the question. The obvious signal — the gap to the
+  second hit — was measured and does not work: 0.10 against 0.08 (DEC-30).
+- **An empty answer, said plainly.** Below the coverage floor the result is
+  nothing, and the message says the journal has no answer. A model handed
+  passages that merely look relevant fabricates more than one handed none, so
+  this is a feature and not a cop-out. Nine of ten questions about things this
+  journal has never discussed get silence.
+- **Quality is held by a test, not by hope.** `test/search-relevance.test.ts`
+  runs 25 real questions against the repository's own journal and fails below
+  recall@3 of 0.64. Three ranking ideas were measured this release and two were
+  removed for making it worse (DEC-27, DEC-28).
+
+### Fixed — `prime` could be forged, and repainted your terminal
+
+- **A note carrying newlines rendered as sections of its own**, and the
+  cheapest section to forge is the `Go deeper:` block `prime` ends with. The
+  length was capped; the shape was not. An escape sequence went further and
+  cleared the screen — `prime` runs from the `SessionStart` hook without being
+  asked.
+- **`prime --json` was unbounded.** One 200 KB note made the session preamble
+  200,728 bytes. Free text is now capped at 2000 characters with `bytes`
+  alongside, the signal `documentation` already gave (DEC-21).
+
+### Fixed — a warm command read the whole journal anyway
+
+- **`loadState` called `readAll` on every command**, purely to count corrupted
+  and unknown events for a warning, after the snapshot had already answered.
+  A warm call read all 10,103 files; a cold one read every event twice.
+  345 ms to 201 ms end to end at 10k events; 204 ms to 5 ms in process.
+- **The fingerprint counts bytes as well as names**, so a file rewritten in
+  place invalidates the cache. That also means `git checkout .kadence/` — the
+  remedy the corruption warning itself recommends — finally invalidates the
+  cache it needed to, which it never did (DEC-22).
+- Every performance guardrail measured `loadOrBuild`; the CLI calls
+  `loadState`. The bug lived in the gap between them. Both are measured now.
+
+### Fixed — list commands returned the whole board
+
+- **One page of 100, with the real total and the offset beside it.**
+  `task list --json` was 1.3M tokens at 4000 tasks against the 25k at which an
+  agent's tool output is cut — silently, so the agent answers on a fraction
+  while believing it saw everything. Now 50 KB. `--limit 0` returns everything;
+  `--offset` walks (DEC-24).
+- 100 rather than 200 because this repository's own tasks run 1100 bytes each,
+  where the ceiling is 93.
+
+### Changed
+
+- Documentation moved into the journal: 65 documents, `DOC-2` through `DOC-66`,
+  as `doc.written` events. `docs/` stays on disk as the working draft and links
+  are rewritten to `DOC-N` on publication (DEC-25). The npm package is
+  unaffected — `.kadence/` is not in `files`.
+
 ## [0.6.0] — 2026-09-23
 
 **Documentation in the journal, and an honest answer when something goes
