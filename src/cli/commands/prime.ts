@@ -60,8 +60,16 @@ const JSON_TEXT_LIMIT = 2000;
 /** Shown only when no decision is in force. */
 const DECISION_HINT = 'record why: kadence decision add "…" --why "…"';
 
-/** The four ways to go deeper, so nothing above has to be exhaustive. */
+/**
+ * The ways to go deeper, so nothing above has to be exhaustive.
+ *
+ * Search leads and says what it replaces. Listed as one command among several
+ * it went unused: agents answered "why" questions with grep, at twice the
+ * context and twice the time of a search for fewer right answers (a live A/B
+ * on this repository's journal, notes on KAD-50).
+ */
 const COMMANDS = [
+  'kadence search "…"         why, where, how — before grep',
   'kadence ready              what can be started now',
   'kadence task show KAD-1    one task in full, with its decisions',
   'kadence decision list      the reasons behind the work',

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createUlid } from '../src/core/ulid.js';
 import { project, type Task } from '../src/core/projection.js';
-import { filterTasks, sortTasks, describeEmptyResult } from '../src/core/query.js';
+import { filterTasks, matchTasks, sortTasks, describeEmptyResult } from '../src/core/query.js';
 import type { FlowEvent, EventType } from '../src/core/event.js';
 
 const gen = createUlid();
@@ -28,21 +28,73 @@ function board(): Task[] {
 
 const titles = (ts: readonly Task[]) => ts.map((t) => t.title);
 
-describe('filterTasks — search', () => {
+/** The same board as a state, which is what search reads. */
+function boardState(extra: FlowEvent[] = []) {
+  const a = created({ title: 'Fix login', description: 'Safari only', type: 'bug', priority: 'urgent', assignee: 'dev1@example.com', labels: ['auth'], estimate: 5, due: '2026-09-10' });
+  const b = created({ title: 'Export to CSV', type: 'story', priority: 'normal', assignee: 'dev2@example.com', labels: ['reports'], estimate: 8, due: '2026-12-01' });
+  const c = created({ title: 'Update deps', type: 'task', priority: 'low' });
+  return project([
+    a, b, c,
+    ev('task.commented', a.entity, { text: 'Cookie format changed' }, 'dev1@example.com'),
+    ev('task.moved', b.entity, { to: 'in_progress' }),
+    ...extra,
+  ]);
+}
+
+/**
+ * `task list --search` runs on the engine `kadence search` uses (KAD-55).
+ *
+ * It was a substring over three fields: a second idea of what "matches" means
+ * next to the one agents are told to use, blind to acceptance criteria, and
+ * unable to find a word that ended a sentence the moment it was fixed there.
+ * Now one tokenizer, one coverage rule, every matching task rather than the
+ * top five, and ranked unless --sort says otherwise.
+ */
+describe('matchTasks — search', () => {
   it('matches the title, case-insensitively', () => {
-    expect(titles(filterTasks(board(), { search: 'LOGIN' }))).toEqual(['Fix login']);
+    expect(titles(matchTasks(boardState(), { search: 'LOGIN' }))).toEqual(['Fix login']);
   });
 
   it('matches the description', () => {
-    expect(titles(filterTasks(board(), { search: 'safari' }))).toEqual(['Fix login']);
+    expect(titles(matchTasks(boardState(), { search: 'safari' }))).toEqual(['Fix login']);
   });
 
   it('matches comment text — discussion is part of the task', () => {
-    expect(titles(filterTasks(board(), { search: 'cookie' }))).toEqual(['Fix login']);
+    expect(titles(matchTasks(boardState(), { search: 'cookie' }))).toEqual(['Fix login']);
   });
 
   it('returns nothing when there is no match, rather than everything', () => {
-    expect(filterTasks(board(), { search: 'nonexistent' })).toHaveLength(0);
+    expect(matchTasks(boardState(), { search: 'nonexistent' })).toHaveLength(0);
+  });
+
+  it('matches an acceptance criterion, which the substring never read', () => {
+    const t = created({ title: 'Ship the importer' });
+    const state = boardState([t, ev('task.criterion_added', t.entity, { text: 'Handles a Jira CSV with 10k rows' })]);
+    expect(titles(matchTasks(state, { search: 'jira' }))).toEqual(['Ship the importer']);
+  });
+
+  it('matches words, not fragments — the same rule as kadence search', () => {
+    expect(matchTasks(boardState(), { search: 'coo' })).toHaveLength(0);
+  });
+
+  it('returns every task that holds the question, not the top five', () => {
+    const many = Array.from({ length: 8 }, (_, i) => created({ title: `Checkout banner variant ${i}` }));
+    expect(matchTasks(boardState(many), { search: 'checkout banner' })).toHaveLength(8);
+  });
+
+  it('puts the task that is most about the question first', () => {
+    const passing = created({ title: 'Refactor settings', description: 'mentions the cache once' });
+    const central = created({ title: 'Cache invalidation', description: 'The cache is stale after a write; cache keys drift' });
+    expect(titles(matchTasks(boardState([passing, central]), { search: 'cache' }))[0]).toBe('Cache invalidation');
+  });
+
+  it('applies the other filters with AND, as before', () => {
+    expect(matchTasks(boardState(), { search: 'cookie', status: 'in_progress' })).toHaveLength(0);
+  });
+
+  it('leaves the order alone when there is no search', () => {
+    const state = boardState();
+    expect(titles(matchTasks(state, {}))).toEqual(titles(state.tasks));
   });
 });
 

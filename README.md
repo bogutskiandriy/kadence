@@ -113,8 +113,8 @@ The measurement itself is a working paper and is not published (see
 **The first ten minutes, for the person who owns `CLAUDE.md`:**
 
 ```bash
-kadence init --hooks          # .kadence/, a short section in AGENTS.md and CLAUDE.md,
-                              # and a Claude Code hook that runs `kadence prime` at session start
+kadence init                  # .kadence/, a short section in AGENTS.md and CLAUDE.md, and two
+                              # Claude Code hooks: prime at session start, a journal search per prompt
 kadence task add "Fix login" --type bug --priority high
 kadence decision add "Keep sessions in Redis" \
   --why "Revocation must be instant" --rejected "JWT: cannot revoke before expiry"
@@ -211,7 +211,7 @@ Everything `init` touched, so you can undo it by hand:
 |---|---|
 | The journal | `.kadence/` — yours to keep or delete; kadence never deletes it |
 | The agent section | between `<!-- kadence:begin -->` and `<!-- kadence:end -->` in `AGENTS.md` and `CLAUDE.md` |
-| The hook (only with `--hooks`) | the `SessionStart` entry that runs `kadence prime` in `.claude/settings.json` |
+| The hooks (unless `--no-hooks`) | the `SessionStart` entry that runs `kadence prime` and the `UserPromptSubmit` entry that runs `kadence hook prompt`, in `.claude/settings.json` |
 | The cache entry | the `.kadence/state.json` line in `.gitignore` |
 
 Then `npm uninstall -g kadence`. Nothing lives outside the repository and your
@@ -232,9 +232,12 @@ kadence ready --json   # seven fields per task, not the whole record
 ```
 
 `prime` is held to forty lines and three kilobytes by a test, because it is paid
-for on every turn that follows. `kadence init --hooks` will add it as a
-`SessionStart` hook — only with the flag, because `.claude/settings.json` is
-yours.
+for on every turn that follows. `kadence init` adds it as a `SessionStart` hook,
+and adds a `UserPromptSubmit` hook that searches the journal for each prompt
+and puts up to three records next to it. Both are on by default because agents
+do not reach for search on their own (1 in 10 measured); `--no-hooks` leaves
+`.claude/settings.json` alone. The journal is searched in the words it is
+written in: a prompt in another language finds nothing.
 
 ```bash
 kadence board --json

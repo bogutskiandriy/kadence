@@ -205,11 +205,11 @@ assumption.
 Tasks, notes, decisions and documentation live in `.kadence/` as plain files, shared through git.
 
     kadence prime                       start here: sprint, your work, what is ready
-    kadence search "…" --json           find where something was written down
-    kadence board --json --summary      the board's state, without the history
-    kadence task list --json            all tasks
-    kadence decision list --json        why the current choices were made
-    kadence doc list --json             documentation: how things work now, revised
+    kadence search "…" --json           why, where, how: ~400 tokens; grep costs ~11k
+    kadence decision show DEC-1 --json  one record: ~300 (task show ~1k, doc show ~4k)
+    kadence board --json --summary      the board's state: ~4k
+    kadence decision list --json        every decision in force: ~8k
+    kadence task list --json            every task: ~16k; narrow with --search "…"
     kadence schema --json               the contract: commands, fields, error codes
 
     kadence task claim                  take the top of ready before starting

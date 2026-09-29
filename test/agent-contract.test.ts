@@ -128,6 +128,48 @@ describe('what the instruction files tell an agent', () => {
     }
   });
 
+  it('say to search before grepping the journal, in the same breath', () => {
+    // Listing `search` among the commands was not enough: agents with it in
+    // front of them still went to grep and `decision list` first. A live A/B
+    // on this repository's journal put grep at twice the context and twice
+    // the time for fewer right answers (notes on KAD-50). The rule has to name
+    // the habit it replaces, so the paragraph that says search also says grep.
+    runInit(dir);
+    for (const file of ['AGENTS.md', 'CLAUDE.md', join('.kadence', 'README.md')]) {
+      const paragraphs = readFileSync(join(dir, file), 'utf8').split(/\n\s*\n/);
+      const rule = paragraphs.find((p) => p.includes('kadence search') && /\bgrep\b/.test(p));
+      expect(rule, file).toBeDefined();
+    }
+  });
+
+  it('list the ways to look something up cheapest first, with what each costs', () => {
+    // Measured on 75 questions over this repository's journal (KAD-55): an
+    // agent that knows the order stops at the first rung that answers.
+    runInit(dir);
+    for (const file of ['AGENTS.md', 'CLAUDE.md']) {
+      const text = readFileSync(join(dir, file), 'utf8');
+      const at = (s: string) => text.indexOf(s);
+      const ladder = [
+        'kadence search "…" --json',
+        'kadence decision show',
+        'kadence board --json --summary',
+        'kadence decision list --json',
+        'kadence task list --json',
+      ];
+      for (const rung of ladder) expect(at(rung), `${file}: ${rung}`).toBeGreaterThan(-1);
+      for (let i = 1; i < ladder.length; i++) {
+        expect(at(ladder[i - 1]!), `${file}: ${ladder[i - 1]} before ${ladder[i]}`).toBeLessThan(at(ladder[i]!));
+      }
+      for (const rung of ladder) {
+        const line = text.split('\n').find((l) => l.includes(rung))!;
+        expect(line, `${file}: ${rung} says what it costs`).toMatch(/~\d/);
+      }
+    }
+    const readme = readFileSync(join(dir, '.kadence', 'README.md'), 'utf8');
+    expect(readme).toMatch(/## What a lookup costs/);
+    expect(readme).toMatch(/grep[^\n]*~\d/);
+  });
+
   it('warn that statuses are project-configurable', () => {
     // The most likely agent error, and the one a default list makes worse.
     runInit(dir);

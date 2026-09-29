@@ -59,6 +59,13 @@ export interface SearchOptions {
   limit?: number;
   /** Include superseded decisions, which are left out by default. */
   all?: boolean;
+  /**
+   * Every record that holds the question, in rank order: no limit and no cut
+   * below the best hit. For a filter such as `task list --search`, where a
+   * matching task missing from the list is a wrong answer; not for handing
+   * passages to a model, where the cut is the point.
+   */
+  every?: boolean;
 }
 
 /** Default number of hits. Small on purpose: a long answer is the problem. */
@@ -146,7 +153,9 @@ const CONTROL = /\p{Cc}/gu;
  * own vocabulary into noise.
  */
 function tokenize(text: string): string[] {
-  return text.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}_.-]*/gu) ?? [];
+  // Ends on a letter or digit: `.` inside a token keeps `state.json` whole, and
+  // at its end it is a full stop — kept, it hid the last word of every sentence.
+  return text.toLowerCase().match(/[\p{L}\p{N}](?:[\p{L}\p{N}_.-]*[\p{L}\p{N}])?/gu) ?? [];
 }
 
 /** One line, no controls: what a span may be cut from. */
@@ -526,10 +535,11 @@ export function search(
 
 
   const best = ranked[0]![1].score;
-  const limit = options.limit ?? DEFAULT_SEARCH_LIMIT;
+  const limit = options.every === true ? ranked.length : (options.limit ?? DEFAULT_SEARCH_LIMIT);
+  const floor = options.every === true ? 0 : best * TAIL_SHARE;
 
   return ranked
-    .filter(([, r]) => r.score >= best * TAIL_SHARE)
+    .filter(([, r]) => r.score >= floor)
     .slice(0, limit)
     .map(([i, { score, coverage }]) => {
       const u = corpus[i]!;

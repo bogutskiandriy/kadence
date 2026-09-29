@@ -66,6 +66,21 @@ describe('search finds a record by what is written in it', () => {
     expect(search(state, 'deleting by label')[0]!.kind).toBe('note');
   });
 
+  it('finds the last word of a sentence', () => {
+    // `.` stays inside a token so `state.json` survives, and for a long time
+    // that kept the full stop too: "release steps." indexed `steps.`, and a
+    // search for "steps" never found it. Every sentence lost its last word.
+    const state = project([note('Rollback needs the release steps. Ask first, then deploy-')]);
+    expect(search(state, 'steps')).toHaveLength(1);
+    expect(search(state, 'deploy')).toHaveLength(1);
+  });
+
+  it('keeps a dotted or hyphenated name whole', () => {
+    const state = project([note('Never commit state.json; KAD-42 says why.')]);
+    expect(search(state, 'state.json')).toHaveLength(1);
+    expect(search(state, 'KAD-42')).toHaveLength(1);
+  });
+
   it('finds the alternative a decision rejected, not only what it chose', () => {
     const state = project([
       decision('Events are append-only', 'A journal you can edit is a journal nobody trusts', 'Mutable records with an audit trail'),

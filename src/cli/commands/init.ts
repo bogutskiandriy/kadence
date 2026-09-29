@@ -30,10 +30,14 @@ export interface InitResult {
  */
 export interface InitOptions {
   /**
-   * Write a SessionStart hook into `.claude/settings.json`.
+   * Write the Claude Code hooks into `.claude/settings.json`: prime at session
+   * start, a journal search on each prompt.
    *
-   * Off by default and only ever on by name: that file is the user's, it is
-   * committed to their repository, and something else's hooks live in it.
+   * On unless set to false (`--no-hooks`). It was off and only ever on by
+   * name, because that file is the user's; it changed when measurement showed
+   * search goes unused unless it is put in front of the agent (KAD-53, KAD-56).
+   * Still an upsert that keeps every other hook, still said out loud, and a
+   * file that does not parse is never rewritten.
    */
   hooks?: boolean;
 }
@@ -64,31 +68,25 @@ export function runInit(cwd: string, version = 'dev', options: InitOptions = {})
   // reads CLAUDE.md instead of it (ADR-009).
   for (const name of INSTRUCTION_FILES) ensureInstructionFile(root, name, version);
 
-  const hookNote = options.hooks === true ? `\n\n${installSessionHook(root)}` : '';
-  // A repository already using Claude Code is one flag away from every session
-  // starting with prime. Say so once, and only where it applies.
-  const hookHint =
-    options.hooks !== true && existsSync(join(root, '.claude')) && !hasSessionHook(root)
-      ? '\n\nkadence init --hooks adds prime at session start.'
-      : '';
+  const withHooks = options.hooks !== false;
+  const hookNote = withHooks ? `\n\n${installSessionHook(root)}` : '';
 
   const toCommit = ['.kadence/', 'AGENTS.md', 'CLAUDE.md'];
-  if (options.hooks === true && hasSessionHook(root)) toCommit.push('.claude/settings.json');
+  if (withHooks && hasSessionHook(root)) toCommit.push('.claude/settings.json');
 
   return {
     ok: true,
     alreadyInitialized: already,
     root,
     message: already
-      ? `kadence is already initialised.${hookNote}${hookHint}`
+      ? `kadence is already initialised.${hookNote}`
       : 'kadence is ready.\n\n' +
         '  kadence task add "first task"\n' +
         '  kadence decision add "What we chose" --why "Why we chose it"\n' +
         '  kadence board\n\n' +
         `Commit ${toCommit.join(', ')} so a teammate's agent finds them.\n` +
         'Files were created but not committed — that call is yours.' +
-        hookNote +
-        hookHint,
+        hookNote,
   };
 }
 
@@ -104,6 +102,24 @@ export function runInit(cwd: string, version = 'dev', options: InitOptions = {})
 export const HOOK_COMMAND =
   'if command -v kadence >/dev/null 2>&1; then kadence prime; else ' +
   "echo 'kadence is not installed on this machine: ask the human to run npm install -g kadence. The team journal is in .kadence/.'; fi";
+/**
+ * The command the UserPromptSubmit hook runs: search the journal for the
+ * prompt and print what it holds, or nothing.
+ *
+ * Silent where kadence is missing — the session-start hook already says so
+ * once, and this one runs on every prompt. `2>/dev/null || true` because exit 2
+ * from this hook erases the user's prompt, and a kadence older than the `hook`
+ * command answers it with exactly that: a teammate who had not upgraded would
+ * lose everything they typed.
+ */
+export const PROMPT_HOOK_COMMAND =
+  'if command -v kadence >/dev/null 2>&1; then kadence hook prompt 2>/dev/null || true; fi';
+/**
+ * Seconds. The default for this event is 30 and a search takes about 0.1; a
+ * hook that is slow for another reason should cost the turn little.
+ */
+const PROMPT_HOOK_TIMEOUT = 10;
+
 /** Commands earlier versions installed. Still ours: replaced in place, never duplicated. */
 const OUR_HOOK_COMMANDS: readonly string[] = ['kadence prime', HOOK_COMMAND];
 /**
@@ -124,7 +140,8 @@ interface HookGroup {
 }
 
 /**
- * Adds a SessionStart hook to `.claude/settings.json`, keeping everything else.
+ * Adds the SessionStart and UserPromptSubmit hooks to `.claude/settings.json`,
+ * keeping everything else.
  *
  * Upsert, not write: hooks of other events, other matchers and other commands
  * all survive, and running this twice leaves one hook. The format was read from
@@ -146,29 +163,58 @@ function installSessionHook(root: string): string {
     } catch {
       // Never rewrite a file we could not read. A settings file that fails to
       // parse is usually mid-edit, and replacing it would lose the edit.
-      return `${path} is not valid JSON, so the hook was not added. Fix it and run:\n  kadence init --hooks`;
+      return `${path} is not valid JSON, so the hooks were not added. Fix it and run:\n  kadence init`;
     }
   }
 
   const hooks = (settings['hooks'] ?? {}) as Record<string, unknown>;
-  const sessionStart = Array.isArray(hooks['SessionStart'])
-    ? (hooks['SessionStart'] as HookGroup[])
-    : [];
+  const said = [upsertSessionHook(hooks, path), upsertPromptHook(hooks, path)];
+  const changed = said.some((s) => s.changed);
+  if (changed) {
+    settings['hooks'] = hooks;
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  }
+  if (said.every((s) => s.added)) {
+    // A first install: one sentence for what happened and what it is for.
+    return (
+      `Added Claude Code hooks to ${path}: prime at session start, and a journal search on each prompt, so the agent sees what is already written down before it greps.\n` +
+      `Without them: delete the two kadence entries there; kadence init --no-hooks will not add them back.`
+    );
+  }
+  return said.map((s) => s.message).join('\n');
+}
 
+interface Upsert {
+  changed: boolean;
+  /** Newly written, as opposed to already there or upgraded in place. */
+  added: boolean;
+  message: string;
+}
+
+function groupsOf(hooks: Record<string, unknown>, event: string): HookGroup[] {
+  return Array.isArray(hooks[event]) ? (hooks[event] as HookGroup[]) : [];
+}
+
+function upsertSessionHook(hooks: Record<string, unknown>, path: string): Upsert {
+  const sessionStart = groupsOf(hooks, 'SessionStart');
   const ours = sessionStart.flatMap((group) =>
     (Array.isArray(group.hooks) ? group.hooks : []).filter(
       (entry) => typeof entry.command === 'string' && OUR_HOOK_COMMANDS.includes(entry.command),
     ),
   );
   if (ours.some((entry) => entry.command === HOOK_COMMAND)) {
-    return `The SessionStart hook is already in ${path}.`;
+    return { changed: false, added: false, message: `The SessionStart hook is already in ${path}.` };
   }
   if (ours.length > 0) {
     // An older hook of ours: upgrade it where it stands, keeping its neighbours
     // and their order.
     for (const entry of ours) entry.command = HOOK_COMMAND;
-    writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
-    return `Updated the SessionStart hook in ${path}: it now prints an install hint where kadence is missing.`;
+    return {
+      changed: true,
+      added: false,
+      message: `Updated the SessionStart hook in ${path}: it now prints an install hint where kadence is missing.`,
+    };
   }
 
   let group = sessionStart.find((g) => g.matcher === HOOK_MATCHER);
@@ -178,13 +224,32 @@ function installSessionHook(root: string): string {
   }
   if (!Array.isArray(group.hooks)) group.hooks = [];
   group.hooks.push({ type: 'command', command: HOOK_COMMAND, timeout: 60 });
-
   hooks['SessionStart'] = sessionStart;
-  settings['hooks'] = hooks;
+  return {
+    changed: true,
+    added: true,
+    message: `Added a SessionStart hook to ${path}: every session now starts with \`kadence prime\`.`,
+  };
+}
 
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
-  return `Added a SessionStart hook to ${path}: every session now starts with \`kadence prime\`.`;
+/**
+ * UserPromptSubmit takes no matcher — it fires on every prompt — so ours is a
+ * group of its own, after whatever was there.
+ */
+function upsertPromptHook(hooks: Record<string, unknown>, path: string): Upsert {
+  const groups = groupsOf(hooks, 'UserPromptSubmit');
+  const present = groups.some(
+    (g) => Array.isArray(g.hooks) && g.hooks.some((e) => e.command === PROMPT_HOOK_COMMAND),
+  );
+  if (present) return { changed: false, added: false, message: `The prompt hook is already in ${path}.` };
+
+  groups.push({ hooks: [{ type: 'command', command: PROMPT_HOOK_COMMAND, timeout: PROMPT_HOOK_TIMEOUT }] });
+  hooks['UserPromptSubmit'] = groups;
+  return {
+    changed: true,
+    added: true,
+    message: `Added a prompt hook to ${path}: each prompt is searched in the journal first, and what it holds is shown to the agent.`,
+  };
 }
 
 /** Whether `.claude/settings.json` already carries a SessionStart hook of ours. Never throws. */
