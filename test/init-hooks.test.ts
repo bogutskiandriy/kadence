@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runInit, HOOK_COMMAND } from '../src/cli/commands/init.js';
+import { runInit, HOOK_COMMAND, PROMPT_HOOK_COMMAND } from '../src/cli/commands/init.js';
 
 /**
  * `.claude/settings.json` is the user's file, not ours.
@@ -26,8 +26,15 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe('init --hooks', () => {
-  it('does not touch .claude/ without the flag', () => {
+  it('installs both hooks by default, creating .claude/ where there is none', () => {
     runInit(dir);
+    const hooks = read()['hooks'] as Record<string, unknown>;
+    expect(hooks['SessionStart']).toBeDefined();
+    expect(hooks['UserPromptSubmit']).toBeDefined();
+  });
+
+  it('does not touch .claude/ with --no-hooks', () => {
+    runInit(dir, 'dev', { hooks: false });
     expect(existsSync(join(dir, '.claude'))).toBe(false);
   });
 
@@ -102,6 +109,79 @@ describe('init --hooks', () => {
     const entries = sessionStart[0]!['hooks'] as Array<Record<string, unknown>>;
     expect(entries).toHaveLength(1);
     expect(second.message).toMatch(/already/i);
+  });
+
+  it('adds a UserPromptSubmit hook that searches the journal for each prompt', () => {
+    // Instructions to search were not followed (0 of 10, notes on KAD-53), so
+    // the search runs on the way in instead of waiting to be remembered.
+    runInit(dir, 'dev', { hooks: true });
+    const groups = (read()['hooks'] as Record<string, unknown>)['UserPromptSubmit'] as Array<
+      Record<string, unknown>
+    >;
+    const commands = groups.flatMap((g) =>
+      (g['hooks'] as Array<Record<string, unknown>>).map((e) => e['command']),
+    );
+    expect(commands).toEqual([PROMPT_HOOK_COMMAND]);
+  });
+
+  it('leaves one prompt hook however many times it runs', () => {
+    runInit(dir, 'dev', { hooks: true });
+    runInit(dir, 'dev', { hooks: true });
+    const groups = (read()['hooks'] as Record<string, unknown>)['UserPromptSubmit'] as Array<
+      Record<string, unknown>
+    >;
+    expect(groups.flatMap((g) => g['hooks'] as unknown[])).toHaveLength(1);
+  });
+
+  it('keeps a prompt hook somebody else already had', () => {
+    mkdirSync(join(dir, '.claude'), { recursive: true });
+    writeFileSync(
+      settingsPath(),
+      JSON.stringify({ hooks: { UserPromptSubmit: [{ hooks: [{ type: 'command', command: 'lint-prompt' }] }] } }),
+      'utf8',
+    );
+    runInit(dir, 'dev', { hooks: true });
+    const groups = (read()['hooks'] as Record<string, unknown>)['UserPromptSubmit'] as Array<
+      Record<string, unknown>
+    >;
+    const commands = groups.flatMap((g) =>
+      (g['hooks'] as Array<Record<string, unknown>>).map((e) => e['command']),
+    );
+    expect(commands).toEqual(['lint-prompt', PROMPT_HOOK_COMMAND]);
+  });
+
+  it('prompt hook is silent and exits 0 on a machine without kadence', () => {
+    // It runs on every prompt. The install hint belongs to the session-start
+    // hook, once; repeating it on every turn would be noise.
+    const r = spawnSync('sh', ['-c', PROMPT_HOOK_COMMAND], {
+      cwd: dir,
+      input: '{"prompt":"why"}',
+      encoding: 'utf8',
+      env: { PATH: '/usr/bin:/bin' },
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe('');
+  });
+
+  it('prompt hook never blocks a prompt when an older kadence does not know the command', () => {
+    // 0.7.0 answers an unknown command with exit 2 and a line on stderr, and
+    // exit 2 from UserPromptSubmit erases the prompt. A teammate who has not
+    // upgraded would lose every prompt they typed.
+    const bin = join(dir, 'old-bin');
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, 'kadence'),
+      '#!/bin/sh\necho \'Unknown command "hook".\' >&2\nexit 2\n',
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    const r = spawnSync('sh', ['-c', PROMPT_HOOK_COMMAND], {
+      cwd: dir,
+      input: '{"prompt":"why"}',
+      encoding: 'utf8',
+      env: { PATH: `${bin}:/usr/bin:/bin` },
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe('');
   });
 
   it('refuses to rewrite a settings file it cannot parse', () => {

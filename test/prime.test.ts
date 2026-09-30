@@ -62,6 +62,18 @@ function busyRepo(): void {
 }
 
 describe('runPrime', () => {
+  it('points at search first when it says where to go deeper', () => {
+    // prime is the one thing the SessionStart hook puts in front of an agent
+    // unasked. Without search here, an agent's first move on a "why" question
+    // was grep — twice the context and twice the time of a search in a live
+    // A/B (notes on KAD-50). The line has to say when, not only what.
+    const r = runPrime(dir, env, {});
+    const lines = r.message.split('\n');
+    const first = lines[lines.findIndex((l) => l.trim() === 'Go deeper:') + 1] ?? '';
+    expect(first.trim()).toMatch(/^kadence search "…"/);
+    expect(first).toMatch(/\bgrep\b/);
+  });
+
   it('fits the budget on an empty repository', () => {
     const r = runPrime(dir, env, {});
     expect(r.ok).toBe(true);

@@ -2,6 +2,78 @@
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-09-30
+
+**The journal is searched before the agent starts guessing.** Agents told to
+use `kadence search` did not: in natural runs on this repository 1 in 10
+reached for it, and 0 in 10 after the instruction files said "before grep".
+Every one opened with grep over the whole tree. So `kadence init` now installs
+a UserPromptSubmit hook that searches the journal for each prompt and puts up
+to three records next to it — by default, next to the `prime` hook.
+
+### ⚠️ `init` now writes `.claude/settings.json`
+
+It used to only with `--hooks`. It now installs both hooks unless you pass
+`--no-hooks`, creates the file when there is none, keeps every hook that was
+already there, says what it added, and never rewrites a file it cannot parse.
+`--hooks` is still accepted.
+
+Measured on the same ten questions, same prompt, Sonnet agents:
+
+| | without the hook | with it |
+|---|---|---|
+| Used the journal | 1 / 10 | 9 / 10 (6 as the first step) |
+| Right answer | 9 / 10 | 10 / 10 |
+| Context added, median | ~10.9k tokens | ~7.9k tokens |
+| Time, median | 44 s | 25 s |
+| Answered from files a clone does not have | 1 | 0 |
+
+One repository, ten questions, one model. The hook's output was placed in the
+prompt by hand, because subagents do not fire hooks, so this measures what the
+records do once they arrive, not the hook firing in a live session. A signal,
+not a benchmark.
+
+### Added
+
+- `kadence hook prompt` — run by the hook, not by hand. Reads the
+  UserPromptSubmit payload on stdin and prints up to three records (1 KB at
+  most), or nothing. A passage is quoted only when its record holds the whole
+  question; a note is given whole, since there is no command to open one.
+  Always exits 0: exit 2 from this hook erases the prompt.
+- A record is shown once per session: what a session has seen is kept in the
+  system temp directory, keyed by session and repository — never in
+  `.kadence/`. The lines are offered on a condition ("if this is about why or
+  how something was decided"), not as an order. On ten ordinary code tasks
+  the hook added ~180 tokens and sent no agent into the journal; same answers,
+  same time.
+- `init` installs it next to the SessionStart hook. The command is
+  silent where kadence is missing and swallows an older kadence's exit 2, so a
+  teammate who has not upgraded does not lose every prompt they type.
+
+### Changed
+
+- **`task list --search` runs on the search engine.** It was a substring over
+  title, description and comments — a second idea of what "matches" means.
+  Now it matches words the way `kadence search` does, reads acceptance
+  criteria too, returns every matching task rather than the top five, and
+  lists the most relevant first unless `--sort` is given. A fragment no longer
+  matches: `--search coo` does not find `cookie`. The flag and the `--json`
+  fields are unchanged. The TUI `/` filter stays a substring, since it filters
+  as a person types.
+- The instruction section and `.kadence/README.md` list the ways to look
+  something up cheapest first, with what each costs in tokens — from the
+  prompt hook's ~90 to `board --json`'s ~51,000, with grep at ~11,000.
+- `prime` names `kadence search` first under "Go deeper", with when to use it.
+- The instruction section in `AGENTS.md` / `CLAUDE.md` and `.kadence/README.md`
+  say when to search — before grep or a list. On their own these changed
+  nothing measurable; they stay because they cost one line.
+
+### Fixed
+
+- `search` missed the last word of every sentence. A full stop stayed inside
+  the token, so "release steps." was indexed as `steps.` and a search for
+  "steps" never found it. Golden-set recall@3 0.64 → 0.68.
+
 ## [0.7.0] — 2026-09-25
 
 **One question over everything written down — and three fixes that had to come

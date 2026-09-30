@@ -220,8 +220,13 @@ describe('T109 — what init tells the person who ran it', () => {
     expect(r.message).toContain('.kadence/');
     expect(r.message).toContain('AGENTS.md');
     expect(r.message).toContain('CLAUDE.md');
-    expect(r.message).not.toContain('.claude/settings.json');
+    expect(r.message).toContain('.claude/settings.json');
     expect(r.message).toMatch(/not committed — that call is yours/);
+  });
+
+  it('leaves .claude/settings.json off the list with --no-hooks', () => {
+    const r = runInit(dir, 'dev', { hooks: false });
+    expect(r.message).not.toContain('.claude/settings.json');
   });
 
   it('adds .claude/settings.json to the list when --hooks installed the hook', () => {
@@ -229,18 +234,21 @@ describe('T109 — what init tells the person who ran it', () => {
     expect(r.message).toContain('.claude/settings.json');
   });
 
-  it('mentions --hooks when .claude/ exists and no hook is installed', () => {
-    mkdirSync(join(dir, '.claude'));
+  it('says it added the hooks, what they do, and how to opt out', () => {
+    // Search only helps when it is used, and agents do not reach for it on
+    // their own (KAD-53): so it is on from the first init, and said out loud.
     const r = runInit(dir);
-    expect(r.message).toContain('kadence init --hooks adds prime at session start');
+    expect(r.message).toMatch(/prime at session start/);
+    expect(r.message).toMatch(/each prompt/);
+    expect(r.message).toContain('--no-hooks');
   });
 
-  it('does not mention --hooks without a .claude/ folder', () => {
-    const r = runInit(dir);
-    expect(r.message).not.toContain('kadence init --hooks');
+  it('says nothing about hooks with --no-hooks', () => {
+    const r = runInit(dir, 'dev', { hooks: false });
+    expect(r.message).not.toMatch(/hook/i);
   });
 
-  it('does not mention --hooks when the old hook is already installed', () => {
+  it('upgrades an old hook of ours on a plain init', () => {
     mkdirSync(join(dir, '.claude'));
     writeFileSync(
       settingsPath(),
@@ -253,7 +261,9 @@ describe('T109 — what init tells the person who ran it', () => {
       }),
       'utf8',
     );
-    const r = runInit(dir);
-    expect(r.message).not.toContain('kadence init --hooks adds');
+    runInit(dir);
+    const hooks = JSON.parse(readFileSync(settingsPath(), 'utf8')).hooks;
+    expect(JSON.stringify(hooks.SessionStart)).not.toContain('"kadence prime"');
+    expect(hooks.UserPromptSubmit).toBeDefined();
   });
 });

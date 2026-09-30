@@ -27,7 +27,7 @@ import {
 import { loadOrBuild } from '../../core/snapshot.js';
 import { renderTaskTable, renderTaskTree, renderTaskDetail, colorsEnabled, describeMerge, page, pageNote } from '../output.js';
 import {
-  filterTasks,
+  matchTasks,
   sortTasks,
   describeEmptyResult,
   describeNothingReady,
@@ -439,7 +439,7 @@ export function runTaskList(
   }
 
   const { sort, tree, branch, base, json: _json, ...filters } = options;
-  let matched = filterTasks(state.tasks, filters);
+  let matched = matchTasks(state, filters);
 
   // The branch filter is applied after the others and never stored: membership
   // lives in git's history, and is read at the moment it is asked for.

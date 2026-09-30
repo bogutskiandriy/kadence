@@ -2,6 +2,7 @@ import cac from 'cac';
 import { runInit } from './commands/init.js';
 import { runReady } from './commands/ready.js';
 import { runSearch, SEARCH_KINDS } from './commands/search.js';
+import { runPromptHook } from './commands/hook.js';
 import { runPrime } from './commands/prime.js';
 import { runStats } from './commands/stats.js';
 import { runCompact } from './commands/compact.js';
@@ -668,6 +669,28 @@ cli
   });
 
 cli
+  .command('hook <event>', 'For Claude Code hooks: prompt reads a UserPromptSubmit payload on stdin')
+  .example('  echo \'{"prompt":"why are events append-only"}\' | kadence hook prompt')
+  .action((event: string) => {
+    // Always exit 0. Exit 2 from a UserPromptSubmit hook erases the user's
+    // prompt, so this command has no failure a person would want to see here.
+    if (event !== 'prompt') {
+      writeAll(2, `Unknown hook "${event}". Known: prompt\n`);
+      process.exit(0);
+    }
+    let input = '';
+    try {
+      // A terminal would block on a read nobody answers; a hook always pipes.
+      if (process.stdin.isTTY !== true) input = readFileSync(0, 'utf8');
+    } catch {
+      input = '';
+    }
+    const context = runPromptHook(process.cwd(), process.env, input);
+    if (context.length > 0) writeAll(1, `${context}\n`);
+    process.exit(0);
+  });
+
+cli
   .command('stats', 'Where the project stands: counts, blockers, contested claims, velocity')
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence stats')
@@ -771,13 +794,14 @@ cli
 
 cli
   .command('init', 'Set up kadence in this repository')
-  .option('--hooks', 'Also add a SessionStart hook running `kadence prime` to .claude/settings.json')
+  .option('--no-hooks', 'Leave .claude/settings.json alone: no prime at session start, no journal search on each prompt')
+  .option('--hooks', 'Accepted for older scripts; the hooks are on by default now')
   .example('  kadence init')
-  .example('  kadence init --hooks')
+  .example('  kadence init --no-hooks')
   .action((options: { hooks?: boolean }) => {
-    // `.claude/settings.json` is the user's file and is committed to their
-    // repository, so it is only ever touched when the flag asks for it.
-    const r = runInit(process.cwd(), __VERSION__, { hooks: options.hooks === true });
+    // On by default since KAD-56: search goes unused unless it is put in front
+    // of the agent. `--no-hooks` is the way out, and the message says so.
+    const r = runInit(process.cwd(), __VERSION__, { hooks: options.hooks !== false });
     emit({ ok: r.ok, message: r.message, exitCode: r.ok ? 0 : 1 }, false);
   });
 
@@ -794,7 +818,7 @@ cli
   .option('--estimate <points>', 'Estimate in points, a positive number')
   .option('--due <date>', 'Due date, YYYY-MM-DD; empty string clears it')
   .option('--status <status>', `Filter by status: ${TASK_STATUSES.join(' | ')}`)
-  .option('--search <text>', 'Search title, description and comments')
+  .option('--search <text>', 'Words in title, description, criteria and comments, matched as kadence search matches them; most relevant first unless --sort')
   .option('--overdue', 'Only tasks past their due date')
   .option('--due-before <date>', 'Only tasks due before YYYY-MM-DD')
   .option('--sort <key>', `Sort by: ${SORT_KEYS.join(' | ')}`)

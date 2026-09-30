@@ -1,4 +1,5 @@
-import type { Task, TaskStatus, TaskType, Priority } from './projection.js';
+import type { Task, TaskStatus, TaskType, Priority, ProjectState } from './projection.js';
+import { search } from './search.js';
 import {
   TERMINAL_STATUS,
   CANCELLED_STATUS,
@@ -16,7 +17,11 @@ import { beforeStarted } from './flow.js';
  */
 
 export interface TaskFilters {
-  /** Substring across title, description and comments. */
+  /**
+   * Words across title, description, criteria and comments, matched the way
+   * `kadence search` matches them. Applied by `matchTasks`, which has the
+   * state search needs; `filterTasks` ignores it.
+   */
   search?: string;
   status?: string;
   type?: string;
@@ -33,10 +38,6 @@ export type SortKey = 'created' | 'priority' | 'due' | 'estimate';
 
 const PRIORITY_RANK: Record<Priority, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
 
-function contains(haystack: string | null, needle: string): boolean {
-  return haystack !== null && haystack.toLowerCase().includes(needle);
-}
-
 /**
  * Applies every filter with AND.
  *
@@ -49,16 +50,8 @@ export function filterTasks(
   today: Date = new Date(),
 ): Task[] {
   const todayIso = today.toISOString().slice(0, 10);
-  const search = filters.search?.toLowerCase();
 
   return tasks.filter((t) => {
-    if (search !== undefined && search.length > 0) {
-      const inComments = t.comments.some((c) => c.text.toLowerCase().includes(search));
-      if (!contains(t.title, search) && !contains(t.description, search) && !inComments) {
-        return false;
-      }
-    }
-
     if (filters.status !== undefined && t.status !== filters.status) return false;
     if (filters.type !== undefined && t.type !== filters.type) return false;
     if (filters.priority !== undefined && t.priority !== filters.priority) return false;
@@ -94,6 +87,32 @@ export function filterTasks(
  * Tasks missing the sort value always go last: a missing deadline is not
  * "the year zero", and a missing estimate is not zero points.
  */
+/**
+ * The tasks `task list` returns: the filters, and `search` when it is set.
+ *
+ * Search runs on the engine `kadence search` uses, restricted to tasks, so
+ * there is one idea of what "matches" means in the product (KAD-55). Every
+ * matching task comes back, not the top five, ranked most relevant first; the
+ * caller's --sort, when given, overrides the ranking.
+ */
+export function matchTasks(
+  state: ProjectState,
+  filters: TaskFilters,
+  today: Date = new Date(),
+): Task[] {
+  const text = filters.search?.trim() ?? '';
+  if (text.length === 0) return filterTasks(state.tasks, filters, today);
+
+  const rankOf = new Map(
+    search(state, text, { kinds: ['task'], every: true }).map((hit, i) => [hit.id, i] as const),
+  );
+  return filterTasks(
+    state.tasks.filter((t) => rankOf.has(t.id)),
+    filters,
+    today,
+  ).sort((a, b) => rankOf.get(a.id)! - rankOf.get(b.id)!);
+}
+
 export function sortTasks(tasks: readonly Task[], key: SortKey): Task[] {
   const out = [...tasks];
 
