@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-09-30
+
 **The journal is searched before the agent starts guessing.** Agents told to
 use `kadence search` did not: in natural runs on this repository 1 in 10
 reached for it, and 0 in 10 after the instruction files said "before grep".
@@ -25,6 +27,11 @@ Measured on the same ten questions, same prompt, Sonnet agents:
 | Context added, median | ~10.9k tokens | ~7.9k tokens |
 | Time, median | 44 s | 25 s |
 | Answered from files a clone does not have | 1 | 0 |
+
+One repository, ten questions, one model. The hook's output was placed in the
+prompt by hand, because subagents do not fire hooks, so this measures what the
+records do once they arrive, not the hook firing in a live session. A signal,
+not a benchmark.
 
 ### Added
 

@@ -324,8 +324,8 @@ either moves both or changes nothing. A typo does not leave half a board.
 
 | | |
 |---|---|
-| Install | 76 KB packed — 233 KB of kadence, plus 1.8 MB of blessed |
-| Startup | 65 ms |
+| Install | 114 KB packed — 344 KB of kadence, plus 1.8 MB of blessed |
+| Startup | 70 ms (`--version`, 0.8.0, one laptop) |
 | 10,000 events | 21 ms cold with a compacted archive, 12 ms warm — 199 ms cold if every event is still a separate file |
 | Journal on disk | under 5 MB |
 | One task, as an agent reads it | 982 bytes, or 304 with `--summary` — the same however long the task has been worked on |
@@ -339,23 +339,19 @@ true.
 
 **Verified.** The merge thesis, on real git branches. Performance and size, by
 tests that fail if they regress. That the conflict problem exists in the wild —
-measured, not assumed. 1060 tests in the repository today, including an
+measured, not assumed. 1,188 tests in the repository today, including an
 end-to-end run through the installed binary.
 
 **Not verified.** That teams and their AI agents actually lose enough context to want
 this. The bet rests on reasoning and on the industry naming the problem out
 loud — not on our own users. That research, Probe B, is
 designed and not yet run: as of
-2026-09-16, zero conversations and no external users. What happens next, and
+2026-09-30, zero conversations and no external users. What happens next, and
 on which dates, is recorded in this repository's own journal — `kadence
 decision list` and `kadence note list`.
 
 **Not built, on purpose.** An MCP package — only if someone who cannot run a CLI
 asks for it, not as an inevitability.
-
-**In the repository, not yet released.** `report burndown`, `report velocity`,
-`report workload`, `report --list` and `report <name> --html`. `npm install`
-gives you 0.4.1 without them.
 
 `kadence context <task>` was dropped: we measured what `task show --json` already
 returns and it is the whole history of one piece of work, under a kilobyte,
@@ -396,9 +392,9 @@ the decision, its reason and the alternatives that lost are in the events.
 
 ```bash
 npm install
-npm test            # 1060 tests; builds dist/cli.js first
+npm test            # 1,188 tests; builds dist/cli.js first
 npm run typecheck
-npm run build       # one 111 KB bundle, blessed kept external (82 KB at 0.4.1)
+npm run build       # dist/cli.js 135 KB, blessed kept external (82 KB at 0.4.1)
 ```
 
 `CLAUDE.md` documents the invariants, the boundaries, and the decisions that
