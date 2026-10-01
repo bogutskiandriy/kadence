@@ -142,6 +142,9 @@ jobs:
 
       - run: npm run build
 
+      # npm pack does not create the destination; Node does, on every shell.
+      - run: node -e "require('fs').mkdirSync('packed', { recursive: true })"
+
       - run: npm pack --pack-destination packed
 
       - name: Install the tarball and drive it
