@@ -1,0 +1,429 @@
+{
+  "version": "0.5.0",
+  "commands": [
+    {
+      "command": "init --no-hooks",
+      "ok": true
+    },
+    {
+      "command": "task add Fix login on Safari -d The cookie is dropped on redirect --type bug --priority high",
+      "ok": true
+    },
+    {
+      "command": "task add Export to CSV --type story --estimate 5",
+      "ok": true
+    },
+    {
+      "command": "task add Update dependencies",
+      "ok": true
+    },
+    {
+      "command": "task add Remove the legacy importer",
+      "ok": true
+    },
+    {
+      "command": "task move KAD-1 in_progress",
+      "ok": true
+    },
+    {
+      "command": "task assign KAD-2 dev@example.com",
+      "ok": true
+    },
+    {
+      "command": "task block KAD-3 KAD-1",
+      "ok": true
+    },
+    {
+      "command": "task claim KAD-2",
+      "ok": true
+    },
+    {
+      "command": "task comment KAD-1 Reproduced on Safari 17.4",
+      "ok": true
+    },
+    {
+      "command": "task ac add KAD-2 Exports ten thousand rows",
+      "ok": true
+    },
+    {
+      "command": "task ac check KAD-2 1",
+      "ok": true
+    },
+    {
+      "command": "task edit KAD-1 --add-label auth",
+      "ok": true
+    },
+    {
+      "command": "task move KAD-1 done",
+      "ok": true
+    },
+    {
+      "command": "task move KAD-4 cancelled",
+      "ok": true
+    },
+    {
+      "command": "decision add Identify tasks by ULID --why Clocks disagree between machines --rejected Auto-increment: collides across branches",
+      "ok": true
+    },
+    {
+      "command": "decision add Identify everything by ULID --why Notes and decisions need the same guarantee --supersedes DEC-1",
+      "ok": true
+    },
+    {
+      "command": "note Safari drops the cookie on a 302 --task KAD-1",
+      "ok": true
+    },
+    {
+      "command": "sprint create Sprint 1",
+      "ok": true
+    },
+    {
+      "command": "sprint add KAD-2 --sprint Sprint 1",
+      "ok": true
+    },
+    {
+      "command": "milestone create 1.0",
+      "ok": true
+    },
+    {
+      "command": "milestone add KAD-3 --milestone 1.0",
+      "ok": true
+    },
+    {
+      "command": "doc add How login works --body Sessions live in a cookie. --task KAD-1",
+      "ok": true
+    },
+    {
+      "command": "doc edit DOC-1 --body Sessions live in a cookie set after the redirect.",
+      "ok": true
+    }
+  ],
+  "tasks": {
+    "schema": "kadence/v1",
+    "ok": true,
+    "tasks": [
+      {
+        "id": "01M3W4A65RAJ4ZDGESDWSNWZRT",
+        "label": "KAD-1",
+        "title": "Fix login on Safari",
+        "description": "The cookie is dropped on redirect",
+        "type": "bug",
+        "priority": "high",
+        "status": "done",
+        "labels": [
+          "auth"
+        ],
+        "assignee": null,
+        "reporter": "fixture@example.com",
+        "sprint": null,
+        "milestone": null,
+        "loggedHours": 0,
+        "parent": null,
+        "blockedBy": [],
+        "due": null,
+        "claimedBy": null,
+        "contestedBy": [],
+        "comments": [
+          {
+            "id": "01M3W4A6WKT7BK98Y63P72FEYG",
+            "author": "fixture@example.com",
+            "ts": "2026-10-01T16:21:13.748Z",
+            "text": "Reproduced on Safari 17.4",
+            "source": "agent"
+          }
+        ],
+        "docs": [],
+        "estimate": null,
+        "criteria": [],
+        "openCriteria": 0,
+        "history": [
+          {
+            "id": "01M3W4A65RAJ4ZDGESDWSNWZRT",
+            "type": "task.created",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:13.016Z",
+            "source": "agent",
+            "data": {
+              "title": "Fix login on Safari",
+              "description": "The cookie is dropped on redirect",
+              "type": "bug",
+              "priority": "high"
+            }
+          },
+          {
+            "id": "01M3W4A6H43690XPH49FV9MCGR",
+            "type": "task.moved",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:13.380Z",
+            "source": "agent",
+            "data": {
+              "from": "backlog",
+              "to": "in_progress"
+            }
+          },
+          {
+            "id": "01M3W4A6WKT7BK98Y63P72FEYG",
+            "type": "task.commented",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:13.748Z",
+            "source": "agent",
+            "data": {
+              "text": "Reproduced on Safari 17.4"
+            }
+          },
+          {
+            "id": "01M3W4A75ABJYEZJ1TE27EDAEP",
+            "type": "task.label_added",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:14.026Z",
+            "source": "agent",
+            "data": {
+              "label": "auth"
+            }
+          },
+          {
+            "id": "01M3W4A790WBX100T4SQ9V7DAY",
+            "type": "task.moved",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:14.144Z",
+            "source": "agent",
+            "data": {
+              "from": "in_progress",
+              "to": "done"
+            }
+          }
+        ]
+      },
+      {
+        "id": "01M3W4A68J4G9E3TSCS2QR2669",
+        "label": "KAD-2",
+        "title": "Export to CSV",
+        "description": null,
+        "type": "story",
+        "priority": "normal",
+        "status": "backlog",
+        "labels": [],
+        "assignee": "dev@example.com",
+        "reporter": "fixture@example.com",
+        "sprint": "01M3W4A7R2CYBKGZVATTR9Z3JS",
+        "milestone": null,
+        "loggedHours": 0,
+        "parent": null,
+        "blockedBy": [],
+        "due": null,
+        "claimedBy": "fixture@example.com",
+        "contestedBy": [],
+        "comments": [],
+        "docs": [],
+        "estimate": 5,
+        "criteria": [
+          {
+            "n": 1,
+            "text": "Exports ten thousand rows",
+            "checked": true,
+            "checkedBy": "fixture@example.com"
+          }
+        ],
+        "openCriteria": 0,
+        "history": [
+          {
+            "id": "01M3W4A68J4G9E3TSCS2QR2669",
+            "type": "task.created",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:13.106Z",
+            "source": "agent",
+            "data": {
+              "title": "Export to CSV",
+              "type": "story",
+              "estimate": 5
+            }
+          },
+          {
+            "id": "01M3W4A6M57QZ53TBTRKVBS2KZ",
+            "type": "task.assigned",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:13.477Z",
+            "source": "agent",
+            "data": {
+              "assignee": "dev@example.com"
+            }
+          },
+          {
+            "id": "01M3W4A6SS9Y7WSK6QGWFCZTAH",
+            "type": "task.claimed",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:13.657Z",
+            "source": "agent",
+            "data": {
+              "by": "fixture@example.com"
+            }
+          },
+          {
+            "id": "01M3W4A6ZH06QBZT8KAAKTPWBY",
+            "type": "task.criterion_added",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:13.841Z",
+            "source": "agent",
+            "data": {
+              "text": "Exports ten thousand rows"
+            }
+          },
+          {
+            "id": "01M3W4A72C6MBW8652VJ8QCSEK",
+            "type": "task.criterion_checked",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:13.932Z",
+            "source": "agent",
+            "data": {
+              "criterion": "01M3W4A6ZH06QBZT8KAAKTPWBY"
+            }
+          },
+          {
+            "id": "01M3W4A7TYE1HWPXRF6FHSJ4GM",
+            "type": "sprint.task_added",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:14.718Z",
+            "source": "agent",
+            "data": {
+              "task": "01M3W4A68J4G9E3TSCS2QR2669"
+            }
+          }
+        ]
+      },
+      {
+        "id": "01M3W4A6BC2FCXGKHJ48M69YQF",
+        "label": "KAD-3",
+        "title": "Update dependencies",
+        "description": null,
+        "type": "task",
+        "priority": "normal",
+        "status": "backlog",
+        "labels": [],
+        "assignee": null,
+        "reporter": "fixture@example.com",
+        "sprint": null,
+        "milestone": "MS-1",
+        "loggedHours": 0,
+        "parent": null,
+        "blockedBy": [
+          "01M3W4A65RAJ4ZDGESDWSNWZRT"
+        ],
+        "due": null,
+        "claimedBy": null,
+        "contestedBy": [],
+        "comments": [],
+        "docs": [],
+        "estimate": null,
+        "criteria": [],
+        "openCriteria": 0,
+        "history": [
+          {
+            "id": "01M3W4A6BC2FCXGKHJ48M69YQF",
+            "type": "task.created",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:13.196Z",
+            "source": "agent",
+            "data": {
+              "title": "Update dependencies"
+            }
+          },
+          {
+            "id": "01M3W4A6Q047NEW8EPY8AB5R10",
+            "type": "task.blocked_by_added",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:13.568Z",
+            "source": "agent",
+            "data": {
+              "blocker": "01M3W4A65RAJ4ZDGESDWSNWZRT"
+            }
+          }
+        ]
+      },
+      {
+        "id": "01M3W4A6E706S1MZP5VPT8EFX3",
+        "label": "KAD-4",
+        "title": "Remove the legacy importer",
+        "description": null,
+        "type": "task",
+        "priority": "normal",
+        "status": "cancelled",
+        "labels": [],
+        "assignee": null,
+        "reporter": "fixture@example.com",
+        "sprint": null,
+        "milestone": null,
+        "loggedHours": 0,
+        "parent": null,
+        "blockedBy": [],
+        "due": null,
+        "claimedBy": null,
+        "contestedBy": [],
+        "comments": [],
+        "docs": [],
+        "estimate": null,
+        "criteria": [],
+        "openCriteria": 0,
+        "history": [
+          {
+            "id": "01M3W4A6E706S1MZP5VPT8EFX3",
+            "type": "task.created",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:13.287Z",
+            "source": "agent",
+            "data": {
+              "title": "Remove the legacy importer"
+            }
+          },
+          {
+            "id": "01M3W4A7CHME6H6WPENW7FC6P1",
+            "type": "task.moved",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:14.257Z",
+            "source": "agent",
+            "data": {
+              "from": "backlog",
+              "to": "cancelled"
+            }
+          }
+        ]
+      }
+    ],
+    "cycles": []
+  },
+  "decisions": {
+    "schema": "kadence/v1",
+    "ok": true,
+    "decisions": [
+      {
+        "id": "01M3W4A7FEFD46YPB6R66RJ2Z0",
+        "label": "DEC-1",
+        "title": "Identify tasks by ULID",
+        "why": "Clocks disagree between machines",
+        "rejected": "Auto-increment: collides across branches",
+        "task": null,
+        "docs": [],
+        "supersedes": null,
+        "supersededBy": "DEC-2",
+        "superseded": true,
+        "at": "2026-10-01T16:21:14.351Z",
+        "by": "fixture@example.com",
+        "source": "agent"
+      },
+      {
+        "id": "01M3W4A7JADNCNNXBJJH3KK854",
+        "label": "DEC-2",
+        "title": "Identify everything by ULID",
+        "why": "Notes and decisions need the same guarantee",
+        "rejected": null,
+        "task": null,
+        "docs": [],
+        "supersedes": "DEC-1",
+        "supersededBy": null,
+        "superseded": false,
+        "at": "2026-10-01T16:21:14.442Z",
+        "by": "fixture@example.com",
+        "source": "agent"
+      }
+    ]
+  }
+}

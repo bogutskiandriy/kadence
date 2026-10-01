@@ -1,0 +1,1 @@
+{"id":"01M3W4A7FEFD46YPB6R66RJ2Z0","type":"decision.recorded","entity":"01M3W4A7FEFD46YPB6R66RJ2Z0","actor":"fixture@example.com","ts":"2026-10-01T16:21:14.351Z","source":"agent","data":{"title":"Identify tasks by ULID","why":"Clocks disagree between machines","rejected":"Auto-increment: collides across branches"}}

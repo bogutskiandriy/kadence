@@ -1,0 +1,1 @@
+{"id":"01M3W4A8W7YP97SKF5WPG5AZMP","type":"task.created","entity":"01M3W4A8W7YP97SKF5WPG5AZMP","actor":"fixture@example.com","ts":"2026-10-01T16:21:15.783Z","source":"agent","data":{"title":"Fix login on Safari","description":"The cookie is dropped on redirect","type":"bug","priority":"high"}}
