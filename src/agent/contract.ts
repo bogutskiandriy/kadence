@@ -701,6 +701,13 @@ export function buildContract(version: string): Record<string, unknown> {
         json: true,
       },
       {
+        name: 'report burnup',
+        summary:
+          'Scope and done for a sprint, day by day: whether the goal was missed or grew. --sprint names one, otherwise the active sprint. Scope goes down only when a task is cancelled or moved to another sprint; the journal has no event for removing one. --json carries burnup: { days: [{ date, scope, done }], scopeAtStart, scopeNow, scopeAdded, finalDone }.',
+        flags: ['--sprint', '--html', '--file', '--json'],
+        json: true,
+      },
+      {
         name: 'report velocity',
         summary:
           'Points committed against points finished, per closed sprint, newest last. Reported as a range — low, median, high — not as an average: the spread between sprints is the forecast, and a series shorter than four sprints says so.',

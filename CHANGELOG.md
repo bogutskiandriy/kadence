@@ -19,6 +19,11 @@
   proposes — "DEC-43 rejected this before: …". On this repository's journal it
   named the right decision for 8 of 10 such prompts, with no false alarm on
   ten ordinary code prompts.
+- `kadence report burnup` — scope and done, day by day, so a missed goal and
+  a goal that grew do not look alike. Text, `--json`, `--html`; `--sprint`
+  names one. Scope goes down only through cancellation or a move to another
+  sprint, and the report says so: the journal has no event for removing a
+  task from a sprint.
 - `kadence doc edit DOC-1` with no text opens `$EDITOR` at a terminal,
   starting from the current revision; saving it unchanged or empty writes
   nothing. Markdown headings survive — the editor helper used to strip every

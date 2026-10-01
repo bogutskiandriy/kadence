@@ -498,11 +498,8 @@ export function runSprintEdit(
  * places. Two resolutions of "which sprint" and two ideas of what a burndown
  * is would drift, so there is one of each, here.
  */
-export function burndownFor(
-  root: string,
-  state: ProjectState,
-  name: string | undefined,
-): { sprint: Sprint; chart: Burndown | null } | CommandResult {
+/** The sprint a sprint report is about: by name, or the active one. */
+export function reportSprint(state: ProjectState, name: string | undefined): Sprint | CommandResult {
   const sprint = name === undefined ? activeSprint(state) : findSprintByName(state, name);
   if (sprint === undefined) {
     return failure(
@@ -514,6 +511,16 @@ export function burndownFor(
       { ...(name !== undefined ? { received: name } : {}), hint: 'kadence sprint list --json' },
     );
   }
+  return sprint;
+}
+
+export function burndownFor(
+  root: string,
+  state: ProjectState,
+  name: string | undefined,
+): { sprint: Sprint; chart: Burndown | null } | CommandResult {
+  const sprint = reportSprint(state, name);
+  if ('exitCode' in sprint) return sprint;
   // The chart is derived from raw events, not from folded state: only the
   // journal knows when each transition happened.
   return { sprint, chart: burndown(state, readAll(root).events, sprint) };

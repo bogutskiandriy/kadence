@@ -1,11 +1,13 @@
 import { resolveContext, isContext, loadState, failure, type CommandResult } from './task.js';
-import { burndownFor } from './sprint.js';
+import { burndownFor, reportSprint } from './sprint.js';
+import { burnup, renderBurnup } from '../../core/burnup.js';
+import { readAll } from '../../core/store.js';
 import { renderBurndown } from '../../core/burndown.js';
 import { velocitySeries, type VelocitySeries } from '../../core/velocity.js';
 import { workloadReport, type WorkloadReport } from '../../core/workload.js';
 import { flowReport, cfdReport, type FlowReport, type CfdReport, type Percentiles } from '../../core/flow.js';
 import { attentionReport, describeSignal, type AttentionReport } from '../../core/attention.js';
-import { flowHtml, cfdHtml, attentionHtml, burndownHtml, velocityHtml, workloadHtml } from '../../export/report-html.js';
+import { flowHtml, cfdHtml, attentionHtml, burndownHtml, burnupHtml, velocityHtml, workloadHtml } from '../../export/report-html.js';
 import { writeExport } from '../write-export.js';
 
 /**
@@ -17,7 +19,7 @@ import { writeExport } from '../write-export.js';
  * started boundary it used, so a number is never quoted without its terms.
  */
 
-export const REPORTS = ['flow', 'cfd', 'attention', 'burndown', 'velocity', 'workload'] as const;
+export const REPORTS = ['flow', 'cfd', 'attention', 'burndown', 'velocity', 'workload', 'burnup'] as const;
 export type ReportName = (typeof REPORTS)[number];
 
 /**
@@ -35,6 +37,7 @@ export const CATALOGUE: ReadonlyArray<{ name: ReportName; answers: string }> = [
   { name: 'burndown', answers: 'Whether a sprint is on track against an even burn.' },
   { name: 'velocity', answers: 'Committed against completed, sprint by sprint, as a range.' },
   { name: 'workload', answers: 'Who is carrying what right now, unassigned work included.' },
+  { name: 'burnup', answers: 'Whether a sprint missed its goal or its goal grew: scope and done, day by day.' },
 ];
 
 /**
@@ -45,7 +48,7 @@ export const CATALOGUE: ReadonlyArray<{ name: ReportName; answers: string }> = [
  */
 const LIST_ORDER: { team: ReportName[]; sprint: ReportName[] } = {
   team: ['attention', 'flow', 'cfd'],
-  sprint: ['burndown', 'velocity', 'workload'],
+  sprint: ['burndown', 'burnup', 'velocity', 'workload'],
 };
 
 function listLine(name: ReportName): string {
@@ -62,7 +65,7 @@ export interface ReportOptions {
   json?: boolean;
   /** Name the catalogue instead of running anything. */
   list?: boolean;
-  /** `burndown` only: a sprint by name, rather than the active one. */
+  /** `burndown` and `burnup`: a sprint by name, rather than the active one. */
   sprint?: string;
   /** Write the report as one self-contained page instead of printing it. */
   html?: boolean;
@@ -284,8 +287,8 @@ export function runReport(
       { received: options.since, allowed: WINDOWED, hint: `kadence report ${name}` },
     );
   }
-  if (options.sprint !== undefined && name !== 'burndown') {
-    return failure(2, 'invalid_argument', `--sprint applies to burndown, not to ${name}.`, {
+  if (options.sprint !== undefined && name !== 'burndown' && name !== 'burnup') {
+    return failure(2, 'invalid_argument', `--sprint applies to burndown and burnup, not to ${name}.`, {
       received: options.sprint,
       hint: 'kadence report burndown --sprint "Sprint 3"',
     });
@@ -332,6 +335,22 @@ export function runReport(
       message: renderBurndown(chart),
       html: () => burndownHtml(chart, today),
     };
+  } else if (name === 'burnup') {
+    const sprint = reportSprint(state, options.sprint);
+    if ('exitCode' in sprint) return sprint;
+    // The same clock burndown charts against: a sprint report is about the
+    // sprint as it stands, so both stop at the real today, not the window's.
+    const chart = burnup(state, readAll(ctx.root).events, sprint);
+    if (chart === null) {
+      return {
+        ok: true,
+        exitCode: 0,
+        warnings,
+        message: `"${sprint.name}" has no tasks yet.\n  kadence sprint add KAD-1`,
+        data: { schema: 'kadence/v1', ok: true, report: name, burnup: null },
+      };
+    }
+    rendered = { data: { burnup: chart }, message: renderBurnup(chart), html: () => burnupHtml(chart, today) };
   } else if (name === 'velocity') {
     const r = velocitySeries(state);
     rendered = { data: r, message: renderVelocity(r), html: () => velocityHtml(r, today) };
