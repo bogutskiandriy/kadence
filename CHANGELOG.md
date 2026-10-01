@@ -19,6 +19,11 @@
   proposes — "DEC-43 rejected this before: …". On this repository's journal it
   named the right decision for 8 of 10 such prompts, with no false alarm on
   ten ordinary code prompts.
+- `kadence doc edit DOC-1` with no text opens `$EDITOR` at a terminal,
+  starting from the current revision; saving it unchanged or empty writes
+  nothing. Markdown headings survive — the editor helper used to strip every
+  line starting with `#`, as git does, which would have removed them. Without
+  a terminal (an agent, a pipe) it says how to pass the text instead.
 - A test that runs agents side by side: eight processes in one working tree,
   three worktrees merged at once, two claims on one task. Nothing is lost;
   the double claim is reported.

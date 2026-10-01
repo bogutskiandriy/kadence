@@ -9,7 +9,7 @@ import { runCompact } from './commands/compact.js';
 import { runReport, REPORTS } from './commands/report.js';
 import { runCompletion, SHELLS } from './commands/completion.js';
 import { runNoteAdd, runNoteList } from './commands/note.js';
-import { runDocAdd, runDocEdit, runDocShow, runDocList, runDocLink } from './commands/doc.js';
+import { runDocAdd, runDocEdit, runDocEditInEditor, runDocShow, runDocList, runDocLink } from './commands/doc.js';
 import { readFileSync } from 'node:fs';
 import {
   runMilestoneCreate,
@@ -493,6 +493,7 @@ cli
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence doc add "Auth" --body "How login works." --task KAD-1')
   .example('  kadence doc edit DOC-1 --file draft.txt')
+  .example('  kadence doc edit DOC-1                 opens $EDITOR at a terminal')
   .example('  kadence doc show DOC-1 --json')
   .example('  kadence doc link DOC-1 KAD-2')
   .action(
@@ -548,6 +549,24 @@ cli
         case 'edit':
           if (arg === undefined) {
             emit(usage('Which document?\n  kadence doc edit DOC-1 --body "…"'), json);
+          }
+          // No text and no title: a person at a terminal gets $EDITOR; anyone
+          // else is told how to pass the text, rather than left with a hang.
+          if (body === undefined && file === undefined && options.stdin !== true && title === undefined) {
+            if (!canUseEditor(process.env, process.stdout.isTTY === true)) {
+              emit(
+                usage(
+                  `No terminal for an editor. Pass the text instead:\n  kadence doc edit ${String(arg)} --file draft.md\n  kadence doc edit ${String(arg)} --body "…"`,
+                ),
+                json,
+              );
+            }
+            emit(
+              runDocEditInEditor(cwd, process.env, String(arg), (current, hint) =>
+                editText(process.env, current, hint, { markdown: true }),
+              ),
+              json,
+            );
           }
           emit(
             runDocEdit(cwd, process.env, String(arg), {
