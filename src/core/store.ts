@@ -208,6 +208,33 @@ export interface CompactionPlan {
 }
 
 /**
+ * Events still in loose files in months before `beforeMonth` — what
+ * `compact` would fold away.
+ *
+ * Names only, no reads: it is asked on every `prime`. Reading, not folding,
+ * is what a long journal costs — at 10,000 events the fold takes 3 ms and
+ * reading the files 171 ms; compacted, 17 ms (KAD-48).
+ */
+export function looseEventCount(root: string, beforeMonth: string): number {
+  let entries: import('node:fs').Dirent[];
+  try {
+    entries = readdirSync(eventsDir(root), { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  let count = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === 'archive' || entry.name >= beforeMonth) continue;
+    try {
+      count += readdirSync(join(eventsDir(root), entry.name)).filter((f) => f.endsWith('.json')).length;
+    } catch {
+      // A month that cannot be listed is a month that cannot be compacted either.
+    }
+  }
+  return count;
+}
+
+/**
  * What `compact` would do, without doing it.
  *
  * Read-only on purpose: the dry run and the summary line both need the answer,
