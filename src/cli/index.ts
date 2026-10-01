@@ -721,7 +721,8 @@ cli
   .command('report [name]', `Reports folded from the journal: ${REPORTS.join(' | ')}`)
   .option('--list', 'Name every report and what each one answers')
   .option('--since <days>', 'flow, cfd, attention: window ending today, in calendar days (default 30d)')
-  .option('--sprint <name>', 'burndown: a sprint by name, rather than the active one')
+  .option('--sprint <name>', 'burndown, burnup: a sprint by name, rather than the active one')
+  .option('--by-status', 'flow: time in each status and flow efficiency, instead of the usual report')
   .option('--html', 'Write one self-contained page instead of printing; charts included, no network')
   .option('--file <path>', 'html: where to write it (default kadence-<report>.html)')
   .option('--json', 'Machine-readable output for agents')
@@ -735,6 +736,7 @@ cli
   .example('  kadence report workload             who is carrying what right now')
   .example('  kadence report flow --html          the same numbers as a page, with charts')
   .example('  kadence report cfd --html --file docs/cfd.html')
+  .example('  kadence report flow --by-status     where the time went, column by column')
   .action(
     (
       name: string | undefined,
@@ -745,6 +747,7 @@ cli
         file?: string;
         list?: boolean;
         sprint?: string;
+        byStatus?: boolean;
       },
     ) => {
       emit(
@@ -754,6 +757,7 @@ cli
           ...(options.since === undefined ? {} : { since: rawFlag('since') ?? String(options.since) }),
           ...(options.list === true ? { list: true } : {}),
           ...(options.sprint === undefined ? {} : { sprint: String(options.sprint) }),
+          ...(options.byStatus === true ? { byStatus: true } : {}),
           ...(options.html === true ? { html: true } : {}),
           ...(options.file === undefined ? {} : { file: String(options.file) }),
           json: options.json === true,

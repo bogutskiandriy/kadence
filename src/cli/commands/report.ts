@@ -5,9 +5,9 @@ import { readAll } from '../../core/store.js';
 import { renderBurndown } from '../../core/burndown.js';
 import { velocitySeries, type VelocitySeries } from '../../core/velocity.js';
 import { workloadReport, type WorkloadReport } from '../../core/workload.js';
-import { flowReport, cfdReport, type FlowReport, type CfdReport, type Percentiles } from '../../core/flow.js';
+import { flowReport, timeInStatus, renderTimeInStatus, cfdReport, type FlowReport, type CfdReport, type Percentiles } from '../../core/flow.js';
 import { attentionReport, describeSignal, type AttentionReport } from '../../core/attention.js';
-import { flowHtml, cfdHtml, attentionHtml, burndownHtml, burnupHtml, velocityHtml, workloadHtml } from '../../export/report-html.js';
+import { flowHtml, cfdHtml, attentionHtml, burndownHtml, burnupHtml, timeInStatusHtml, velocityHtml, workloadHtml } from '../../export/report-html.js';
 import { writeExport } from '../write-export.js';
 
 /**
@@ -65,6 +65,8 @@ export interface ReportOptions {
   json?: boolean;
   /** Name the catalogue instead of running anything. */
   list?: boolean;
+  /** `flow` only: where the time went — time in each status and flow efficiency. */
+  byStatus?: boolean;
   /** `burndown` and `burnup`: a sprint by name, rather than the active one. */
   sprint?: string;
   /** Write the report as one self-contained page instead of printing it. */
@@ -287,6 +289,11 @@ export function runReport(
       { received: options.since, allowed: WINDOWED, hint: `kadence report ${name}` },
     );
   }
+  if (options.byStatus === true && name !== 'flow') {
+    return failure(2, 'invalid_argument', `--by-status applies to flow, not to ${name}.`, {
+      hint: 'kadence report flow --by-status',
+    });
+  }
   if (options.sprint !== undefined && name !== 'burndown' && name !== 'burnup') {
     return failure(2, 'invalid_argument', `--sprint applies to burndown and burnup, not to ${name}.`, {
       received: options.sprint,
@@ -357,6 +364,9 @@ export function runReport(
   } else if (name === 'workload') {
     const r = workloadReport(state, today);
     rendered = { data: r, message: renderWorkload(r), html: () => workloadHtml(r, today) };
+  } else if (options.byStatus === true) {
+    const r = timeInStatus(state, today, since);
+    rendered = { data: { byStatus: r }, message: renderTimeInStatus(r), html: () => timeInStatusHtml(r, today) };
   } else {
     const r = flowReport(state, today, since);
     rendered = { data: r, message: renderFlow(r), html: () => flowHtml(r, today) };

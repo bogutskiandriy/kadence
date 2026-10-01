@@ -1,4 +1,4 @@
-import type { FlowReport, CfdReport, Percentiles } from '../core/flow.js';
+import type { FlowReport, CfdReport, Percentiles, TimeInStatusReport } from '../core/flow.js';
 import { type AttentionReport, describeSignal } from '../core/attention.js';
 import { esc, page, BASE_STYLE, VIZ_STYLE } from './page.js';
 import { columnsChart, stackedAreaChart, barsChart, percentileStrips, lineChart, type Series } from './svg.js';
@@ -52,6 +52,42 @@ function legend(items: readonly { name: string; color: string }[]): string {
 
 function figure(chart: string, caption: string): string {
   return `<figure class="figure">${chart}<figcaption>${esc(caption)}</figcaption></figure>`;
+}
+
+/** Where the time went, column by column, and how much of it was blocked (KAD-16). */
+export function timeInStatusHtml(r: TimeInStatusReport, generatedAt: Date = new Date()): string {
+  const body: string[] = [];
+  body.push('<h1>Time in status</h1>');
+  body.push(
+    stamp(
+      [
+        `The last ${r.window.days} days, ${r.window.from} to ${r.window.to}, in ${r.unit}. Work counts as started at “${esc(r.started)}”.`,
+        'A visit to a column counts when it ended inside the window.',
+        `Generated ${utcStamp(generatedAt)}.`,
+      ],
+      'kadence report flow --by-status --html',
+    ),
+  );
+  body.push(
+    '<div class="tiles">',
+    r.flowEfficiency === null
+      ? tile('Flow efficiency', '–', 'nothing finished in the window')
+      : tile('Flow efficiency', `${r.flowEfficiency.percent}%`, `of start-to-done not spent blocked, ${r.flowEfficiency.tasks} task(s)`),
+    '</div>',
+  );
+  body.push(
+    table(
+      [{ head: 'Status' }, { head: 'Phase' }, { head: 'Visits', num: true }, { head: 'p50 days', num: true }, { head: 'p85 days', num: true }],
+      r.statuses.map(
+        (s) =>
+          `<tr><td>${esc(s.status)}</td><td>${s.phase}</td><td class="num">${s.visits?.n ?? 0}</td>` +
+          `<td class="num">${s.visits === null ? '–' : s.visits.p50}</td><td class="num">${s.visits === null ? '–' : s.visits.p85}</td></tr>`,
+      ),
+    ),
+  );
+  for (const n of r.notes) body.push(`<p class="empty">${esc(n)}</p>`);
+  body.push(footer(`${r.statuses.length} columns.`));
+  return page('kadence time in status', BASE_STYLE + VIZ_STYLE, body);
 }
 
 /**

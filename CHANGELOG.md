@@ -19,6 +19,10 @@
   proposes — "DEC-43 rejected this before: …". On this repository's journal it
   named the right decision for 8 of 10 such prompts, with no false alarm on
   ten ordinary code prompts.
+- `kadence report flow --by-status` — where the time went: for every column,
+  p50 and p85 of the visits that ended in the window, marked before or past
+  the started boundary, and flow efficiency — the share of start-to-done not
+  spent blocked. Text, `--json` (under `byStatus`), `--html`.
 - `kadence report burnup` — scope and done, day by day, so a missed goal and
   a goal that grew do not look alike. Text, `--json`, `--html`; `--sprint`
   names one. Scope goes down only through cancellation or a move to another

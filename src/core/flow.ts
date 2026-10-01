@@ -441,3 +441,128 @@ export function cfdReport(state: ProjectState, today: Date = new Date(), windowD
   }
   return { window: w, statuses, days: rows };
 }
+
+export interface StatusTime {
+  status: string;
+  /** Before the started boundary — waiting — or past it — working. */
+  phase: 'before start' | 'in progress';
+  /** Visits to the column that ended inside the window; null when none did. */
+  visits: Percentiles | null;
+}
+
+export interface TimeInStatusReport {
+  window: Window;
+  started: string;
+  unit: 'calendar days';
+  statuses: StatusTime[];
+  /**
+   * Of the time from start to done, the share not spent blocked, for work
+   * finished in the window. null when nothing finished.
+   */
+  flowEfficiency: { tasks: number; percent: number } | null;
+  notes: string[];
+}
+
+/**
+ * Where the time went: how long work sits in each column, and how much of its
+ * cycle it spent blocked (KAD-16).
+ *
+ * Cycle time says how long; this says where — the decomposition Jira's control
+ * chart and Linear's triage time give, from the same moves `cfdReport` walks.
+ * A visit counts when it ended inside the window, so a column people wait in
+ * shows up when the waiting stops. `done` and `cancelled` are left out: work
+ * does not leave them, so a visit there has no length.
+ */
+export function timeInStatus(state: ProjectState, today: Date = new Date(), windowDays = 30): TimeInStatusReport {
+  const w = windowEnding(today, windowDays);
+  const wFrom = dayStart(w.from);
+  const wTo = dayStart(w.to) + DAY_MS;
+  const nowMs = today.getTime();
+
+  const columns = [...state.statuses];
+  for (const t of state.tasks) if (!columns.includes(t.status)) columns.push(t.status);
+  if (!columns.includes(INITIAL_STATUS)) columns.unshift(INITIAL_STATUS);
+  const measured = columns.filter((s) => s !== TERMINAL_STATUS && s !== CANCELLED_STATUS);
+  const before = beforeStarted(state.statuses, state.started);
+
+  const visits = new Map<string, number[]>(measured.map((s) => [s, []]));
+  for (const t of state.tasks) {
+    let status = INITIAL_STATUS;
+    let since = Date.parse(t.createdAt);
+    for (const h of t.history) {
+      let to: string | null = null;
+      if (h.type === 'task.moved' && typeof h.data['to'] === 'string') to = h.data['to'];
+      else if (h.type === 'task.cancelled') to = CANCELLED_STATUS;
+      else if (h.type === 'task.reopened') to = startedAtEvent(state.startedChanges, h.id);
+      if (to === null || to === status) continue;
+      const left = Date.parse(h.ts);
+      if (left >= wFrom && left < wTo) visits.get(status)?.push((left - since) / DAY_MS);
+      status = to;
+      since = left;
+    }
+  }
+
+  const statuses: StatusTime[] = measured.map((status) => ({
+    status,
+    phase: before !== null && before.has(status) ? 'before start' : 'in progress',
+    visits: percentiles(visits.get(status) ?? [])?.shown ?? null,
+  }));
+
+  const finished = new Map<string, number>();
+  for (const t of state.tasks) {
+    const f = finishedAt(t);
+    if (f !== null) finished.set(t.id, Date.parse(f));
+  }
+  let cycle = 0;
+  let unblocked = 0;
+  let tasks = 0;
+  for (const t of state.tasks) {
+    const done = finished.get(t.id);
+    if (done === undefined || done < wFrom || done >= wTo) continue;
+    const start = startedAt(t, state.started, state.statuses, state.startedChanges);
+    if (start === null) continue;
+    const span = days(start, new Date(done).toISOString());
+    if (span <= 0) continue;
+    const own: Window = { from: isoDay(Date.parse(start)), to: isoDay(done), days: 0 };
+    const blocked = Math.min(span, blockedDays(t, finished, own, nowMs));
+    cycle += span;
+    unblocked += span - blocked;
+    tasks += 1;
+  }
+
+  const notes: string[] = [];
+  if (statuses.every((s) => s.visits === null)) notes.push('No task left a column inside the window.');
+  if (tasks === 0) notes.push('Nothing was finished inside the window, so there is no flow efficiency to give.');
+
+  return {
+    window: w,
+    started: state.started,
+    unit: 'calendar days',
+    statuses,
+    flowEfficiency: tasks === 0 ? null : { tasks, percent: Math.round((unblocked / cycle) * 100) },
+    notes,
+  };
+}
+
+export function renderTimeInStatus(r: TimeInStatusReport): string {
+  const lines = [
+    `Time in status — the last ${r.window.days} days (${r.window.from} to ${r.window.to}), in ${r.unit}.`,
+    `Work counts as started at "${r.started}".`,
+    '',
+    `  ${'status'.padEnd(14)} ${'phase'.padEnd(13)} ${'n'.padStart(4)} ${'p50'.padStart(6)} ${'p85'.padStart(6)}`,
+  ];
+  for (const s of r.statuses) {
+    const v = s.visits;
+    lines.push(
+      `  ${s.status.padEnd(14)} ${s.phase.padEnd(13)} ${String(v?.n ?? 0).padStart(4)} ${(v === null ? '–' : String(v.p50)).padStart(6)} ${(v === null ? '–' : String(v.p85)).padStart(6)}`,
+    );
+  }
+  lines.push('');
+  lines.push(
+    r.flowEfficiency === null
+      ? 'Flow efficiency: nothing finished in the window.'
+      : `Flow efficiency: ${r.flowEfficiency.percent}% of the time from start to done was not spent blocked (${r.flowEfficiency.tasks} task${r.flowEfficiency.tasks === 1 ? '' : 's'}).`,
+  );
+  for (const n of r.notes) lines.push(n);
+  return lines.join('\n');
+}
