@@ -72,6 +72,31 @@ describe('runPromptHook', () => {
     expect(new Set(refs).size).toBe(refs.length);
   });
 
+  it('says so when a prompt proposes what a decision already rejected', () => {
+    // Agents and people reopen settled decisions (discovery 2026-09-30, H1).
+    // A decision that merely matches is one more record; one whose rejected
+    // alternative is what the prompt asks for is the thing to say first.
+    runDecisionAdd(dir, env, 'One file per event under .kadence/events', {
+      why: 'Two branches writing at once produce two files and git merges them',
+      rejected: 'A single tasks.json that every command rewrites: conflicts on every parallel change',
+    });
+    const out = runPromptHook(dir, env, payload("let's keep all the tasks in a single tasks.json file"));
+    const first = out.split('\n')[1] ?? '';
+    expect(first).toMatch(/DEC-2/);
+    expect(first).toMatch(/rejected/i);
+    expect(out).toContain('conflicts on every parallel change');
+  });
+
+  it('does not call it rejected when the prompt asks about what was chosen', () => {
+    runDecisionAdd(dir, env, 'One file per event under .kadence/events', {
+      why: 'Two branches writing at once produce two files and git merges them',
+      rejected: 'A single tasks.json that every command rewrites: conflicts on every parallel change',
+    });
+    const out = runPromptHook(dir, env, payload('why one file per event under .kadence/events?'));
+    expect(out).toContain('DEC-2');
+    expect(out).not.toMatch(/rejected/i);
+  });
+
   it('offers the records on a condition, not as an order', () => {
     // It speaks on most prompts, code tasks included (25 of 30 measured in
     // KAD-56). An order to read before grep would send a coding agent into
