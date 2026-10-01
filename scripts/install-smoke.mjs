@@ -43,9 +43,16 @@ const version = readFileSync(join(import.meta.dirname, '..', 'package.json'), 'u
 const windows = process.platform === 'win32';
 const dir = mkdtempSync(join(tmpdir(), `kadence-smoke-${manager}-`));
 
+/**
+ * With `shell` on Windows, Node joins the arguments with spaces and quotes
+ * nothing, so "Smoke test the install" arrived as four arguments — the first
+ * Windows run failed exactly the three checks whose arguments had spaces.
+ */
+const quote = (arg) => (/[\s"&|<>^]/.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg);
+
 /** Runs a command in the project; `shell` on Windows so `.cmd` shims resolve. */
 function run(cmd, args, input) {
-  const r = spawnSync(cmd, args, {
+  const r = spawnSync(cmd, windows ? args.map(quote) : args, {
     cwd: dir,
     input,
     encoding: 'utf8',
@@ -76,9 +83,11 @@ const json = (r) => {
   try {
     return JSON.parse(r.out);
   } catch {
-    return null;
+    return { unparsed: true, out: r.out.slice(0, 300), err: r.err.slice(0, 300) };
   }
 };
+/** What to print when a JSON check fails: the answer, or why there was none. */
+const why = (v) => JSON.stringify(v).slice(0, 400);
 
 try {
   check('the tarball exists', existsSync(tarball), tarball);
@@ -103,19 +112,19 @@ try {
   check(`--version names ${version}`, v.code === 0 && v.out.includes(version), v.err || v.out);
 
   const schema = json(kadence('schema', '--json'));
-  check('schema --json is the kadence/v1 contract', schema?.schema === 'kadence/v1' && Array.isArray(schema?.contract?.commands));
+  check('schema --json is the kadence/v1 contract', schema?.schema === 'kadence/v1' && Array.isArray(schema?.contract?.commands), why(schema));
 
   const init = kadence('init', '--no-hooks');
   check('init writes .kadence/', init.code === 0 && existsSync(join(dir, '.kadence')), init.err || init.out);
 
   const added = json(kadence('task', 'add', 'Smoke test the install', '--json'));
-  check('task add answers in JSON', added?.ok === true && typeof added?.task?.id === 'string');
+  check('task add answers in JSON', added?.ok === true && typeof added?.task?.id === 'string', why(added));
 
   const listed = json(kadence('task', 'list', '--json'));
-  check('task list reads it back', listed?.tasks?.some((t) => t.title === 'Smoke test the install') === true);
+  check('task list reads it back', listed?.tasks?.some((t) => t.title === 'Smoke test the install') === true, why(listed));
 
   const found = json(kadence('search', 'smoke install', '--json'));
-  check('search finds it', (found?.hits?.length ?? 0) > 0);
+  check('search finds it', (found?.hits?.length ?? 0) > 0, why(found));
 
   const prime = kadence('prime');
   check('prime runs', prime.code === 0 && prime.out.includes('Go deeper'), prime.err || prime.out);
