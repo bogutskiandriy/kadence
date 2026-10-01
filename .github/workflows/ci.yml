@@ -106,3 +106,43 @@ jobs:
 
       - name: Package
         run: npm pack --dry-run
+
+  install:
+    # G4 (DOC-32): it installs everywhere it claims to. The tests above run
+    # dist/cli.js from the working tree; this installs the packed tarball the
+    # way a person would and drives the binary each manager puts on the path —
+    # the files list, the bin shim, Windows' .cmd wrapper, and Bun running the
+    # code instead of Node. scripts/install-smoke.mjs says what it checks.
+    name: install (${{ matrix.manager }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        manager: [npm, pnpm, yarn, bun, bun-runtime]
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # pnpm through corepack, which ships with Node 22: no extra action to
+      # pin. yarn 1 is already on every hosted runner.
+      - if: matrix.manager == 'pnpm'
+        run: corepack enable pnpm
+
+      - if: startsWith(matrix.manager, 'bun')
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      - run: npm ci --ignore-scripts
+
+      - run: npm run build
+
+      - run: npm pack --pack-destination packed
+
+      - name: Install the tarball and drive it
+        run: node scripts/install-smoke.mjs ${{ matrix.manager }} packed
