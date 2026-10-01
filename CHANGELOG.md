@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+**A journal outlives the version that wrote it, and now that is tested.**
+
+### Added
+
+- Compatibility suite: real journals written by every published minor version,
+  0.1.5 to 0.8.0 (`scripts/make-fixtures.mjs` installs each from npm and drives
+  one scenario), folded by the current code and held to what each version
+  itself reported. A change that reads an old journal differently fails CI.
+- A written compatibility and deprecation policy (DOC-65 in the journal):
+  additive-only inside `kadence/v1`, migration by new events and never by
+  rewriting, a deprecation period of two minor releases and 90 days.
+- CI installs the packed tarball with npm, pnpm, yarn, bun and `bunx --bun`
+  on Linux, macOS and Windows, and drives the installed binary.
+
 ## [0.8.0] — 2026-09-30
 
 **The journal is searched before the agent starts guessing.** Agents told to

@@ -388,6 +388,13 @@ decision list`, or `kadence decision show DEC-3` for one in full. The longer
 write-ups behind them are working papers and are kept out of git on purpose;
 the decision, its reason and the alternatives that lost are in the events.
 
+**Your journal outlives the version that wrote it.** Inside `kadence/v1` the
+format and the `--json` contract only grow: nothing is renamed or removed, an
+upgrade never rewrites an event, and a journal written by any released version
+reads the same in every later one — tested on real journals from every minor
+version since 0.1 (`test/compatibility.test.ts`). The full policy, deprecation
+included: `kadence search "compatibility policy"` or `kadence doc show DOC-65`.
+
 ## Contributing
 
 ```bash
