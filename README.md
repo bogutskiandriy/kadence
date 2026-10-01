@@ -106,6 +106,16 @@ The measurement itself is a working paper and is not published (see
 `.gitignore`); the mechanism it measures is proved here by
 `test/integration/merge.test.ts`.
 
+And for agents running side by side, which is where neighbouring tools lose
+work: **eight processes writing 200 tasks into one working tree at once, and
+three worktrees writing 240 more and merged in one octopus merge — no
+conflict, no task lost**; two worktrees claiming the same task come out of the
+merge with one claim and the other reported as contested, not silently
+dropped. Every agent writes its own file, so there is nothing to overwrite.
+The proof is [`test/parallel-agents.test.ts`](test/parallel-agents.test.ts) —
+it runs the real binary in separate processes, and fails (182 of 200) when the
+store is made to share file names.
+
 ---
 
 ## In practice

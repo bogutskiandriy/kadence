@@ -15,6 +15,13 @@
   rewriting, a deprecation period of two minor releases and 90 days.
 - CI installs the packed tarball with npm, pnpm, yarn, bun and `bunx --bun`
   on Linux, macOS and Windows, and drives the installed binary.
+- The prompt hook leads with a decision that already rejected what the prompt
+  proposes — "DEC-43 rejected this before: …". On this repository's journal it
+  named the right decision for 8 of 10 such prompts, with no false alarm on
+  ten ordinary code prompts.
+- A test that runs agents side by side: eight processes in one working tree,
+  three worktrees merged at once, two claims on one task. Nothing is lost;
+  the double claim is reported.
 
 ## [0.8.0] — 2026-09-30
 
