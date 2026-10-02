@@ -2,6 +2,7 @@ import { resolveContext, isContext, loadState, claimantOf, type CommandResult } 
 import { readyTasks, holdsClaim } from '../../core/query.js';
 import { attentionReport, describeSignal } from '../../core/attention.js';
 import type { ProjectState, Task } from '../../core/projection.js';
+import { looseEventCount } from '../../core/store.js';
 
 /** A note's task as the label a reader sees everywhere else, never a ULID. */
 function labelOf(state: ProjectState, id: string | null): string | null {
@@ -18,6 +19,15 @@ function labelOf(state: ProjectState, id: string | null): string | null {
  * `init`; this is the live half, and `test/prime.test.ts` holds it to forty
  * lines and three kilobytes.
  */
+
+/**
+ * Loose events in earlier months past which prime names `kadence compact`.
+ *
+ * At 10,000 a read after a write took 211 ms, over the 200 ms budget; after
+ * compacting, 28 ms (KAD-48). At half that it is time to say so — once, here,
+ * rather than on every write.
+ */
+export const LOOSE_EVENTS_HINT = 5000;
 
 /** Everything here is capped. A summary with no cap is a wall by month three. */
 const MINE_LIMIT = 5;
@@ -284,6 +294,11 @@ export function runPrime(
   if (notes.length > 0) {
     lines.push('', 'Recent notes:');
     for (const n of notes) lines.push(`  ${n.task === null ? '' : `${n.task} `}${short(n.text)}`);
+  }
+
+  const loose = looseEventCount(ctx.root, new Date().toISOString().slice(0, 7));
+  if (loose > LOOSE_EVENTS_HINT) {
+    lines.push('', `Journal: ${loose} events in loose files from earlier months. kadence compact makes reads about 7× faster.`);
   }
 
   lines.push('', 'Go deeper:');

@@ -2,6 +2,41 @@
 
 ## [Unreleased]
 
+**A journal outlives the version that wrote it, and now that is tested.**
+
+### Added
+
+- Compatibility suite: real journals written by every published minor version,
+  0.1.5 to 0.8.0 (`scripts/make-fixtures.mjs` installs each from npm and drives
+  one scenario), folded by the current code and held to what each version
+  itself reported. A change that reads an old journal differently fails CI.
+- A written compatibility and deprecation policy (DOC-65 in the journal):
+  additive-only inside `kadence/v1`, migration by new events and never by
+  rewriting, a deprecation period of two minor releases and 90 days.
+- CI installs the packed tarball with npm, pnpm, yarn, bun and `bunx --bun`
+  on Linux, macOS and Windows, and drives the installed binary.
+- The prompt hook leads with a decision that already rejected what the prompt
+  proposes — "DEC-43 rejected this before: …". On this repository's journal it
+  named the right decision for 8 of 10 such prompts, with no false alarm on
+  ten ordinary code prompts.
+- `kadence report flow --by-status` — where the time went: for every column,
+  p50 and p85 of the visits that ended in the window, marked before or past
+  the started boundary, and flow efficiency — the share of start-to-done not
+  spent blocked. Text, `--json` (under `byStatus`), `--html`.
+- `kadence report burnup` — scope and done, day by day, so a missed goal and
+  a goal that grew do not look alike. Text, `--json`, `--html`; `--sprint`
+  names one. Scope goes down only through cancellation or a move to another
+  sprint, and the report says so: the journal has no event for removing a
+  task from a sprint.
+- `kadence doc edit DOC-1` with no text opens `$EDITOR` at a terminal,
+  starting from the current revision; saving it unchanged or empty writes
+  nothing. Markdown headings survive — the editor helper used to strip every
+  line starting with `#`, as git does, which would have removed them. Without
+  a terminal (an agent, a pipe) it says how to pass the text instead.
+- A test that runs agents side by side: eight processes in one working tree,
+  three worktrees merged at once, two claims on one task. Nothing is lost;
+  the double claim is reported.
+
 ## [0.8.0] — 2026-09-30
 
 **The journal is searched before the agent starts guessing.** Agents told to

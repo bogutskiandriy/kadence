@@ -675,8 +675,8 @@ export function buildContract(version: string): Record<string, unknown> {
       {
         name: 'report flow',
         summary:
-          'WIP, throughput per week, cycle / lead / response time as p50 p85 p95 in calendar days, aging work against p85, created vs resolved, blocked days. Names the window and the started boundary it used. `--html` writes the same numbers as one self-contained page with charts, and answers with the path rather than the report.',
-        flags: ['--since', '--html', '--file', '--json'],
+          'WIP, throughput per week, cycle / lead / response time as p50 p85 p95 in calendar days, aging work against p85, created vs resolved, blocked days. Names the window and the started boundary it used. `--html` writes the same numbers as one self-contained page with charts, and answers with the path rather than the report. `--by-status` answers a different question — where the time went: per column, percentiles of visits that ended in the window, before or past the started boundary, and flow efficiency (the share of start-to-done not spent blocked) — under `byStatus` in `--json`.',
+        flags: ['--since', '--by-status', '--html', '--file', '--json'],
         json: true,
       },
       {
@@ -697,6 +697,13 @@ export function buildContract(version: string): Record<string, unknown> {
         name: 'report burndown',
         summary:
           'One sprint against an even burn, day by day. The active sprint by default; `--sprint <name>` for a closed one. The same fold as `sprint burndown`, under the verb the catalogue lives at.',
+        flags: ['--sprint', '--html', '--file', '--json'],
+        json: true,
+      },
+      {
+        name: 'report burnup',
+        summary:
+          'Scope and done for a sprint, day by day: whether the goal was missed or grew. --sprint names one, otherwise the active sprint. Scope goes down only when a task is cancelled or moved to another sprint; the journal has no event for removing one. --json carries burnup: { days: [{ date, scope, done }], scopeAtStart, scopeNow, scopeAdded, finalDone }.',
         flags: ['--sprint', '--html', '--file', '--json'],
         json: true,
       },

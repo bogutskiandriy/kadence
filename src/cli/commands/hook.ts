@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { search, PARTIAL_COVERAGE, type SearchHit } from '../../core/search.js';
+import { search, rejectedMatches, PARTIAL_COVERAGE, type SearchHit, type RejectedMatch } from '../../core/search.js';
 import { resolveContext, isContext, loadState } from './task.js';
 
 /**
@@ -127,21 +127,37 @@ function writeSeen(path: string, seen: ReadonlySet<string>): void {
 }
 
 function render(
+  turnedDown: readonly RejectedMatch[],
   hits: readonly SearchHit[],
   noteText: (id: string) => string | null,
-): { text: string; shown: SearchHit[] } {
+): { text: string; shown: string[] } {
   // The same reference `search` prints: a section carries its lines, so three
   // hits in one document read as three places rather than one label thrice.
   const ref = (h: SearchHit): string => {
     const base = h.label ?? `note ${h.id}`;
     return h.lines === null ? base : `${base}:${h.lines.from}-${h.lines.to}`;
   };
-  const width = Math.max(...hits.map((h) => ref(h).length));
+  const width = Math.max(...turnedDown.map((m) => m.label.length), ...hits.map((h) => ref(h).length));
   const head = 'kadence: if this is about why or how something was decided, the journal may already say:';
   const tail = 'More: kadence search "…" --json · open one: task show / decision show / doc show';
 
   const lines = [head];
-  const shown: SearchHit[] = [];
+  const shown: string[] = [];
+  const fits = (entry: string[]) => Buffer.byteLength([...lines, ...entry, tail].join('\n'), 'utf8') <= PROMPT_HOOK_BYTES;
+
+  // First: a decision that already turned down what the prompt proposes. It
+  // is the one line here that can stop work before it starts (KAD-61).
+  for (const m of turnedDown) {
+    const pad = ' '.repeat(width);
+    const entry = [
+      `  ${m.label.padEnd(width)}  [decision] rejected this before: “${flat(m.rejected, 200)}”`,
+      `  ${pad}  chose instead: ${flat(m.title, TITLE_CHARS)}`,
+    ];
+    if (!fits(entry)) break;
+    lines.push(...entry);
+    shown.push(m.id);
+  }
+
   for (const hit of hits) {
     const entry = [`  ${ref(hit).padEnd(width)}  [${hit.kind}] ${flat(hit.title, TITLE_CHARS)}`];
     const whole = hit.kind === 'note' ? noteText(hit.id) : null;
@@ -150,10 +166,9 @@ function render(
     } else if (hit.coverage >= PARTIAL_COVERAGE) {
       entry.push(`  ${' '.repeat(width)}  “${flat(hit.span.text, 200)}”`);
     }
-    const next = [...lines, ...entry, tail].join('\n');
-    if (Buffer.byteLength(next, 'utf8') > PROMPT_HOOK_BYTES) break;
+    if (!fits(entry)) break;
     lines.push(...entry);
-    shown.push(hit);
+    shown.push(keyOf(hit));
   }
   return { text: shown.length === 0 ? '' : [...lines, tail].join('\n'), shown };
 }
@@ -178,13 +193,16 @@ export function runPromptHook(cwd: string, env: NodeJS.ProcessEnv, input: string
     const found = search(state, question, { limit: CANDIDATES });
     const seenAt = payload.session === null ? null : seenFile(ctx.root, payload.session);
     const seen = seenAt === null ? new Set<string>() : readSeen(seenAt);
-    const hits = found.filter((h) => !seen.has(keyOf(h))).slice(0, HITS);
-    if (hits.length === 0) return '';
+    const turnedDown = rejectedMatches(state, question).filter((m) => !seen.has(m.id)).slice(0, 2);
+    const hits = found
+      .filter((h) => !seen.has(keyOf(h)) && !turnedDown.some((m) => m.id === h.id))
+      .slice(0, HITS - turnedDown.length);
+    if (hits.length === 0 && turnedDown.length === 0) return '';
 
     const noteText = (id: string): string | null => state.notes.find((n) => n.id === id)?.text ?? null;
-    const { text, shown } = render(hits, noteText);
+    const { text, shown } = render(turnedDown, hits, noteText);
     if (seenAt !== null && shown.length > 0) {
-      for (const h of shown) seen.add(keyOf(h));
+      for (const key of shown) seen.add(key);
       writeSeen(seenAt, seen);
     }
     return text;

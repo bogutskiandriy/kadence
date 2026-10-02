@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
+import type { EditorResult } from '../editor.js';
 import { resolve } from 'node:path';
 import { ulid } from '../../core/ulid.js';
 import { append } from '../../core/store.js';
@@ -97,6 +98,35 @@ function lengthWarning(body: string): string[] {
           'documents worse; one document per topic keeps what they read short.',
       ]
     : [];
+}
+
+/**
+ * `doc edit` with no text: the person writes in $EDITOR, starting from the
+ * current revision (KAD-39).
+ *
+ * The editor is passed in, so this is the same path whether a terminal opens
+ * vi or a test hands back a string; the write is `runDocEdit`, the function
+ * every other way of editing calls. Leaving the text as it was, or emptying
+ * it, writes nothing — the git convention people already know.
+ */
+export function runDocEditInEditor(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  ref: string,
+  edit: (current: string, hint: string) => EditorResult,
+): CommandResult {
+  const ctx = resolveContext(cwd, env);
+  if (!isContext(ctx)) return ctx;
+  const { state } = loadState(ctx.root, ctx.actor);
+  const doc = findDoc(state, ref);
+  if (doc === undefined) return docNotFound(ref);
+
+  const r = edit(doc.body, `Editing ${doc.label} — ${doc.title}.`);
+  if (r.error !== null) return { ok: false, exitCode: 1, message: r.error };
+  if (r.text === null || (r.text.trim() === doc.body.trim() && doc.conflicts.length === 0)) {
+    return { ok: true, exitCode: 0, message: `Aborted — nothing changed in ${doc.label}.` };
+  }
+  return runDocEdit(cwd, env, ref, { body: r.text });
 }
 
 /** What `doc list` and `task show` carry: enough to decide whether to read the body. */

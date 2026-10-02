@@ -132,5 +132,8 @@ describe('the generated reference', () => {
     // stdout is the fifth bug in the family CLAUDE.md lists.
     const r = spawnSync('node', [GENERATOR, '--stdout'], { encoding: 'utf8' });
     expect(() => JSON.parse(r.stdout)).not.toThrow();
-  });
+    // The generator runs the CLI once per command: 1.5 s locally, past the
+    // harness's default five seconds on a busy CI runner (Node 20,
+    // 2026-10-02). What is tested is the output, not the speed.
+  }, 30_000);
 });

@@ -458,6 +458,77 @@ function spanOf(text: string, terms: readonly string[]): { text: string; start: 
   return { text: line.slice(start, end), start, end };
 }
 
+/** A decision whose rejected alternative is what the question proposes. */
+export interface RejectedMatch {
+  id: string;
+  label: string;
+  title: string;
+  rejected: string;
+  /** Share of the question, weighted by rarity, found in the rejected alternative. */
+  inRejected: number;
+  /** The same share found in what was chosen: the title and the reason. */
+  inChosen: number;
+}
+
+/**
+ * Below this share a rejected alternative only shares words with the question.
+ *
+ * Measured in KAD-61 on this repository's journal: ten prompts that propose
+ * something a decision rejected, ten ordinary code prompts. At 0.25 one code
+ * prompt raised a false alarm; 0.3 to 0.4 named 7-8 of 10 with none; 0.5
+ * named 6. 0.35 is the middle of the clean stretch, not its edge. The misses
+ * are vocabulary — "async" against "asynchronous", "erase" against "erases".
+ */
+export const REJECTED_SHARE = 0.35;
+
+/**
+ * Decisions whose rejected alternative carries more of the question than what
+ * they chose did.
+ *
+ * Search ranks a decision as a whole; it cannot tell "this is what we decided"
+ * from "this is what we decided against". People and agents reopen settled
+ * decisions (discovery 2026-09-30), and the second case is the one worth
+ * saying first. The weight of each term is the same rarity the ranking uses
+ * (DEC-30), counted only over terms the journal knows, so words it has never
+ * seen cannot dilute the comparison between two parts of one record.
+ */
+export function rejectedMatches(state: ProjectState, query: string): RejectedMatch[] {
+  const terms = new Set(queryTerms(query));
+  if (terms.size < 2) return [];
+  const candidates = state.decisions.filter((d) => d.supersededBy === null && d.rejected !== null);
+  if (candidates.length === 0) return [];
+
+  const corpus = units(state).filter((u) => !u.superseded);
+  const index = build(corpus, terms);
+  const idf = new Map<string, number>();
+  for (const term of terms) {
+    const df = index.df.get(term) ?? 0;
+    if (df > 0) idf.set(term, Math.log(1 + (index.count - df + 0.5) / (df + 0.5)));
+  }
+  let asked = 0;
+  for (const w of idf.values()) asked += w;
+  if (asked === 0) return [];
+
+  const share = (text: string): number => {
+    const present = new Set(tokenize(text));
+    let carried = 0;
+    for (const [term, w] of idf) if (present.has(term)) carried += w;
+    return carried / asked;
+  };
+
+  return candidates
+    .map((d) => ({
+      id: d.id,
+      label: d.label,
+      title: d.title,
+      rejected: d.rejected!,
+      inRejected: Math.round(share(d.rejected!) * 100) / 100,
+      inChosen: Math.round(share(`${d.title}\n${d.why}`) * 100) / 100,
+    }))
+    .filter((m) => m.inRejected >= REJECTED_SHARE && m.inRejected > m.inChosen)
+    .sort((a, b) => b.inRejected - a.inRejected || (a.id < b.id ? -1 : 1));
+}
+
 /**
  * One scoring pass: BM25, with the coverage rule.
  *

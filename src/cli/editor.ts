@@ -31,20 +31,35 @@ function resolveEditor(env: NodeJS.ProcessEnv): string {
  * The hint explains the abort rule, because a silent empty buffer that quietly
  * cancels the command is the kind of behaviour people discover by losing work.
  */
+export interface EditOptions {
+  /**
+   * The text is Markdown, where `#` starts a heading, not a comment. The hint
+   * goes into one HTML comment instead, and only that comment is removed — a
+   * document edited the git way would lose every heading it has (KAD-39).
+   */
+  markdown?: boolean;
+}
+
+/** The hint's own comment in Markdown mode; nothing else is ever removed. */
+const MARKDOWN_HINT = /\n*<!-- kadence:[\s\S]*?-->\n*/;
+
 export function editText(
   env: NodeJS.ProcessEnv,
   initial: string,
   hint: string,
+  options: EditOptions = {},
 ): EditorResult {
   const dir = mkdtempSync(join(tmpdir(), 'kadence-edit-'));
   const file = join(dir, 'KADENCE_EDITMSG.md');
 
-  const header = [
-    '',
-    `${COMMENT_PREFIX} ${hint}`,
-    `${COMMENT_PREFIX} Lines starting with '${COMMENT_PREFIX}' are ignored.`,
-    `${COMMENT_PREFIX} Save an empty file to abort.`,
-  ].join('\n');
+  const header = options.markdown === true
+    ? `\n\n<!-- kadence: ${hint}\n     This comment is removed when you save. Save an empty file to abort. -->`
+    : [
+        '',
+        `${COMMENT_PREFIX} ${hint}`,
+        `${COMMENT_PREFIX} Lines starting with '${COMMENT_PREFIX}' are ignored.`,
+        `${COMMENT_PREFIX} Save an empty file to abort.`,
+      ].join('\n');
 
   try {
     writeFileSync(file, `${initial}${header}\n`, 'utf8');
@@ -61,11 +76,14 @@ export function editText(
     }
 
     const raw = readFileSync(file, 'utf8');
-    const body = raw
-      .split('\n')
-      .filter((line) => !line.startsWith(COMMENT_PREFIX))
-      .join('\n')
-      .trim();
+    const body = (
+      options.markdown === true
+        ? raw.replace(MARKDOWN_HINT, '\n')
+        : raw
+            .split('\n')
+            .filter((line) => !line.startsWith(COMMENT_PREFIX))
+            .join('\n')
+    ).trim();
 
     return { text: body.length === 0 ? null : body, error: null };
   } catch (err) {

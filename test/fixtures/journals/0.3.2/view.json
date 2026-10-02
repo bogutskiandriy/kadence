@@ -1,0 +1,348 @@
+{
+  "version": "0.3.2",
+  "commands": [
+    {
+      "command": "init --no-hooks",
+      "ok": true
+    },
+    {
+      "command": "task add Fix login on Safari -d The cookie is dropped on redirect --type bug --priority high",
+      "ok": true
+    },
+    {
+      "command": "task add Export to CSV --type story --estimate 5",
+      "ok": true
+    },
+    {
+      "command": "task add Update dependencies",
+      "ok": true
+    },
+    {
+      "command": "task add Remove the legacy importer",
+      "ok": true
+    },
+    {
+      "command": "task move KAD-1 in_progress",
+      "ok": true
+    },
+    {
+      "command": "task assign KAD-2 dev@example.com",
+      "ok": true
+    },
+    {
+      "command": "task block KAD-3 KAD-1",
+      "ok": true
+    },
+    {
+      "command": "task claim KAD-2",
+      "ok": false
+    },
+    {
+      "command": "task comment KAD-1 Reproduced on Safari 17.4",
+      "ok": true
+    },
+    {
+      "command": "task ac add KAD-2 Exports ten thousand rows",
+      "ok": false
+    },
+    {
+      "command": "task ac check KAD-2 1",
+      "ok": false
+    },
+    {
+      "command": "task edit KAD-1 --add-label auth",
+      "ok": false
+    },
+    {
+      "command": "task move KAD-1 done",
+      "ok": true
+    },
+    {
+      "command": "task move KAD-4 cancelled",
+      "ok": true
+    },
+    {
+      "command": "decision add Identify tasks by ULID --why Clocks disagree between machines --rejected Auto-increment: collides across branches",
+      "ok": true
+    },
+    {
+      "command": "decision add Identify everything by ULID --why Notes and decisions need the same guarantee --supersedes DEC-1",
+      "ok": true
+    },
+    {
+      "command": "note Safari drops the cookie on a 302 --task KAD-1",
+      "ok": true
+    },
+    {
+      "command": "sprint create Sprint 1",
+      "ok": true
+    },
+    {
+      "command": "sprint add KAD-2 --sprint Sprint 1",
+      "ok": true
+    },
+    {
+      "command": "milestone create 1.0",
+      "ok": true
+    },
+    {
+      "command": "milestone add KAD-3 --milestone 1.0",
+      "ok": true
+    },
+    {
+      "command": "doc add How login works --body Sessions live in a cookie. --task KAD-1",
+      "ok": true
+    },
+    {
+      "command": "doc edit DOC-1 --body Sessions live in a cookie set after the redirect.",
+      "ok": true
+    }
+  ],
+  "tasks": {
+    "schema": "kadence/v1",
+    "ok": true,
+    "tasks": [
+      {
+        "id": "01M3W4A12C90161F49PH8J0KT0",
+        "label": "KAD-1",
+        "title": "Fix login on Safari",
+        "description": "The cookie is dropped on redirect",
+        "type": "bug",
+        "priority": "high",
+        "status": "done",
+        "labels": [],
+        "assignee": null,
+        "reporter": "fixture@example.com",
+        "sprint": null,
+        "loggedHours": 0,
+        "parent": null,
+        "blockedBy": [],
+        "due": null,
+        "comments": [
+          {
+            "id": "01M3W4A1R2M77TXH41D3Y5V265",
+            "author": "fixture@example.com",
+            "ts": "2026-10-01T16:21:08.482Z",
+            "text": "Reproduced on Safari 17.4"
+          }
+        ],
+        "docs": [],
+        "estimate": null,
+        "history": [
+          {
+            "id": "01M3W4A12C90161F49PH8J0KT0",
+            "type": "task.created",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:07.788Z",
+            "data": {
+              "title": "Fix login on Safari",
+              "description": "The cookie is dropped on redirect",
+              "type": "bug",
+              "priority": "high"
+            }
+          },
+          {
+            "id": "01M3W4A1DF2789P23SMJZNPBSD",
+            "type": "task.moved",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:08.143Z",
+            "data": {
+              "from": "backlog",
+              "to": "in_progress"
+            }
+          },
+          {
+            "id": "01M3W4A1R2M77TXH41D3Y5V265",
+            "type": "task.commented",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:08.482Z",
+            "data": {
+              "text": "Reproduced on Safari 17.4"
+            }
+          },
+          {
+            "id": "01M3W4A20X5S2SS5G3Y02JAHB3",
+            "type": "task.moved",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:08.765Z",
+            "data": {
+              "from": "in_progress",
+              "to": "done"
+            }
+          }
+        ]
+      },
+      {
+        "id": "01M3W4A1584WKRC3Z1NGWG8QZP",
+        "label": "KAD-2",
+        "title": "Export to CSV",
+        "description": null,
+        "type": "story",
+        "priority": "normal",
+        "status": "backlog",
+        "labels": [],
+        "assignee": "dev@example.com",
+        "reporter": "fixture@example.com",
+        "sprint": "01M3W4A2E9J89RM8PZTD7DJHGD",
+        "loggedHours": 0,
+        "parent": null,
+        "blockedBy": [],
+        "due": null,
+        "comments": [],
+        "docs": [],
+        "estimate": 5,
+        "history": [
+          {
+            "id": "01M3W4A1584WKRC3Z1NGWG8QZP",
+            "type": "task.created",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:07.880Z",
+            "data": {
+              "title": "Export to CSV",
+              "type": "story",
+              "estimate": 5
+            }
+          },
+          {
+            "id": "01M3W4A1G96MZFPDV4YAC9B8SM",
+            "type": "task.assigned",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:08.233Z",
+            "data": {
+              "assignee": "dev@example.com"
+            }
+          },
+          {
+            "id": "01M3W4A2H51DNATBJEY4MHDGT0",
+            "type": "sprint.task_added",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:09.285Z",
+            "data": {
+              "task": "01M3W4A1584WKRC3Z1NGWG8QZP"
+            }
+          }
+        ]
+      },
+      {
+        "id": "01M3W4A17Y4K0RQG3PXS3CBAQG",
+        "label": "KAD-3",
+        "title": "Update dependencies",
+        "description": null,
+        "type": "task",
+        "priority": "normal",
+        "status": "backlog",
+        "labels": [],
+        "assignee": null,
+        "reporter": "fixture@example.com",
+        "sprint": null,
+        "loggedHours": 0,
+        "parent": null,
+        "blockedBy": [
+          "01M3W4A12C90161F49PH8J0KT0"
+        ],
+        "due": null,
+        "comments": [],
+        "docs": [],
+        "estimate": null,
+        "history": [
+          {
+            "id": "01M3W4A17Y4K0RQG3PXS3CBAQG",
+            "type": "task.created",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:07.966Z",
+            "data": {
+              "title": "Update dependencies"
+            }
+          },
+          {
+            "id": "01M3W4A1K26DKVMQG39J49BGX5",
+            "type": "task.blocked_by_added",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:08.322Z",
+            "data": {
+              "blocker": "01M3W4A12C90161F49PH8J0KT0"
+            }
+          }
+        ]
+      },
+      {
+        "id": "01M3W4A1AP4ZT3HHSH7P6T1079",
+        "label": "KAD-4",
+        "title": "Remove the legacy importer",
+        "description": null,
+        "type": "task",
+        "priority": "normal",
+        "status": "cancelled",
+        "labels": [],
+        "assignee": null,
+        "reporter": "fixture@example.com",
+        "sprint": null,
+        "loggedHours": 0,
+        "parent": null,
+        "blockedBy": [],
+        "due": null,
+        "comments": [],
+        "docs": [],
+        "estimate": null,
+        "history": [
+          {
+            "id": "01M3W4A1AP4ZT3HHSH7P6T1079",
+            "type": "task.created",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:08.055Z",
+            "data": {
+              "title": "Remove the legacy importer"
+            }
+          },
+          {
+            "id": "01M3W4A23RP7AVSETZD3JJS1Y3",
+            "type": "task.moved",
+            "actor": "fixture@example.com",
+            "ts": "2026-10-01T16:21:08.856Z",
+            "data": {
+              "from": "backlog",
+              "to": "cancelled"
+            }
+          }
+        ]
+      }
+    ],
+    "cycles": []
+  },
+  "decisions": {
+    "schema": "kadence/v1",
+    "ok": true,
+    "decisions": [
+      {
+        "id": "01M3W4A26H7XQQ5BS70MJGTRSX",
+        "label": "DEC-1",
+        "title": "Identify tasks by ULID",
+        "why": "Clocks disagree between machines",
+        "rejected": "Auto-increment: collides across branches",
+        "task": null,
+        "docs": [],
+        "supersedes": null,
+        "supersededBy": "DEC-2",
+        "superseded": true,
+        "at": "2026-10-01T16:21:08.945Z",
+        "by": "fixture@example.com",
+        "source": "agent"
+      },
+      {
+        "id": "01M3W4A29CM6WNPZ5M4FK5PKS3",
+        "label": "DEC-2",
+        "title": "Identify everything by ULID",
+        "why": "Notes and decisions need the same guarantee",
+        "rejected": null,
+        "task": null,
+        "docs": [],
+        "supersedes": "DEC-1",
+        "supersededBy": null,
+        "superseded": false,
+        "at": "2026-10-01T16:21:09.036Z",
+        "by": "fixture@example.com",
+        "source": "agent"
+      }
+    ]
+  }
+}

@@ -1,8 +1,9 @@
-import type { FlowReport, CfdReport, Percentiles } from '../core/flow.js';
+import type { FlowReport, CfdReport, Percentiles, TimeInStatusReport } from '../core/flow.js';
 import { type AttentionReport, describeSignal } from '../core/attention.js';
 import { esc, page, BASE_STYLE, VIZ_STYLE } from './page.js';
 import { columnsChart, stackedAreaChart, barsChart, percentileStrips, lineChart, type Series } from './svg.js';
 import type { Burndown } from '../core/burndown.js';
+import type { Burnup } from '../core/burnup.js';
 import type { VelocitySeries } from '../core/velocity.js';
 import type { WorkloadReport } from '../core/workload.js';
 
@@ -51,6 +52,108 @@ function legend(items: readonly { name: string; color: string }[]): string {
 
 function figure(chart: string, caption: string): string {
   return `<figure class="figure">${chart}<figcaption>${esc(caption)}</figcaption></figure>`;
+}
+
+/** Where the time went, column by column, and how much of it was blocked (KAD-16). */
+export function timeInStatusHtml(r: TimeInStatusReport, generatedAt: Date = new Date()): string {
+  const body: string[] = [];
+  body.push('<h1>Time in status</h1>');
+  body.push(
+    stamp(
+      [
+        `The last ${r.window.days} days, ${r.window.from} to ${r.window.to}, in ${r.unit}. Work counts as started at “${esc(r.started)}”.`,
+        'A visit to a column counts when it ended inside the window.',
+        `Generated ${utcStamp(generatedAt)}.`,
+      ],
+      'kadence report flow --by-status --html',
+    ),
+  );
+  body.push(
+    '<div class="tiles">',
+    r.flowEfficiency === null
+      ? tile('Flow efficiency', '–', 'nothing finished in the window')
+      : tile('Flow efficiency', `${r.flowEfficiency.percent}%`, `of start-to-done not spent blocked, ${r.flowEfficiency.tasks} task(s)`),
+    '</div>',
+  );
+  body.push(
+    table(
+      [{ head: 'Status' }, { head: 'Phase' }, { head: 'Visits', num: true }, { head: 'p50 days', num: true }, { head: 'p85 days', num: true }],
+      r.statuses.map(
+        (s) =>
+          `<tr><td>${esc(s.status)}</td><td>${s.phase}</td><td class="num">${s.visits?.n ?? 0}</td>` +
+          `<td class="num">${s.visits === null ? '–' : s.visits.p50}</td><td class="num">${s.visits === null ? '–' : s.visits.p85}</td></tr>`,
+      ),
+    ),
+  );
+  for (const n of r.notes) body.push(`<p class="empty">${esc(n)}</p>`);
+  body.push(footer(`${r.statuses.length} columns.`));
+  return page('kadence time in status', BASE_STYLE + VIZ_STYLE, body);
+}
+
+/**
+ * Burnup: scope and done as two lines, so a missed goal and a goal that grew
+ * do not look alike (KAD-15).
+ */
+export function burnupHtml(b: Burnup, generatedAt: Date = new Date()): string {
+  const body: string[] = [];
+  body.push('<h1>Burnup</h1>');
+  const grew =
+    b.scopeAdded > 0
+      ? `The goal grew by ${b.scopeAdded} point(s) after the start.`
+      : b.scopeAdded < 0
+        ? `The goal shrank by ${-b.scopeAdded} point(s) after the start.`
+        : 'The goal did not change after the start.';
+  body.push(
+    stamp(
+      [
+        `${esc(b.sprintName)}: ${b.scopeAtStart} points at the start, ${b.scopeNow} now. ${grew}`,
+        b.finalDone === null
+          ? 'The sprint is still open, so the last day is today rather than the end.'
+          : `Closed with ${b.finalDone} of ${b.scopeNow} points done.`,
+        `Generated ${utcStamp(generatedAt)}.`,
+      ],
+      'kadence report burnup --html',
+    ),
+  );
+
+  if (b.days.length === 0 || b.scopeNow + b.scopeAtStart === 0) {
+    body.push('<p class="empty">Nothing to chart: no task in this sprint carries an estimate.</p>');
+    body.push(footer(`${b.sprintName}, ${b.days.length} days.`));
+    return page('kadence burnup', BASE_STYLE + VIZ_STYLE, body);
+  }
+
+  const last = b.days[b.days.length - 1]!;
+  body.push(
+    '<div class="tiles">',
+    tile('Scope at the start', String(b.scopeAtStart), 'points in the sprint on day one'),
+    tile('Scope now', String(b.scopeNow), b.scopeAdded === 0 ? 'unchanged' : `${b.scopeAdded > 0 ? '+' : '−'}${Math.abs(b.scopeAdded)} since the start`, b.scopeAdded > 0),
+    tile('Done', String(last.done), `of ${last.scope}, on ${last.date}`),
+    '</div>',
+  );
+  body.push(legend([{ name: 'Scope', color: '--muted' }, { name: 'Done', color: '--s1' }]));
+  body.push(
+    figure(
+      lineChart({
+        labels: b.days.map((d) => d.date),
+        series: [
+          { name: 'Scope', color: '--muted', values: b.days.map((d) => d.scope), reference: true },
+          { name: 'Done', color: '--s1', values: b.days.map((d) => d.done) },
+        ],
+        unit: 'points',
+      }),
+      'Points in the sprint and points done at the end of each day. Scope goes down only when a task is cancelled or moved to another sprint: the journal has no event for taking a task out of a sprint.',
+    ),
+  );
+  body.push(
+    '<details><summary>Every day as rows</summary>',
+    table(
+      [{ head: 'Date' }, { head: 'Scope', num: true }, { head: 'Done', num: true }],
+      b.days.map((d) => `<tr><td>${esc(d.date)}</td><td class="num">${d.scope}</td><td class="num">${d.done}</td></tr>`),
+    ),
+    '</details>',
+  );
+  body.push(footer(`${b.sprintName}, ${b.days.length} days.`));
+  return page('kadence burnup', BASE_STYLE + VIZ_STYLE, body);
 }
 
 /** A column is numeric or it is not; the header has to agree with the cells. */

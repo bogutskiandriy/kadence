@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,7 +13,9 @@ import {
   runSprintAdd,
   runSprintEdit,
 } from '../src/cli/commands/sprint.js';
-import { runPrime } from '../src/cli/commands/prime.js';
+import { runPrime, LOOSE_EVENTS_HINT } from '../src/cli/commands/prime.js';
+import { createUlid } from '../src/core/ulid.js';
+import { compact } from '../src/core/store.js';
 import { runDocAdd } from '../src/cli/commands/doc.js';
 
 /**
@@ -60,6 +62,43 @@ function busyRepo(): void {
     runDocAdd(dir, env, `Document number ${i} with a long title`, { body: 'text', task: 'KAD-1' });
   }
 }
+
+describe('runPrime on a long journal', () => {
+  /**
+   * Reading is what a long journal costs, not folding: at 10,000 events the
+   * fold takes 3 ms and reading the files 171 ms; after `compact`, 17 ms
+   * (KAD-48). Nobody runs a command they have not heard of, so prime names it
+   * once the old months hold enough loose files to matter.
+   */
+  function looseOldMonth(count: number): void {
+    const gen = createUlid();
+    const dir = join(dir_, '.kadence', 'events', '2026-01');
+    mkdirSync(dir, { recursive: true });
+    for (let i = 0; i < count; i++) {
+      const id = gen();
+      writeFileSync(
+        join(dir, `${id}.json`),
+        `${JSON.stringify({ id, type: 'note.recorded', entity: id, actor: 'old@example.com', ts: '2026-01-15T10:00:00.000Z', source: 'human', data: { text: `Old note ${i}` } })}\n`,
+      );
+    }
+  }
+  let dir_: string;
+  beforeEach(() => {
+    dir_ = dir;
+  });
+
+  it(`names kadence compact past ${LOOSE_EVENTS_HINT} loose events in old months`, () => {
+    looseOldMonth(LOOSE_EVENTS_HINT + 1);
+    const r = runPrime(dir, env, {});
+    expect(r.message).toMatch(/kadence compact/);
+  }, 60_000);
+
+  it('says nothing about it on a journal below the line, or after compacting', () => {
+    looseOldMonth(LOOSE_EVENTS_HINT + 1);
+    compact(dir, '2026-02');
+    expect(runPrime(dir, env, {}).message).not.toMatch(/kadence compact/);
+  }, 60_000);
+});
 
 describe('runPrime', () => {
   it('points at search first when it says where to go deeper', () => {

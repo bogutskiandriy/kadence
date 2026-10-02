@@ -106,6 +106,16 @@ The measurement itself is a working paper and is not published (see
 `.gitignore`); the mechanism it measures is proved here by
 `test/integration/merge.test.ts`.
 
+And for agents running side by side, which is where neighbouring tools lose
+work: **eight processes writing 200 tasks into one working tree at once, and
+three worktrees writing 240 more and merged in one octopus merge — no
+conflict, no task lost**; two worktrees claiming the same task come out of the
+merge with one claim and the other reported as contested, not silently
+dropped. Every agent writes its own file, so there is nothing to overwrite.
+The proof is [`test/parallel-agents.test.ts`](test/parallel-agents.test.ts) —
+it runs the real binary in separate processes, and fails (182 of 200) when the
+store is made to share file names.
+
 ---
 
 ## In practice
@@ -387,6 +397,13 @@ revisit it, are in the journal that ships with this repository — `kadence
 decision list`, or `kadence decision show DEC-3` for one in full. The longer
 write-ups behind them are working papers and are kept out of git on purpose;
 the decision, its reason and the alternatives that lost are in the events.
+
+**Your journal outlives the version that wrote it.** Inside `kadence/v1` the
+format and the `--json` contract only grow: nothing is renamed or removed, an
+upgrade never rewrites an event, and a journal written by any released version
+reads the same in every later one — tested on real journals from every minor
+version since 0.1 (`test/compatibility.test.ts`). The full policy, deprecation
+included: `kadence search "compatibility policy"` or `kadence doc show DOC-65`.
 
 ## Contributing
 

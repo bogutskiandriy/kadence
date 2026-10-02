@@ -1,0 +1,1 @@
+{"id":"01M3W4A29CM6WNPZ5M4FK5PKS3","type":"decision.recorded","entity":"01M3W4A29CM6WNPZ5M4FK5PKS3","actor":"fixture@example.com","ts":"2026-10-01T16:21:09.036Z","source":"agent","data":{"title":"Identify everything by ULID","why":"Notes and decisions need the same guarantee","supersedes":"01M3W4A26H7XQQ5BS70MJGTRSX"}}

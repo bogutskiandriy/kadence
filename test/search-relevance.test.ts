@@ -147,6 +147,10 @@ describe('relevance against the real journal', () => {
    * less than deciding whether a cache went stale. If that stops being true the
    * number here says so before a user does.
    */
+  // Seventy-five searches over the live journal: on a CI runner that passed the
+  // harness's default five seconds as a whole (5.1 s on Node 22, 2026-10-01)
+  // while every query stayed far inside its own budget. The assertion is the
+  // budget per query; the limit here only has to be longer than the loop.
   it.runIf(corpus >= CORPUS_FLOOR)('answers inside the budget on the real corpus', () => {
     const questions = QUESTIONS.map((q) => q.query);
     let best = Infinity;
@@ -159,7 +163,7 @@ describe('relevance against the real journal', () => {
     // eslint-disable-next-line no-console
     console.log(`  a query over ${corpus} documents: ${best.toFixed(0)} ms`);
     expect(best).toBeLessThan(200);
-  });
+  }, 60_000);
 
   it.runIf(corpus < CORPUS_FLOOR)('says why it is not measuring anything', () => {
     // eslint-disable-next-line no-console
