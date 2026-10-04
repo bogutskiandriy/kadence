@@ -60,13 +60,22 @@ describe('runPromptHook', () => {
     expect(out).toContain('The staging deploy needs the VPN, or the upload times out after thirty seconds');
   });
 
+  it('names note show in the tail, so a note ULID has a command to open it', () => {
+    const out = runPromptHook(dir, env, payload('why does staging need the VPN'));
+    expect(out.split('\n').at(-1)).toContain('note show');
+  });
+
+  it('suggests searching again in other words, with --also', () => {
+    const out = runPromptHook(dir, env, payload('why does staging need the VPN'));
+    expect(out.split('\n').at(-1)).toContain('--also');
+  });
+
   it('tells two sections of one document apart by their lines', () => {
     // Three hits reading "DOC-1" three times look like a bug and point nowhere.
-    const added = runDocAdd(dir, env, 'Deploy runbook', {
+    runDocAdd(dir, env, 'Deploy runbook', {
       body: '# Deploy runbook\n\n## Staging\n\nStaging deploy rollback steps.\n\n## Production\n\nProduction deploy rollback steps.\n',
     });
     const out = runPromptHook(dir, env, payload('deploy rollback steps'));
-    console.log('DEBUG', JSON.stringify(added).slice(0,400));
     const refs = out.split('\n').map((l) => l.match(/^\s+(DOC-\d+:\d+-\d+)\s/)?.[1]).filter(Boolean);
     expect(refs.length).toBeGreaterThanOrEqual(2);
     expect(new Set(refs).size).toBe(refs.length);

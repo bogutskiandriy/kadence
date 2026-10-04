@@ -397,3 +397,90 @@ describe('the shape of a hit', () => {
     );
   });
 });
+
+describe('light stemming (KAD-69)', () => {
+  /**
+   * "claims" and "claimed" are the same word to the person asking. Measured on
+   * a scratch copy before this change: folding plurals, -ed and -ing on both
+   * sides took first place from 37 to 43 of 100 questions and the top five
+   * from 56 to 68 (tasks/plan-search-quality.md).
+   */
+  const filler = [
+    note('The board renders its own columns'),
+    note('Tests need a git identity'),
+    note('A note is read to catch up on what changed'),
+  ];
+
+  it('finds a plural from the singular and back', () => {
+    const state = project([...filler, decision('Claims as events', 'Two people can hold one task and both are recorded')]);
+    expect(search(state, 'claim')[0]?.title).toBe('Claims as events');
+    const back = project([...filler, decision('Each claim is an event', 'Both are recorded')]);
+    expect(search(back, 'claims')[0]?.title).toBe('Each claim is an event');
+  });
+
+  it('folds -ed and -ing onto the word they came from', () => {
+    const state = project([...filler, doc('Branches', '# Branches\n\nTwo branches merge their labels as deltas.')]);
+    expect(search(state, 'merging')[0]?.title).toBe('Branches');
+    expect(search(state, 'merged')[0]?.title).toBe('Branches');
+  });
+
+  it('removes stopwords before stemming, so an inflected one cannot slip through', () => {
+    // "does" stemmed first would become "do"/"doe" and escape the list, and a
+    // query of nothing but small words would match everything.
+    const state = project([...filler, note('Who does what on the board')]);
+    expect(search(state, 'does')).toEqual([]);
+  });
+
+  it('leaves the project vocabulary alone: identifiers are not words', () => {
+    const state = project([
+      ...filler,
+      note('blocked_by is a list of task ULIDs'),
+      note('A blocked task waits for another'),
+    ]);
+    const hits = search(state, 'blocked_by');
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.title).toMatch(/blocked_by/);
+  });
+
+  it('still quotes the word as written, not its stem', () => {
+    const state = project([...filler, doc('Branches', '# Branches\n\nTwo branches merge their labels as deltas.')]);
+    expect(search(state, 'merging')[0]!.span.text).toMatch(/merge/);
+  });
+});
+
+describe('two thresholds: what ranks, and when to say nothing (KAD-69)', () => {
+  /**
+   * One gate did two jobs. At 0.35 of the question it refused nonsense — and
+   * cut real answers that hold a smaller share of a long question: top 3 fell
+   * from 80 to 66 of 100 on a scratch copy. Ranking now admits anything that
+   * holds a tenth of the question; whether to answer at all is still decided
+   * at 0.35, by the best hit. Nonsense still gets nothing (DEC-30).
+   */
+  const corpus = () =>
+    project([
+      note('The board renders its own columns'),
+      note('Tests need a git identity'),
+      note('A note is read to catch up on what changed'),
+      note('Sprints are optional'),
+      doc('Ledger', '# Ledger\n\nThe ledger reconcile step runs nightly.'),
+      doc('Tolerance', '# Tolerance\n\nA tolerance of one cent is allowed.'),
+      doc('Snapshot', '# Snapshot\n\nA snapshot is written after every fold.'),
+    ]);
+
+  it('ranks a record holding a quarter of the question below the one holding half', () => {
+    const hits = search(corpus(), 'ledger reconcile tolerance snapshot');
+    expect(hits[0]!.title).toBe('Ledger');
+    expect(hits.map((h) => h.title)).toContain('Tolerance');
+  });
+
+  it('says nothing when even the best record holds too little of the question', () => {
+    expect(search(corpus(), 'ledger kubernetes ingress webpack')).toEqual([]);
+  });
+
+  it('keeps the strict share for filtering, where a loose match is a wrong row', () => {
+    // `task list --search` uses every: a task holding a quarter of the words
+    // is not a task about them.
+    const titles = search(corpus(), 'ledger reconcile tolerance snapshot', { every: true }).map((h) => h.title);
+    expect(titles).toEqual(['Ledger']);
+  });
+});

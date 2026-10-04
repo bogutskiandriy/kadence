@@ -142,6 +142,12 @@ git commit -m "Keep the team's work next to the code"
 kadence never commits for you. Once that commit is pushed, the journal is the
 team's, not yours.
 
+**If the repository is public**, add the topic `kadence-journal` to it
+(the gear next to *About* on GitHub, or
+`gh repo edit --add-topic kadence-journal`). kadence sends nothing anywhere,
+so a topic you choose to show is the only way anyone, us included, can tell
+it is in use.
+
 ### Adding a teammate
 
 1. **They install it:** `npm install -g kadence` (Node 20 or newer). Nothing is

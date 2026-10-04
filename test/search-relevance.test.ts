@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { loadOrBuild } from '../src/core/snapshot.js';
-import { search } from '../src/core/search.js';
+import { search, searchAll } from '../src/core/search.js';
+import { readAll } from '../src/core/store.js';
+import { project, type ProjectState } from '../src/core/projection.js';
+import type { FlowEvent } from '../src/core/event.js';
 
 /**
  * Does search answer the questions people actually ask?
@@ -42,6 +46,31 @@ const RECALL_FLOOR = 0.56;
 /** The corpus this set was written against. Far below it, the answers are meaningless. */
 const CORPUS_FLOOR = 50;
 
+/**
+ * The benchmark reads the journal as it stood at this event, not as it stands.
+ *
+ * Measured live, the number measured what we wrote about search: DEC-28 and the
+ * notes on the search work quote the golden questions word for word, and began
+ * to outrank the records that answer them (plan-search-quality, Phase 0). So the
+ * floor is held on a frozen corpus — every event up to and including this ULID,
+ * which was the last one on main when it was pinned — and the live journal is
+ * still searched, as a drift alarm that reports and does not decide.
+ *
+ * Ordering is by ULID (I2), so "up to" is the same set on every machine. Re-pin
+ * deliberately, with the numbers before and after in the commit, never to make
+ * a red run green.
+ */
+const PINNED = '01M3XZ6NSCHCD22JHHR40GZ1ZZ';
+/** How many events the pin holds. A different count means the corpus moved under the pin. */
+const PINNED_EVENTS = 1124;
+/** Measured on the frozen corpus when it was pinned: 19/25. Two questions of margin, as above. */
+const FROZEN_FLOOR = 0.68;
+
+/** The journal as it stood at the pin. Anything written later cannot move the benchmark. */
+function frozen(events: readonly FlowEvent[]): FlowEvent[] {
+  return events.filter((e) => e.id <= PINNED);
+}
+
 interface Question {
   query: string;
   /**
@@ -68,7 +97,10 @@ const QUESTIONS: readonly Question[] = [
   { query: 'how are labels assigned and why can they shift', expect: 'invariants' },
   { query: 'what is the performance budget', expect: 'Product Requirements Document' },
   { query: 'why is the core synchronous', expect: 'Synchronous I/O' },
-  { query: 'how does compaction work', expect: 'compaction' },
+  // Once expected anything titled "compaction", which no record answering the
+  // question carried — the hits were notes quoting the question. DEC-46 is the
+  // record that says what compaction does to reads and why it is the remedy.
+  { query: 'how does compaction work', expect: 'Reads after a write stay fast through compaction' },
   { query: 'what does the agent contract promise', expect: 'agent contract' },
   { query: 'why are decisions superseded rather than edited', expect: 'Decisions as events' },
 
@@ -96,26 +128,150 @@ const found = (hits: ReturnType<typeof search>, want: Question['expect']): boole
     .some((h) => wanted.some((w) => h.title.toLowerCase().includes(w.toLowerCase())));
 };
 
-describe('relevance against the real journal', () => {
+/** Recall@3 over the golden set, and the questions it missed. */
+function golden(state: ProjectState): { recall: number; missed: string[] } {
+  const missed: string[] = [];
+  for (const q of QUESTIONS) {
+    if (!found(search(state, q.query), q.expect)) missed.push(`${q.query}  →  expected "${[q.expect].flat().join(' | ')}"`);
+  }
+  return { recall: (QUESTIONS.length - missed.length) / QUESTIONS.length, missed };
+}
+
+function report(name: string, corpus: number, r: { recall: number; missed: string[] }): void {
+  // eslint-disable-next-line no-console
+  console.log(
+    `  ${name} recall@3: ${r.recall.toFixed(2)} (${QUESTIONS.length - r.missed.length}/${QUESTIONS.length}) over ${corpus} documents` +
+      (r.missed.length > 0 ? `\n  missed:\n    ${r.missed.join('\n    ')}` : ''),
+  );
+}
+
+describe('relevance on the frozen corpus', () => {
+  const all = readAll(process.cwd()).events;
+  const events = frozen(all);
+  const state = project(events);
+  // A clone made before the pin existed, or a fixture-only checkout, has nothing to rank.
+  const pinned = all.some((e) => e.id === PINNED);
+
+  it.runIf(pinned)('holds exactly the events it was pinned with', () => {
+    // An older event merged in from a branch lands below the pin and moves the
+    // corpus. That is a reason to re-pin on purpose, not to read a new number.
+    expect(events.length).toBe(PINNED_EVENTS);
+  });
+
+  it.runIf(pinned)(
+    `answers at least ${Math.round(FROZEN_FLOOR * 100)}% of real questions in the top three`,
+    () => {
+      const r = golden(state);
+      report('frozen', state.documents.length, r);
+      expect(r.recall).toBeGreaterThanOrEqual(FROZEN_FLOOR);
+    },
+  );
+
+  it.runIf(pinned)('does not move when a note quoting every golden question is written after the pin', () => {
+    // What happened to the live number: the notes about search quoted the
+    // questions and outranked the answers. Written after the pin, they cannot.
+    const quoting: FlowEvent = {
+      id: '7ZZZZZZZZZZZZZZZZZZZZZZZZZ',
+      type: 'note.recorded',
+      entity: '7ZZZZZZZZZZZZZZZZZZZZZZZZZ',
+      actor: 'bench@example.com',
+      ts: '2099-01-01T00:00:00.000Z',
+      source: 'agent',
+      data: { text: QUESTIONS.map((q) => q.query).join('. ') },
+    };
+    expect(golden(project(frozen([...all, quoting]))).recall).toBe(golden(state).recall);
+  });
+});
+
+/**
+ * Fifty questions nobody tunes against (KAD-68).
+ *
+ * The golden set is small and known: every change to ranking is tried against
+ * it, so it slowly stops measuring anything but itself. These were written by
+ * an agent that saw the records and never the engine; the phrasings beside
+ * each by a second agent that saw only the question, as a caller does before
+ * it searches. The numbers are printed and never asserted: a floor here would
+ * be one more thing to tune to.
+ */
+interface HeldOut {
+  query: string;
+  /** ULIDs of the records that answer it. Stable, unlike KAD-N (I7). */
+  targets: readonly string[];
+  kind: string;
+  phrasings: readonly string[];
+}
+
+const HELD_OUT = JSON.parse(
+  readFileSync(new URL('./fixtures/search-heldout.json', import.meta.url), 'utf8'),
+) as HeldOut[];
+
+/** Where the first target lands among the hits, 1-based, or null when it is not there. */
+function rankOf(hits: ReturnType<typeof search>, targets: readonly string[]): number | null {
+  const i = hits.findIndex((h) => targets.includes(h.id));
+  return i === -1 ? null : i + 1;
+}
+
+describe('held-out questions on the frozen corpus — reported, never a floor', () => {
+  const all = readAll(process.cwd()).events;
+  const state = project(frozen(all));
+  const pinned = all.some((e) => e.id === PINNED);
+  const ids = new Set<string>([
+    ...state.tasks.map((t) => t.id),
+    ...state.decisions.map((d) => d.id),
+    ...state.documents.map((d) => d.id),
+    ...state.notes.map((n) => n.id),
+  ]);
+
+  it('is fifty questions, each with three phrasings', () => {
+    expect(HELD_OUT).toHaveLength(50);
+    for (const q of HELD_OUT) {
+      expect(q.phrasings, q.query).toHaveLength(3);
+      expect(q.targets.length, q.query).toBeGreaterThan(0);
+    }
+  });
+
+  it('shares no question with the golden set', () => {
+    const golden = new Set(QUESTIONS.map((q) => q.query.toLowerCase()));
+    expect(HELD_OUT.filter((q) => golden.has(q.query.toLowerCase()))).toEqual([]);
+  });
+
+  it.runIf(pinned)('points every question at a record inside the frozen corpus', () => {
+    expect(HELD_OUT.flatMap((q) => q.targets).filter((id) => !ids.has(id))).toEqual([]);
+  });
+
+  // A hundred searches, half of them four phrasings fused: past the harness's
+  // default five seconds on a busy machine, as the budget test above was. The
+  // limit only has to be longer than the loop; nothing here is asserted on time.
+  it.runIf(pinned)('prints where the answers land, asked once and asked four ways', () => {
+    const line = (name: string, ask: (q: HeldOut) => ReturnType<typeof search>): string => {
+      const answers = HELD_OUT.map((q) => ask(q));
+      const ranks = answers.map((hits, i) => rankOf(hits, HELD_OUT[i]!.targets));
+      const within = (n: number): number => ranks.filter((r) => r !== null && r <= n).length;
+      const silent = answers.filter((hits) => hits.length === 0).length;
+      return `  held-out ${name} (${HELD_OUT.length}): top-1 ${within(1)}, top-3 ${within(3)}, top-5 ${within(5)}, silent ${silent}`;
+    };
+    // eslint-disable-next-line no-console
+    console.log(
+      [
+        line('question', (q) => search(state, q.query, { limit: 5 })),
+        // The question with its three blind phrasings, as `search --also` fuses them (KAD-70).
+        line('+ phrasings', (q) => searchAll(state, [q.query, ...q.phrasings], { limit: 5 })),
+      ].join('\n'),
+    );
+    expect(HELD_OUT.length).toBe(50);
+  }, 60_000);
+});
+
+describe('relevance against the live journal — a drift alarm', () => {
   const { state } = loadOrBuild(process.cwd());
   const corpus = state.documents.length;
 
   it.runIf(corpus >= CORPUS_FLOOR)(
     `answers at least ${Math.round(RECALL_FLOOR * 100)}% of real questions in the top three`,
     () => {
-      const missed: string[] = [];
-      for (const q of QUESTIONS) {
-        if (!found(search(state, q.query), q.expect)) missed.push(`${q.query}  →  expected "${[q.expect].flat().join(" | ")}"`);
-      }
-      const recall = (QUESTIONS.length - missed.length) / QUESTIONS.length;
-
-      // eslint-disable-next-line no-console
-      console.log(
-        `  recall@3: ${recall.toFixed(2)} (${QUESTIONS.length - missed.length}/${QUESTIONS.length}) over ${corpus} documents` +
-          (missed.length > 0 ? `\n  missed:\n    ${missed.join('\n    ')}` : ''),
-      );
-
-      expect(recall).toBeGreaterThanOrEqual(RECALL_FLOOR);
+      const r = golden(state);
+      report('live', corpus, r);
+      expect(r.recall).toBeGreaterThanOrEqual(RECALL_FLOOR);
     },
   );
 

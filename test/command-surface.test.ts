@@ -66,9 +66,9 @@ describe('kadence --help', () => {
 describe('schema --json names every shipped command', () => {
   /**
    * Actions no error can list: `note` takes free text, so an unknown word is a
-   * note and not a mistake. Its summary names `note list` instead.
+   * note and not a mistake. Its summary names `note list` and `note show`.
    */
-  const ACTIONS_NO_ERROR_CAN_LIST: Record<string, string[]> = { note: ['list'] };
+  const ACTIONS_NO_ERROR_CAN_LIST: Record<string, string[]> = { note: ['list', 'show'] };
 
   /**
    * The actions of a command, as the command itself states them.

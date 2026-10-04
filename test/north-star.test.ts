@@ -230,3 +230,23 @@ describe('north-star --append', () => {
     expect(existsSync(log)).toBe(false);
   });
 });
+
+describe('the topic the count can see (KAD-64)', () => {
+  // Code search does not index every repository — it found nothing for this
+  // one (DOC-53). A topic is what a user chooses to show, and kadence sends
+  // nothing, so it is the only adoption signal there is. The README asks for
+  // it and the script counts it; if the two drift apart, the count is
+  // silently zero.
+  const TOPIC = 'kadence-journal';
+
+  it('the README asks public repositories to add it', () => {
+    const readme = readFileSync(resolve('README.md'), 'utf8');
+    expect(readme).toContain(`\`${TOPIC}\``);
+  });
+
+  it('the weekly search counts repositories carrying it', () => {
+    const script = readFileSync(SCRIPT, 'utf8');
+    expect(script).toContain(`const TOPIC = '${TOPIC}'`);
+    expect(script).toContain('topic:${TOPIC}');
+  });
+});

@@ -25,6 +25,7 @@ import {
   type Priority,
 } from '../../core/projection.js';
 import { loadOrBuild } from '../../core/snapshot.js';
+import { outran } from '../../core/staleness.js';
 import { renderTaskTable, renderTaskTree, renderTaskDetail, colorsEnabled, describeMerge, page, pageNote } from '../output.js';
 import {
   matchTasks,
@@ -839,11 +840,20 @@ export function runTaskShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): C
       bytes: Buffer.byteLength(d.body, 'utf8'),
       updatedAt: d.updatedAt,
       conflicted: d.conflicts.length > 0,
+      // The task closed after the revision shown: what the document says may
+      // describe the work before it changed (KAD-67). Cleared by a revision.
+      stale: outran(d, task),
     }));
   const docLines =
     documentation.length === 0
       ? ''
-      : `\n\nDocumentation:\n${documentation.map((d) => `  ${d.label}  ${d.title}   kadence doc show ${d.label}`).join('\n')}`;
+      : `\n\nDocumentation:\n${documentation
+          .map(
+            (d) =>
+              `  ${d.label}  ${d.title}   kadence doc show ${d.label}` +
+              (d.stale ? `\n    older than this task's close: last revised ${d.updatedAt.slice(0, 10)}` : ''),
+          )
+          .join('\n')}`;
 
   return {
     ok: true,

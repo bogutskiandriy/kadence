@@ -142,6 +142,21 @@ const TAIL_SHARE = 0.2;
  */
 const COVERAGE = 0.35;
 
+/**
+ * How much of the question a record must hold to be ranked at all (KAD-69).
+ *
+ * COVERAGE did two jobs: refusing nonsense, and deciding what may rank. The
+ * second cost real answers — a section holding two of six words of a long
+ * question was cut before it could be scored: on a scratch copy over 100
+ * questions, top three fell from 80 to 66 with the gate at 0.35. So the gate is
+ * split. A record is ranked when it holds a tenth of the question; the search
+ * answers only when its best record holds COVERAGE, and otherwise says
+ * nothing, which is what keeps "kubernetes ingress controller annotations"
+ * empty (DEC-30). A filter (`every`) keeps COVERAGE for every row: a task
+ * holding a tenth of the words is not a task about them.
+ */
+const RANK_COVERAGE = 0.1;
+
 /** Unicode category Cc: every line break and every escape. */
 const CONTROL = /\p{Cc}/gu;
 
@@ -156,6 +171,49 @@ function tokenize(text: string): string[] {
   // Ends on a letter or digit: `.` inside a token keeps `state.json` whole, and
   // at its end it is a full stop — kept, it hid the last word of every sentence.
   return text.toLowerCase().match(/[\p{L}\p{N}](?:[\p{L}\p{N}_.-]*[\p{L}\p{N}])?/gu) ?? [];
+}
+
+/**
+ * Plurals, -ed and -ing folded onto the word they came from (KAD-69).
+ *
+ * "claims", "claimed" and "claim" are one word to the person asking, and the
+ * record that answers rarely uses the form the question did. Measured on a
+ * scratch copy over 100 questions: first place 37 → 43, top five 56 → 68.
+ *
+ * Deliberately light — a few suffixes and a trailing `e`, applied the same way
+ * to the index and to the query, so `merge`, `merged` and `merging` all meet at
+ * `merg`. Not Porter: its later steps fold "general" into "gener" and
+ * "university" into "univers", trading the precision a lexical search lives on
+ * for recall a calling agent can supply with a second phrasing. A token that is
+ * not plain letters — `KAD-42`, `state.json`, `blocked_by` — is the project's
+ * vocabulary, not English, and is left exactly as written.
+ */
+function stem(token: string): string {
+  if (token.length <= 3 || !/^\p{Ll}+$/u.test(token)) return token;
+  let w = token;
+  if (w.endsWith('ies') && w.length > 4) w = `${w.slice(0, -3)}y`;
+  else if (w.endsWith('sses')) w = w.slice(0, -2);
+  else if (w.endsWith('s') && !w.endsWith('ss') && !w.endsWith('us') && !w.endsWith('is')) w = w.slice(0, -1);
+
+  let cut = false;
+  if (w.endsWith('ing') && w.length - 3 >= 3) {
+    w = w.slice(0, -3);
+    cut = true;
+  } else if (w.endsWith('ied') && w.length > 4) {
+    w = `${w.slice(0, -3)}y`;
+  } else if (w.endsWith('ed') && w.length - 2 >= 3) {
+    w = w.slice(0, -2);
+    cut = true;
+  }
+  // running → runn → run; but not "fall" → "fal" or "pass" → "pas".
+  if (cut && w.length > 3 && w.at(-1) === w.at(-2) && !'aeioulsz'.includes(w.at(-1)!)) w = w.slice(0, -1);
+  if (w.endsWith('e') && w.length >= 4) w = w.slice(0, -1);
+  return w;
+}
+
+/** The terms of a text as the index sees them: tokens, stemmed. */
+function termsOf(text: string): string[] {
+  return tokenize(text).map(stem);
 }
 
 /** One line, no controls: what a span may be cut from. */
@@ -391,15 +449,15 @@ function build(corpus: readonly Unit[], terms: ReadonlySet<string>): Index {
     let size = 0;
 
     // Weighted without being walked more than once.
-    for (const term of tokenize(corpus[i]!.heading)) {
+    for (const term of termsOf(corpus[i]!.heading)) {
       size += HEADING_WEIGHT;
       if (terms.has(term)) counts.set(term, (counts.get(term) ?? 0) + HEADING_WEIGHT);
     }
-    for (const term of tokenize(corpus[i]!.subject)) {
+    for (const term of termsOf(corpus[i]!.subject)) {
       size += SUBJECT_WEIGHT;
       if (terms.has(term)) counts.set(term, (counts.get(term) ?? 0) + SUBJECT_WEIGHT);
     }
-    for (const term of tokenize(corpus[i]!.text)) {
+    for (const term of termsOf(corpus[i]!.text)) {
       size += 1;
       if (terms.has(term)) counts.set(term, (counts.get(term) ?? 0) + 1);
     }
@@ -421,9 +479,10 @@ function build(corpus: readonly Unit[], terms: ReadonlySet<string>): Index {
  * stripping it to nothing would be a worse answer than a poor one.
  */
 function queryTerms(query: string): string[] {
-  const all = tokenize(query);
-  const content = all.filter((t) => !STOPWORDS.has(t));
-  return content.length > 0 ? content : [];
+  // Stopwords first: "does" stemmed would become "do" and slip past the list.
+  return tokenize(query)
+    .filter((t) => !STOPWORDS.has(t))
+    .map(stem);
 }
 
 /**
@@ -456,6 +515,68 @@ function spanOf(text: string, terms: readonly string[]): { text: string; start: 
     if (space > start) end = space;
   }
   return { text: line.slice(start, end), start, end };
+}
+
+/**
+ * Reciprocal rank fusion's constant: 60, as in Cormack et al. (2009).
+ *
+ * It flattens the top of each list so that a passage two phrasings agree on
+ * outranks one that only a single phrasing put first. Not tuned here.
+ */
+const RRF_K = 60;
+/** How deep each phrasing is read before fusing. Twice what one answer shows. */
+const FUSE_DEPTH = 10;
+
+/**
+ * Several phrasings of one question, one answer (KAD-70).
+ *
+ * A lexical search cannot bridge "website" and "landing page"; the agent that
+ * calls it can, by writing the question two or three ways in the project's
+ * words. Each phrasing is searched on its own — with its own decision to say
+ * nothing — and the lists are fused by reciprocal rank, so a passage several
+ * phrasings found rises and each passage comes back once. kadence stays
+ * lexical: the vocabulary comes from the caller (tasks/plan-search-quality.md,
+ * Phase 2).
+ *
+ * The phrasings are a set: the order they came in changes nothing, so a caller
+ * that leads with its own wording gets the same journal back. The hit carried
+ * is the one from the phrasing that ranked it highest — its span and coverage
+ * are that phrasing's.
+ */
+export function searchAll(
+  state: ProjectState,
+  queries: readonly string[],
+  options: SearchOptions = {},
+): SearchHit[] {
+  const asked = [...new Set(queries.map((q) => q.trim()).filter((q) => q.length > 0))].sort();
+  if (asked.length === 0) return [];
+  if (asked.length === 1) return search(state, asked[0]!, options);
+
+  // One pass over the corpus for every phrasing: tokenizing it is the cost of a
+  // search, and four phrasings must not cost four of them (measured 261 ms
+  // against 66 for one, before this).
+  const corpus = corpusFor(state, options);
+  if (corpus.length === 0) return [];
+  const termsOfQuery = asked.map(queryTerms);
+  const index = build(corpus, new Set(termsOfQuery.flat()));
+
+  const fused = new Map<string, { hit: SearchHit; rank: number; fusion: number }>();
+  for (const terms of termsOfQuery) {
+    if (terms.length === 0) continue;
+    const hits = answer(corpus, index, terms, { ...options, limit: Math.max(FUSE_DEPTH, options.limit ?? 0) });
+    hits.forEach((hit, i) => {
+      const key = hit.lines === null ? hit.id : `${hit.id}:${hit.lines.from}`;
+      const seen = fused.get(key);
+      const fusion = (seen?.fusion ?? 0) + 1 / (RRF_K + i + 1);
+      const better = seen === undefined || i < seen.rank || (i === seen.rank && hit.coverage > seen.hit.coverage);
+      fused.set(key, { hit: better ? hit : seen.hit, rank: better ? i : seen.rank, fusion });
+    });
+  }
+
+  return [...fused.entries()]
+    .sort(([ka, a], [kb, b]) => b.fusion - a.fusion || (ka < kb ? -1 : ka > kb ? 1 : 0))
+    .slice(0, options.limit ?? DEFAULT_SEARCH_LIMIT)
+    .map(([, v]) => v.hit);
 }
 
 /** A decision whose rejected alternative is what the question proposes. */
@@ -510,7 +631,7 @@ export function rejectedMatches(state: ProjectState, query: string): RejectedMat
   if (asked === 0) return [];
 
   const share = (text: string): number => {
-    const present = new Set(tokenize(text));
+    const present = new Set(termsOf(text));
     let carried = 0;
     for (const [term, w] of idf) if (present.has(term)) carried += w;
     return carried / asked;
@@ -540,10 +661,10 @@ export function rejectedMatches(state: ProjectState, query: string): RejectedMat
  * them wronger. The generality went with it.
  */
 function rank(
-  corpus: readonly Unit[],
+  index: Index,
   terms: ReadonlySet<string>,
+  floor: number = COVERAGE,
 ): Map<number, { score: number; coverage: number }> {
-  const index = build(corpus, terms);
   const idfOf = (term: string): number => {
     // A term the journal has never seen scores as the rarest thing there is,
     // which is what makes its absence count against a result.
@@ -555,7 +676,7 @@ function rank(
   for (const weight of idf.values()) asked += weight;
 
   const scores = new Map<number, { score: number; coverage: number }>();
-  for (let i = 0; i < corpus.length; i++) {
+  for (let i = 0; i < index.count; i++) {
     const counts = index.frequency[i]!;
     if (counts.size === 0) continue;
 
@@ -563,13 +684,16 @@ function rank(
     let score = 0;
     let carried = 0;
     for (const [term, f] of counts) {
-      const weight = idf.get(term)!;
+      // Only this question's terms: the index may have been built for several.
+      const weight = idf.get(term);
+      if (weight === undefined) continue;
       score += (weight * (f * (K1 + 1))) / (f + K1 * norm);
       carried += weight;
     }
+    if (carried === 0) continue;
     // Enough of the question has to be present, weighted by how rare its words
     // are: see COVERAGE.
-    if (carried >= asked * COVERAGE) scores.set(i, { score, coverage: asked === 0 ? 1 : carried / asked });
+    if (carried >= asked * floor) scores.set(i, { score, coverage: asked === 0 ? 1 : carried / asked });
   }
 
   return scores;
@@ -582,19 +706,37 @@ export function search(
 ): SearchHit[] {
   const terms = queryTerms(query);
   if (terms.length === 0) return [];
-
-  const wanted = options.kinds === undefined ? null : new Set<SearchKind>(options.kinds);
-  const corpus = units(state).filter(
-    (u) =>
-      (wanted === null || wanted.has(u.kind)) && (options.all === true || !u.superseded),
-  );
+  const corpus = corpusFor(state, options);
   if (corpus.length === 0) return [];
+  return answer(corpus, build(corpus, new Set(terms)), terms, options);
+}
 
+/** The units a search may return: narrowed by kind, superseded decisions left out unless asked. */
+function corpusFor(state: ProjectState, options: SearchOptions): Unit[] {
+  const wanted = options.kinds === undefined ? null : new Set<SearchKind>(options.kinds);
+  return units(state).filter(
+    (u) => (wanted === null || wanted.has(u.kind)) && (options.all === true || !u.superseded),
+  );
+}
+
+/**
+ * One question's answer over an index already built.
+ *
+ * The index may hold more terms than this question asks about — `searchAll`
+ * builds one for every phrasing at once — and that changes no score: document
+ * frequency and term counts are per term, and lengths count every token.
+ */
+function answer(corpus: readonly Unit[], index: Index, terms: readonly string[], options: SearchOptions): SearchHit[] {
   // Distinct terms, so repeating a word in the query cannot pass for covering
   // the question twice.
   const distinct = new Set(terms);
-  const scores = rank(corpus, distinct);
+  const every = options.every === true;
+  const scores = rank(index, distinct, every ? COVERAGE : RANK_COVERAGE);
   if (scores.size === 0) return [];
+  // Whether to answer at all is decided by the best record, at the old gate.
+  let held = 0;
+  for (const r of scores.values()) if (r.coverage > held) held = r.coverage;
+  if (held < COVERAGE) return [];
 
   const ranked = [...scores.entries()].sort((a, b) => {
     if (b[1].score !== a[1].score) return b[1].score - a[1].score;
@@ -604,10 +746,9 @@ export function search(
     return corpus[a[0]]!.id < corpus[b[0]]!.id ? -1 : 1;
   });
 
-
   const best = ranked[0]![1].score;
-  const limit = options.every === true ? ranked.length : (options.limit ?? DEFAULT_SEARCH_LIMIT);
-  const floor = options.every === true ? 0 : best * TAIL_SHARE;
+  const limit = every ? ranked.length : (options.limit ?? DEFAULT_SEARCH_LIMIT);
+  const floor = every ? 0 : best * TAIL_SHARE;
 
   return ranked
     .filter(([, r]) => r.score >= floor)

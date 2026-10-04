@@ -142,6 +142,16 @@ describe('what the instruction files tell an agent', () => {
     }
   });
 
+  it('tell agents to search in two or three phrasings at once', () => {
+    // A lexical search cannot bridge "website" and "landing page"; the agent
+    // can. On 50 held-out questions the question plus three phrasings took
+    // first place from 26 to 30 and left none unanswered (KAD-70).
+    runInit(dir);
+    for (const file of ['AGENTS.md', 'CLAUDE.md', join('.kadence', 'README.md')]) {
+      expect(readFileSync(join(dir, file), 'utf8'), file).toMatch(/--also/);
+    }
+  });
+
   it('list the ways to look something up cheapest first, with what each costs', () => {
     // Measured on 75 questions over this repository's journal (KAD-55): an
     // agent that knows the order stops at the first rung that answers.

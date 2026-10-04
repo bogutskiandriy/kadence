@@ -215,6 +215,32 @@ describe('decisions are reachable and published', () => {
     expect(names).toContain('task doc');
   });
 
+  it('opens a note by its ULID through the binary, and publishes the command', () => {
+    const added = json(['note', 'Tests need a git identity', '--json']);
+    const shown = run(['note', 'show', added.note.id, '--json']);
+    expect(shown.code, shown.stderr).toBe(0);
+    expect(JSON.parse(shown.stdout).note.text).toBe('Tests need a git identity');
+
+    const names = json(['schema', '--json']).contract.commands.map((c: { name: string }) => c.name);
+    expect(names).toContain('note show');
+    expect(json(['schema', '--json']).contract.errors.map((e: { code: string }) => e.code)).toContain('note_not_found');
+  });
+
+  it('opens one section of a document through the binary', () => {
+    run(['doc', 'add', 'Runbook', '--body', '# Runbook\n\n## Staging\n\nNeeds the VPN.\n\n## Production\n\nTwo approvals.', '--json']);
+    const shown = run(['doc', 'show', 'DOC-1:3-6', '--json']);
+    expect(shown.code, shown.stderr).toBe(0);
+    const doc = JSON.parse(shown.stdout).document;
+    expect(doc.body).toBe('## Staging\n\nNeeds the VPN.\n');
+    expect(doc.section).toEqual({ from: 3, to: 6, lines: 9 });
+  });
+
+  it('asks which note when note show has no ULID', () => {
+    const r = run(['note', 'show', '--json']);
+    expect(r.code).toBe(2);
+    expect(JSON.parse(r.stdout).error.code).toBe('invalid_argument');
+  });
+
   it('publishes the decision shape, so an agent knows what comes back', () => {
     const shapes = json(['schema', '--json']).contract.shapes;
     expect(shapes.decision.required).toContain('why');

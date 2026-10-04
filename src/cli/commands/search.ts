@@ -1,5 +1,5 @@
 import {
-  search,
+  searchAll,
   SEARCH_KINDS,
   DEFAULT_SEARCH_LIMIT,
   PARTIAL_COVERAGE,
@@ -34,6 +34,8 @@ export interface SearchOptions {
   limit?: number;
   /** Include superseded decisions. */
   all?: boolean;
+  /** More phrasings of the same question, fused with it (KAD-70). */
+  also?: readonly string[];
   json?: boolean;
 }
 
@@ -62,7 +64,7 @@ function reference(hit: SearchHit): string {
   return hit.lines === null ? base : `${base}:${hit.lines.from}-${hit.lines.to}`;
 }
 
-function render(hits: readonly SearchHit[], query: string): string {
+function render(hits: readonly SearchHit[], query: string, also: number): string {
   const width = Math.max(...hits.map((h) => reference(h).length));
   const lines = hits.flatMap((hit) => [
     `${reference(hit).padEnd(width)}  [${hit.kind}] ${hit.title}` +
@@ -75,7 +77,8 @@ function render(hits: readonly SearchHit[], query: string): string {
   // first result is exactly the reader who needs to know it is a partial one.
   const weak = hits[0]!.coverage < PARTIAL_COVERAGE;
   return [
-    `${hits.length} result${hits.length === 1 ? '' : 's'} for "${query}"`,
+    `${hits.length} result${hits.length === 1 ? '' : 's'} for "${query}"` +
+      (also === 0 ? '' : ` and ${also} other phrasing${also === 1 ? '' : 's'}`),
     '',
     ...lines,
     ...(weak
@@ -127,8 +130,9 @@ export function runSearch(
   const { kinds, error } = parseKinds(options.kind);
   if (error !== null) return error;
 
+  const also = (options.also ?? []).map((p) => p.trim()).filter((p) => p.length > 0);
   const { state, warnings } = loadState(ctx.root, ctx.actor);
-  const hits = search(state, query, {
+  const hits = searchAll(state, [query, ...also], {
     ...(kinds === null ? {} : { kinds }),
     ...(options.limit === undefined ? {} : { limit: options.limit }),
     ...(options.all === true ? { all: true } : {}),
@@ -138,11 +142,13 @@ export function runSearch(
     ok: true,
     exitCode: 0,
     warnings,
-    message: hits.length === 0 ? nothing(query, kinds !== null) : render(hits, query),
+    message: hits.length === 0 ? nothing(query, kinds !== null) : render(hits, query, also.length),
     data: {
       schema: 'kadence/v1',
       ok: true,
       query,
+      // Always present: the phrasings that were fused with the question.
+      also,
       hits,
       // Present even when empty, so an agent branches on a number rather than
       // on whether a key exists.

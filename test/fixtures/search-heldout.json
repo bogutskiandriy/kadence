@@ -1,0 +1,654 @@
+[
+  {
+    "query": "When a choice is reversed, how does the old record get flagged?",
+    "targets": [
+      "01M20V6SFTBNX6EQ9S42KT7SQE"
+    ],
+    "kind": "decision",
+    "why": "new event carries supersedes; backward link derived while folding",
+    "phrasings": [
+      "decision superseded status marker",
+      "supersede revoke decision replaced by",
+      "reverse decision old record deprecated"
+    ]
+  },
+  {
+    "query": "Why are replaced choices missing from the default listing?",
+    "targets": [
+      "01M20V6ZS41TZ9W8BW95SGK6X5"
+    ],
+    "kind": "decision",
+    "why": "safe default hides reversed reasons; history behind --all",
+    "phrasings": [
+      "superseded decisions hidden decision list",
+      "decision list filter active only",
+      "show superseded flag --all decisions"
+    ]
+  },
+  {
+    "query": "Why is the generated command catalogue left out of the npm tarball?",
+    "targets": [
+      "01M2DZHJ3ESZA4XP1FS5HP1M1B"
+    ],
+    "kind": "decision",
+    "why": "reference.json costs 8x the generator; only the site consumes it",
+    "phrasings": [
+      "reference.json excluded package files",
+      "npm pack files whitelist dist reference",
+      "publish tarball size generated docs"
+    ]
+  },
+  {
+    "query": "Which typeface sets the product name next to the logo mark?",
+    "targets": [
+      "01M2FQE3YP0RBQRRC3RKGZEJNK"
+    ],
+    "kind": "decision",
+    "why": "wordmark in Fraunces serif, mono rejected",
+    "phrasings": [
+      "logo wordmark font typeface",
+      "brand typography product name lockup",
+      "logo mark wordmark font choice"
+    ]
+  },
+  {
+    "query": "Can we use Chart.js or another library for graphs in exports?",
+    "targets": [
+      "01M2HYWDQK72D0KCB8NKBGCAWN"
+    ],
+    "kind": "decision",
+    "why": "no script tag allowed; hand-written inline SVG instead",
+    "phrasings": [
+      "chart library dependency export html",
+      "graphs SVG render export no dependency",
+      "Chart.js d3 charts report export"
+    ]
+  },
+  {
+    "query": "Why don't we quote a team's mean points per sprint?",
+    "targets": [
+      "01M2HZW6AA7Q2H3RS98FKHWNAW"
+    ],
+    "kind": "decision",
+    "why": "low/median/high range; an average hides spread",
+    "phrasings": [
+      "average velocity misleading points",
+      "mean story points sprint statistic",
+      "velocity median range forecast"
+    ]
+  },
+  {
+    "query": "What happens if I pass --since to report velocity?",
+    "targets": [
+      "01M2HZW6FD2730BFDZ3P4SK5CP"
+    ],
+    "kind": "decision",
+    "why": "a flag that cannot apply is an error, not silently ignored",
+    "phrasings": [
+      "report velocity since flag",
+      "velocity date range filter option",
+      "--since option unknown velocity"
+    ]
+  },
+  {
+    "query": "Is importing a draft from /tmp restricted for security reasons?",
+    "targets": [
+      "01M2TQ8XSXKG21X0DYVF7QR46H"
+    ],
+    "kind": "decision",
+    "why": "--file reads any path; restriction buys no safety since --body exists",
+    "phrasings": [
+      "import file path restriction tmp",
+      "draft import security path traversal",
+      "doc import outside repository directory"
+    ]
+  },
+  {
+    "query": "Should the opening cold outreach message ask for a call slot?",
+    "targets": [
+      "01M2W5GR50SFRGABNXA0CXXSA7"
+    ],
+    "kind": "decision",
+    "why": "first message asks one question, no booking link",
+    "phrasings": [
+      "cold email first message call ask",
+      "outreach opening message meeting request",
+      "cold outreach template no call ask"
+    ]
+  },
+  {
+    "query": "What happens when the same option is passed twice?",
+    "targets": [
+      "01M2W5T0477RG2J3GH52WTFWSA"
+    ],
+    "kind": "decision",
+    "why": "last value wins except for the accumulating flags",
+    "phrasings": [
+      "repeated flag array cac",
+      "duplicate option passed twice",
+      "option repeat last wins array"
+    ]
+  },
+  {
+    "query": "Is it ok to commit files listing developers we contacted?",
+    "targets": [
+      "01M378BK3H9F9JYYYDQM337BYB"
+    ],
+    "kind": "decision",
+    "why": "documents about people stay out of the public repository",
+    "phrasings": [
+      "outreach contacts list gitignore",
+      "commit interview contacts personal data",
+      "developer contact list privacy git"
+    ]
+  },
+  {
+    "query": "Why is a long note cut short in the session-start JSON payload?",
+    "targets": [
+      "01M3BYSQ48V7W6WJ6PCP7MP9A4"
+    ],
+    "kind": "decision",
+    "why": "prime --json caps free text at 2000 chars, reports bytes",
+    "phrasings": [
+      "prime json note truncated length",
+      "session start payload truncation note",
+      "note body cut limit prime"
+    ]
+  },
+  {
+    "query": "Why does the cache key check file sizes, not only names?",
+    "targets": [
+      "01M3C01FJ4V7HEB5EZFKXBCKHJ"
+    ],
+    "kind": "decision",
+    "why": "fingerprint counts bytes so content changes like git checkout invalidate it",
+    "phrasings": [
+      "cache invalidation file size mtime",
+      "state cache key fingerprint size",
+      "snapshot staleness detection file list"
+    ]
+  },
+  {
+    "query": "Why are results capped, and how do I fetch the rest?",
+    "targets": [
+      "01M3C2VRG7WAGKG2BZRZB4XQRM"
+    ],
+    "kind": "decision",
+    "why": "one page of 100 with total and offset; walk with --offset",
+    "phrasings": [
+      "search results limit pagination",
+      "result cap --limit offset more",
+      "truncated results fetch next page"
+    ]
+  },
+  {
+    "query": "Why not use an embedding model for retrieval over the journal?",
+    "targets": [
+      "01M3C4T0QMXGH6ZYSAPNQ7WSFM"
+    ],
+    "kind": "decision",
+    "why": "lexical BM25: model is 200 MB, offline, jargon tokens",
+    "phrasings": [
+      "embeddings vector search rejected",
+      "semantic search model offline retrieval",
+      "BM25 instead of embeddings"
+    ]
+  },
+  {
+    "query": "How does a hit signal that it might be the wrong answer?",
+    "targets": [
+      "01M3CA7QHMXEY04MDF48F9K6H3"
+    ],
+    "kind": "decision",
+    "why": "coverage of the question, not margin over second hit",
+    "phrasings": [
+      "search hit low confidence score",
+      "result relevance warning weak match",
+      "search score threshold ambiguous hit"
+    ]
+  },
+  {
+    "query": "Why wasn't the schema version bumped when defaults changed in 0.7?",
+    "targets": [
+      "01M3CBJTSDVMFEVHGD2HP75HDX"
+    ],
+    "kind": "decision",
+    "why": "a default is not a field; stays on kadence/v1",
+    "phrasings": [
+      "schema version kadence/v1 unchanged",
+      "json contract defaults change no bump",
+      "0.7 schema version compatibility"
+    ]
+  },
+  {
+    "query": "Why is blessed loaded only when the interactive board starts?",
+    "targets": [
+      "01M3PB62S7J7B7CDJE2FFR14FK"
+    ],
+    "kind": "decision",
+    "why": "TUI exempt from 200 ms budget, imported lazily",
+    "phrasings": [
+      "blessed lazy import TUI",
+      "dynamic import startup budget blessed",
+      "board ui deferred load dependency"
+    ]
+  },
+  {
+    "query": "Which argument parser did we pick and why not commander?",
+    "targets": [
+      "01M3CAWG24JH7AECAKDQ60BKHE"
+    ],
+    "kind": "doc",
+    "why": "ADR-004 compares cac, citty, commander by import cost",
+    "phrasings": [
+      "cac argument parser choice",
+      "commander vs cac CLI parser",
+      "CLI parsing library decision"
+    ]
+  },
+  {
+    "query": "Why does 'task log KAD-1 -30m' fail with Unknown option?",
+    "targets": [
+      "01M3CAWG9V0J9BMDCNY6V33N6H"
+    ],
+    "kind": "doc",
+    "why": "cac treats any value with leading - as a flag",
+    "phrasings": [
+      "task log negative duration unknown option",
+      "time log -30m parsed as flag",
+      "dash prefixed argument parse error"
+    ]
+  },
+  {
+    "query": "Should the Next.js marketing site code live in this repo?",
+    "targets": [
+      "01M3CAWGHB853CES7P43J9CM2K"
+    ],
+    "kind": "doc",
+    "why": "ADR-008: landing page fails the reproduce-the-product check",
+    "phrasings": [
+      "marketing site separate repository",
+      "Next.js website repo location",
+      "landing page site monorepo split"
+    ]
+  },
+  {
+    "query": "What logo concepts were considered, and which was recommended?",
+    "targets": [
+      "01M3CAWHCQMYGJD9V2DKAZ0KJM"
+    ],
+    "kind": "doc",
+    "why": "three concepts: repeat sign (recommended), rhythm strokes, technical mono",
+    "phrasings": [
+      "logo concepts options recommendation",
+      "brand mark design alternatives",
+      "logo exploration chosen concept"
+    ]
+  },
+  {
+    "query": "What happens on first init outside a git repository?",
+    "targets": [
+      "01M3CAWHWX956QDNR9NTQ6NAZQ"
+    ],
+    "kind": "doc",
+    "why": "flow 1: error, hint git init, exit 1",
+    "phrasings": [
+      "init without git repository",
+      "kadence init no git warning",
+      "first run outside repo error"
+    ]
+  },
+  {
+    "query": "Which ideas from Beads and Backlog.md do we borrow?",
+    "targets": [
+      "01M3CAWJ4W3CD8CMAA35HE8RB1"
+    ],
+    "kind": "doc",
+    "why": "verdicts per competitor feature, rebuilt our way",
+    "phrasings": [
+      "Beads Backlog.md comparison borrow",
+      "competitor ideas adopted Beads",
+      "Backlog.md features inspiration"
+    ]
+  },
+  {
+    "query": "Why aren't GitHub stars how we measure success?",
+    "targets": [
+      "01M3CAWJG8SKT7F27T58P94TTP"
+    ],
+    "kind": "doc",
+    "why": "stars are a vanity metric, not live repositories",
+    "phrasings": [
+      "GitHub stars vanity metric",
+      "north star metric success measure",
+      "success metric adoption not stars"
+    ]
+  },
+  {
+    "query": "Should we shift the pitch away from sprint analytics toward shared context?",
+    "targets": [
+      "01M3CAWJMARYQT67BWQ0WX2523"
+    ],
+    "kind": "doc",
+    "why": "review of the proposal with options A/B/C and recommendation",
+    "phrasings": [
+      "positioning shared context pivot",
+      "pitch sprint velocity analytics repositioning",
+      "product positioning agent context"
+    ]
+  },
+  {
+    "query": "Why score the backlog by value and effort rather than RICE?",
+    "targets": [
+      "01M3CAWJYYVSST0N1QPV23K0HE"
+    ],
+    "kind": "doc",
+    "why": "RICE needs reach; zero users means invented numbers",
+    "phrasings": [
+      "value effort prioritization RICE",
+      "backlog scoring method choice",
+      "RICE rejected value effort matrix"
+    ]
+  },
+  {
+    "query": "What is the weekly routine: hours, Monday scorecard, ledger?",
+    "targets": [
+      "01M3CAWKK5PGS97A99179ZD25K"
+    ],
+    "kind": "doc",
+    "why": "strategy section 5 operating rhythm",
+    "phrasings": [
+      "weekly cadence scorecard Monday",
+      "hours ledger weekly routine",
+      "weekly review time tracking scorecard"
+    ]
+  },
+  {
+    "query": "How are hours per point worked out when a sprint closes?",
+    "targets": [
+      "01M3CAWKQBNR7GFXV9BF1CCQFJ"
+    ],
+    "kind": "doc",
+    "why": "hours derived from state changes; task log only corrects",
+    "phrasings": [
+      "hours per point sprint close",
+      "sprint close time per story point",
+      "logged hours divided by points"
+    ]
+  },
+  {
+    "query": "Did a fresh Sonnet agent do better with the journal than without?",
+    "targets": [
+      "01M3CAWKVGB1NHTHWC7CG8SAWK",
+      "01M2TRQBZTW0EAZR2BM04PCCP4"
+    ],
+    "kind": "doc",
+    "why": "controlled A/B of cold agents, 13 runs, and its summary note",
+    "phrasings": [
+      "Sonnet agent experiment journal",
+      "agent eval with without journal",
+      "fresh agent context benchmark result"
+    ]
+  },
+  {
+    "query": "How is risk scored for each product assumption?",
+    "targets": [
+      "01M3CAWM46PMDP7E3J1P5Q83KZ"
+    ],
+    "kind": "doc",
+    "why": "Risk = Impact x (1 - Confidence), Torres categories",
+    "phrasings": [
+      "assumption risk scoring",
+      "assumption map impact uncertainty",
+      "riskiest assumption prioritization"
+    ]
+  },
+  {
+    "query": "What loading levels exist for handing context to an AI agent?",
+    "targets": [
+      "01M3CAWMH1YAZ5WJD569SG5ZAV"
+    ],
+    "kind": "doc",
+    "why": "section 1.2 four loading levels",
+    "phrasings": [
+      "context levels agent loading",
+      "progressive disclosure agent context tiers",
+      "prime search show token budget levels"
+    ]
+  },
+  {
+    "query": "How long is each discovery interview and what should we not ask?",
+    "targets": [
+      "01M3CAWNDME74F748PER2P4JJZ"
+    ],
+    "kind": "doc",
+    "why": "45-minute script with phases and a what-not-to-ask section",
+    "phrasings": [
+      "interview length questions avoid",
+      "discovery interview script duration",
+      "customer interview mom test rules"
+    ]
+  },
+  {
+    "query": "Why check merge conflicts through git history before interviewing people?",
+    "targets": [
+      "01M3CAWP2CM44AYV3JF53WRKM1"
+    ],
+    "kind": "doc",
+    "why": "Probe A git archaeology: facts over unreliable memory",
+    "phrasings": [
+      "Probe A git history conflicts",
+      "merge conflict frequency repositories analysis",
+      "conflict data before interviews"
+    ]
+  },
+  {
+    "query": "Does token cost really justify a CLI over an MCP server?",
+    "targets": [
+      "01M3CAWPEQGC6HETDJ10KRWFMP"
+    ],
+    "kind": "doc",
+    "why": "Probe C finding 3: MCP argument does not hold at our size",
+    "phrasings": [
+      "MCP server vs CLI tokens",
+      "token cost CLI MCP comparison",
+      "MCP rejected token overhead"
+    ]
+  },
+  {
+    "query": "How do I ship a new version, and can it be undone?",
+    "targets": [
+      "01M3CBJAB1AT0KXE91J8RAP91Y"
+    ],
+    "kind": "doc",
+    "why": "release is npm publish; 72-hour unpublish window",
+    "phrasings": [
+      "release process npm publish",
+      "release rollback unpublish deprecate",
+      "versioning tag publish steps"
+    ]
+  },
+  {
+    "query": "Can we tell whether a sprint goal was missed or grew?",
+    "targets": [
+      "01M2HYZ7J8963G7CY5PWW6BM4M"
+    ],
+    "kind": "task",
+    "why": "burnup answers what burndown cannot: scope growth",
+    "phrasings": [
+      "sprint goal scope creep",
+      "sprint missed vs scope added",
+      "scope change commitment tracking"
+    ]
+  },
+  {
+    "query": "How do one developer's agents get distinct identities when taking work?",
+    "targets": [
+      "01M2TR2RWHQAMPSD8WDWV83R7X"
+    ],
+    "kind": "task",
+    "why": "KADENCE_ACTOR instead of shared git email",
+    "phrasings": [
+      "agent identity claim multiple agents",
+      "KADENCE_AGENT actor id claim",
+      "parallel agents same developer assignee"
+    ]
+  },
+  {
+    "query": "Why not rebuild the snapshot eagerly right after every write?",
+    "targets": [
+      "01M3C0JXG9AZB7GZTW37XK5NXY"
+    ],
+    "kind": "task",
+    "why": "moves cost to writes; needs apply(state,event) equivalent to fold",
+    "phrasings": [
+      "state.json rebuild lazy",
+      "cache rebuild on read not write",
+      "snapshot eager rebuild cost"
+    ]
+  },
+  {
+    "query": "Why does a query miss a word that ends a sentence?",
+    "targets": [
+      "01M3MMNB3WAKJVB9768Z78EDP7"
+    ],
+    "kind": "task",
+    "why": "tokenizer keeps trailing full stop in the token",
+    "phrasings": [
+      "tokenizer punctuation trailing period",
+      "search tokenization sentence end",
+      "word followed by period not matched"
+    ]
+  },
+  {
+    "query": "Can the hook warn when a prompt revives a turned-down option?",
+    "targets": [
+      "01M3W3JJ1PF9WQYQ2DQ1GK1F2B"
+    ],
+    "kind": "task",
+    "why": "hook says DEC-N rejected this, with the reason",
+    "phrasings": [
+      "prompt hook rejected alternative warning",
+      "hook detect rejected option revival",
+      "UserPromptSubmit decision rejected match"
+    ]
+  },
+  {
+    "query": "Can I open only a handful of lines from a long document?",
+    "targets": [
+      "01M3W3JMPSBCBDSYHAMATMFZZF"
+    ],
+    "kind": "task",
+    "why": "doc show for one section via DOC-31:163-172 reference",
+    "phrasings": [
+      "doc show line range",
+      "doc show --lines excerpt",
+      "partial document read section"
+    ]
+  },
+  {
+    "query": "How would we flag documentation that fell behind finished work?",
+    "targets": [
+      "01M3W3JN6MJD8RG5E4Q3ZBC9CK"
+    ],
+    "kind": "task",
+    "why": "stale signal when linked task done after last revision",
+    "phrasings": [
+      "stale docs detection done tasks",
+      "documentation drift outdated",
+      "doc freshness check finished work"
+    ]
+  },
+  {
+    "query": "What happens at session start on a teammate's machine without the binary?",
+    "targets": [
+      "01M2MR8PFSBYEXSG6T09JJ9VZW"
+    ],
+    "kind": "task",
+    "why": "SessionStart hook prints install hint and exits 0",
+    "phrasings": [
+      "session hook binary missing",
+      "hook kadence not installed teammate",
+      "SessionStart hook command not found"
+    ]
+  },
+  {
+    "query": "Which argument comes first in task block, the blocker or the blocked?",
+    "targets": [
+      "01M2MRACN7X3VRDBZEBQTBE8D7"
+    ],
+    "kind": "note",
+    "why": "order is task block <blocked> <blocker>",
+    "phrasings": [
+      "task block argument order",
+      "blocker blocked argument order",
+      "dependency direction block command"
+    ]
+  },
+  {
+    "query": "Is 'feature' an accepted value for the task type option?",
+    "targets": [
+      "01M2TP57454KBD4E80CCAKJNYS"
+    ],
+    "kind": "note",
+    "why": "types are task, bug, story, epic",
+    "phrasings": [
+      "task type allowed values",
+      "--type feature bug chore",
+      "task type enum validation"
+    ]
+  },
+  {
+    "query": "Why did switching branches wipe ignored folders like docs from disk?",
+    "targets": [
+      "01M37BS616RZFAC7HSQ5DJ8JDC"
+    ],
+    "kind": "note",
+    "why": "still tracked on old branch, so merge applied deletion",
+    "phrasings": [
+      "branch switch deleted ignored files",
+      "git checkout removed untracked docs",
+      "gitignore docs lost branch"
+    ]
+  },
+  {
+    "query": "Can someone's note text inject terminal escape codes into prime?",
+    "targets": [
+      "01M3BXZY51S0V630NR2ANRZFM9"
+    ],
+    "kind": "note",
+    "why": "ANSI escapes passed through; fixed by stripping category Cc",
+    "phrasings": [
+      "ANSI escape sanitization note text",
+      "terminal injection control characters prime",
+      "strip escape codes output"
+    ]
+  },
+  {
+    "query": "Why does prime announce a merge from another branch when none happened?",
+    "targets": [
+      "01M3S32GX9EMHF2W6Z5VD88393",
+      "01M3RXT4Z3Z2FNNGPBN0B2GZCC"
+    ],
+    "kind": "note",
+    "why": "countIncoming treats another actor's local events as incoming",
+    "phrasings": [
+      "prime false merge detected",
+      "merge detection spurious branch",
+      "prime merge notice wrong"
+    ]
+  },
+  {
+    "query": "Which BM25 parameter tweak actually improved ranking?",
+    "targets": [
+      "01M3C7QSHJ86AB4MGMQ4Q0Q9EK"
+    ],
+    "kind": "note",
+    "why": "length normalization 0.75 to 0.45, +0.04",
+    "phrasings": [
+      "BM25 k1 b tuning",
+      "ranking parameter change improvement",
+      "BM25 field weights length normalization"
+    ]
+  }
+]
