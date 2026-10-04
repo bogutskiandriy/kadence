@@ -1,8 +1,8 @@
 import cac from 'cac';
-import { runInit } from './commands/init.js';
+import { runInit, HOOK_AGENTS, type HookAgent } from './commands/init.js';
 import { runReady } from './commands/ready.js';
 import { runSearch, SEARCH_KINDS } from './commands/search.js';
-import { runPromptHook } from './commands/hook.js';
+import { runPromptHook, runSessionHook } from './commands/hook.js';
 import { runPrime } from './commands/prime.js';
 import { runStats } from './commands/stats.js';
 import { runCompact } from './commands/compact.js';
@@ -713,13 +713,15 @@ cli
   });
 
 cli
-  .command('hook <event>', 'For Claude Code hooks: prompt reads a UserPromptSubmit payload on stdin')
+  .command('hook <event>', 'For agent hooks: prompt reads a UserPromptSubmit payload; cursor-session and copilot-session print prime as JSON')
   .example('  echo \'{"prompt":"why are events append-only"}\' | kadence hook prompt')
+  .example('  kadence hook cursor-session')
   .action((event: string) => {
     // Always exit 0. Exit 2 from a UserPromptSubmit hook erases the user's
     // prompt, so this command has no failure a person would want to see here.
-    if (event !== 'prompt') {
-      writeAll(2, `Unknown hook "${event}". Known: prompt\n`);
+    const known = ['prompt', 'cursor-session', 'copilot-session'];
+    if (!known.includes(event)) {
+      writeAll(2, `Unknown hook "${event}". Known: ${known.join(', ')}\n`);
       process.exit(0);
     }
     let input = '';
@@ -728,6 +730,12 @@ cli
       if (process.stdin.isTTY !== true) input = readFileSync(0, 'utf8');
     } catch {
       input = '';
+    }
+    if (event !== 'prompt') {
+      // The payload is read and ignored: a writer blocked on a full pipe would
+      // hold the session start for nothing.
+      writeAll(1, `${runSessionHook(process.cwd(), process.env, event === 'cursor-session' ? 'cursor' : 'copilot')}\n`);
+      process.exit(0);
     }
     const context = runPromptHook(process.cwd(), process.env, input);
     if (context.length > 0) writeAll(1, `${context}\n`);
@@ -844,12 +852,25 @@ cli
   .command('init', 'Set up kadence in this repository')
   .option('--no-hooks', 'Leave .claude/settings.json alone: no prime at session start, no journal search on each prompt')
   .option('--hooks', 'Accepted for older scripts; the hooks are on by default now')
+  .option('--hooks-for <agents>', `Also write hooks for: ${HOOK_AGENTS.join(', ')} (comma-separated). Without it, only for those already in use`)
   .example('  kadence init')
   .example('  kadence init --no-hooks')
-  .action((options: { hooks?: boolean }) => {
+  .example('  kadence init --hooks-for codex,cursor')
+  .action((options: { hooks?: boolean; hooksFor?: unknown }) => {
     // On by default since KAD-56: search goes unused unless it is put in front
     // of the agent. `--no-hooks` is the way out, and the message says so.
-    const r = runInit(process.cwd(), __VERSION__, { hooks: options.hooks !== false });
+    const asked = (rawFlagLast('hooks-for') ?? '')
+      .split(',')
+      .map((a) => a.trim().toLowerCase())
+      .filter((a) => a.length > 0);
+    const unknown = asked.filter((a) => !(HOOK_AGENTS as readonly string[]).includes(a));
+    if (unknown.length > 0) {
+      emit(usage(`Unknown agent "${unknown[0]}" for --hooks-for. Known: ${HOOK_AGENTS.join(', ')}`), false);
+    }
+    const r = runInit(process.cwd(), __VERSION__, {
+      hooks: options.hooks !== false,
+      hooksFor: asked as HookAgent[],
+    });
     emit({ ok: r.ok, message: r.message, exitCode: r.ok ? 0 : 1 }, false);
   });
 

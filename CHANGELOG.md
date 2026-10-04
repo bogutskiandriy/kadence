@@ -71,6 +71,13 @@
   `node scripts/agent-package.mjs`; `--check` fails when either has drifted
   from the source. A test holds every command the skill names to the ones
   `schema --json` publishes. Not in the npm package.
+- Hooks for Codex, Cursor and Copilot (DEC-48, DEC-52). Codex gets the same
+  two as Claude Code in `.codex/hooks.json`; Cursor (`.cursor/hooks.json`) and
+  Copilot (`.github/hooks/kadence.json`) get a session-start hook, through the
+  new `kadence hook cursor-session` / `copilot-session`, which print `prime` as
+  the JSON each reads — neither takes plain stdout. `init` writes them where
+  the agent's directory is already there, or for those named with
+  `--hooks-for`; existing files are merged, never overwritten.
 - A test that runs agents side by side: eight processes in one working tree,
   three worktrees merged at once, two claims on one task. Nothing is lost;
   the double claim is reported.

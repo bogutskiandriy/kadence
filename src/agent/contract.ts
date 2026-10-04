@@ -547,7 +547,12 @@ export function buildContract(version: string): Record<string, unknown> {
     },
     commands: [
       { name: 'schema', summary: 'This contract. Works outside a repository.' },
-      { name: 'init', summary: 'Create .kadence/ and the agent instruction files.' },
+      {
+        name: 'init',
+        summary:
+          'Create .kadence/ and the agent instruction files, and the hooks that put the journal in front of the agent: Claude Code always (unless --no-hooks); Codex, Cursor and Copilot where their directory is already in the repository, or when named with --hooks-for. Every existing hook file is merged, never overwritten.',
+        flags: ['--no-hooks', '--hooks-for'],
+      },
       {
         name: 'board',
         summary:
@@ -886,7 +891,7 @@ export function buildContract(version: string): Record<string, unknown> {
       {
         name: 'hook',
         summary:
-          'Run by Claude Code hooks, not by hand. `hook prompt` reads a UserPromptSubmit payload on stdin, searches the journal for the prompt and prints up to three records to add to the context, or nothing. Always exits 0: exit 2 would erase the prompt. Installed by `init` unless `--no-hooks`; a record is shown once per session.',
+          'Run by agent hooks, not by hand. `hook prompt` reads a UserPromptSubmit payload on stdin (Claude Code, Codex), searches the journal for the prompt and prints up to three records to add to the context, or nothing. `hook cursor-session` and `hook copilot-session` print `prime` as the JSON those agents read at session start ({"additional_context"} and {"additionalContext"}), or {} on any failure. Always exits 0: exit 2 would erase the prompt. Installed by `init` unless `--no-hooks`; a record is shown once per session.',
         args: ['event'],
       },
     ],

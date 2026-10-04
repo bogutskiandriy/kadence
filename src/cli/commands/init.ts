@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { findRepoRoot } from '../../core/git.js';
 import { eventsDir, dataDir } from '../../core/store.js';
 import { agentReadme, upsertAgentsSection } from '../../agent/contract.js';
@@ -40,7 +40,18 @@ export interface InitOptions {
    * file that does not parse is never rewritten.
    */
   hooks?: boolean;
+  /**
+   * Agents besides Claude Code to write hooks for, whether or not their
+   * directory is there yet (`--hooks-for codex,cursor,copilot`). Without it,
+   * init writes for an agent only where the repository shows it in use: each
+   * of these directories belongs to another tool (DEC-52).
+   */
+  hooksFor?: readonly HookAgent[];
 }
+
+/** The agents besides Claude Code whose hooks can put text in front of the model (DEC-48). */
+export const HOOK_AGENTS = ['codex', 'cursor', 'copilot'] as const;
+export type HookAgent = (typeof HOOK_AGENTS)[number];
 
 export function runInit(cwd: string, version = 'dev', options: InitOptions = {}): InitResult {
   const root = findRepoRoot(cwd);
@@ -69,10 +80,17 @@ export function runInit(cwd: string, version = 'dev', options: InitOptions = {})
   for (const name of INSTRUCTION_FILES) ensureInstructionFile(root, name, version);
 
   const withHooks = options.hooks !== false;
-  const hookNote = withHooks ? `\n\n${installSessionHook(root)}` : '';
+  const agents = withHooks ? installAgentHooks(root, options.hooksFor ?? []) : { written: [], said: [] };
+  const hookNote = withHooks
+    ? `\n\n${[installSessionHook(root), ...agents.said].join('\n')}` +
+      (agents.written.length === 0 && (options.hooksFor ?? []).length === 0
+        ? `\nUsing Codex, Cursor or Copilot as well? kadence init --hooks-for codex,cursor,copilot`
+        : '')
+    : '';
 
   const toCommit = ['.kadence/', 'AGENTS.md', 'CLAUDE.md'];
   if (withHooks && hasSessionHook(root)) toCommit.push('.claude/settings.json');
+  toCommit.push(...agents.written);
 
   return {
     ok: true,
@@ -250,6 +268,108 @@ function upsertPromptHook(hooks: Record<string, unknown>, path: string): Upsert 
     added: true,
     message: `Added a prompt hook to ${path}: each prompt is searched in the journal first, and what it holds is shown to the agent.`,
   };
+}
+
+/**
+ * What the Cursor and Copilot session hooks print where kadence is not
+ * installed: still the JSON each reads, so the agent hears it once.
+ */
+const MISSING = 'kadence is not installed on this machine: ask the human to run npm install -g kadence. The team journal is in .kadence/.';
+
+/** Cursor's sessionStart: context only as `{"additional_context": …}` on stdout. */
+export const CURSOR_SESSION_COMMAND =
+  'if command -v kadence >/dev/null 2>&1; then kadence hook cursor-session; else ' +
+  `echo '${JSON.stringify({ additional_context: MISSING })}'; fi`;
+/** Copilot's sessionStart: context only as `{"additionalContext": …}` on stdout. */
+export const COPILOT_SESSION_COMMAND =
+  'if command -v kadence >/dev/null 2>&1; then kadence hook copilot-session; else ' +
+  `echo '${JSON.stringify({ additionalContext: MISSING })}'; fi`;
+
+/**
+ * Where each agent's use shows in a repository. A directory of its own, or for
+ * Copilot the instruction file it reads; `.github/` alone means GitHub.
+ */
+function inUse(root: string, agent: HookAgent): boolean {
+  switch (agent) {
+    case 'codex':
+      return existsSync(join(root, '.codex'));
+    case 'cursor':
+      return existsSync(join(root, '.cursor'));
+    case 'copilot':
+      return existsSync(join(root, '.github', 'hooks')) || existsSync(join(root, '.github', 'copilot-instructions.md'));
+  }
+}
+
+/** A JSON object from disk, `{}` when the file is absent, null when it does not parse. */
+function readObject(path: string): Record<string, unknown> | null {
+  if (!existsSync(path)) return {};
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeObject(path: string, value: Record<string, unknown>): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+}
+
+/**
+ * Hooks for Codex, Cursor and Copilot (KAD-71, DEC-48): the same upsert rules
+ * as `.claude/settings.json` — every other hook kept, ours once, and a file
+ * that does not parse never rewritten.
+ */
+function installAgentHooks(root: string, named: readonly HookAgent[]): { written: string[]; said: string[] } {
+  const written: string[] = [];
+  const said: string[] = [];
+  for (const agent of HOOK_AGENTS) {
+    if (!named.includes(agent) && !inUse(root, agent)) continue;
+    const rel = agent === 'codex' ? '.codex/hooks.json' : agent === 'cursor' ? '.cursor/hooks.json' : '.github/hooks/kadence.json';
+    const path = join(root, rel);
+    const file = readObject(path);
+    if (file === null) {
+      said.push(`${rel} is not valid JSON, so the ${agent} hooks were not added. Fix it and run:\n  kadence init`);
+      continue;
+    }
+    const hooks = (typeof file['hooks'] === 'object' && file['hooks'] !== null ? file['hooks'] : {}) as Record<string, unknown>;
+    let changed = false;
+    if (agent === 'codex') {
+      // Codex reads Claude Code's own shape, and the same two commands.
+      changed = [upsertSessionHook(hooks, rel), upsertPromptHook(hooks, rel)].some((u) => u.changed);
+    } else {
+      const event = 'sessionStart';
+      const list = Array.isArray(hooks[event]) ? (hooks[event] as Array<Record<string, unknown>>) : [];
+      const ours = agent === 'cursor' ? 'kadence hook cursor-session' : 'kadence hook copilot-session';
+      const field = agent === 'cursor' ? 'command' : 'bash';
+      if (!list.some((e) => typeof e[field] === 'string' && (e[field] as string).includes(ours))) {
+        list.push(
+          agent === 'cursor'
+            ? { command: CURSOR_SESSION_COMMAND, timeout: 60 }
+            : { type: 'command', bash: COPILOT_SESSION_COMMAND, timeoutSec: 60 },
+        );
+        hooks[event] = list;
+        changed = true;
+      }
+      if (file['version'] === undefined) file['version'] = 1;
+    }
+    written.push(rel);
+    if (!changed) {
+      said.push(`The ${agent} hooks are already in ${rel}.`);
+      continue;
+    }
+    file['hooks'] = hooks;
+    writeObject(path, file);
+    said.push(
+      agent === 'codex'
+        ? `Added Codex hooks to ${rel}: prime at session start and a journal search on each prompt. Codex asks you to trust a project's hooks before it runs them.`
+        : agent === 'cursor'
+          ? `Added a Cursor sessionStart hook to ${rel}: prime arrives at the start of each session. Cursor cannot add context on each prompt, so search stays in AGENTS.md.`
+          : `Added a Copilot sessionStart hook to ${rel}: prime arrives at the start of each session (Copilot CLI and cloud agent; POSIX shell).`,
+    );
+  }
+  return { written, said };
 }
 
 /** Whether `.claude/settings.json` already carries a SessionStart hook of ours. Never throws. */

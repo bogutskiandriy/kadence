@@ -130,6 +130,10 @@ kadence decision add "Keep sessions in Redis" \
   --why "Revocation must be instant" --rejected "JWT: cannot revoke before expiry"
 ```
 
+On Codex, Cursor or Copilot, `kadence init --hooks-for codex,cursor,copilot`
+adds their hooks too; init writes them unasked only where the agent's own
+directory is already in the repository.
+
 Open a new agent session. The hook runs `kadence prime`, and the agent starts
 knowing what is open, what is ready and **DEC-1 with its reason** — ask it how
 sessions should be stored and it answers from the journal, not from a guess.
