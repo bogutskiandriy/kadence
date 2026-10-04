@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { search, rejectedMatches, PARTIAL_COVERAGE, type SearchHit, type RejectedMatch } from '../../core/search.js';
 import { resolveContext, isContext, loadState } from './task.js';
+import { runPrime } from './prime.js';
 
 /**
  * What the journal says, placed next to a prompt before the agent reads it.
@@ -172,6 +173,29 @@ function render(
     shown.push(keyOf(hit));
   }
   return { text: shown.length === 0 ? '' : [...lines, tail].join('\n'), shown };
+}
+
+/** Agents whose session-start hook only reads context from JSON on stdout. */
+export type SessionHookFlavor = 'cursor' | 'copilot';
+
+/**
+ * `prime`, in the JSON a session-start hook of Cursor or Copilot reads (KAD-71).
+ *
+ * Neither takes plain stdout as context, as Claude Code and Codex do: Cursor
+ * reads `additional_context` and Copilot `additionalContext`, from a JSON
+ * object, and anything else is dropped. So the same preamble is wrapped, and
+ * every failure — no repository, no journal, a crash — answers `{}`, which
+ * both read as "nothing to add". A session start is never where kadence fails.
+ */
+export function runSessionHook(cwd: string, env: NodeJS.ProcessEnv, flavor: SessionHookFlavor): string {
+  try {
+    const primed = runPrime(cwd, env, {});
+    if (!primed.ok || primed.message.length === 0) return '{}';
+    const key = flavor === 'cursor' ? 'additional_context' : 'additionalContext';
+    return JSON.stringify({ [key]: primed.message });
+  } catch {
+    return '{}';
+  }
 }
 
 /**
