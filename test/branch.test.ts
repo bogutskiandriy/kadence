@@ -35,7 +35,10 @@ beforeEach(() => {
   git('add', '-A');
   git('commit', '-qm', 'init');
 });
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+// Retried: on a CI runner a git process the test started can still be writing
+// into .git when the test ends, and the removal fails with ENOTEMPTY after the
+// test itself has passed (Node 20, PR #10). Nothing about the product.
+afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
 
 /** Two tasks on main, then a branch that adds one and moves one. */
 function withBranch(): void {

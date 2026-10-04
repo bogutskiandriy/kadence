@@ -167,6 +167,9 @@ describe('relevance on the frozen corpus', () => {
     },
   );
 
+  // Two folds of the whole journal and two passes over the golden set: 5.4 s
+  // on a CI runner (Node 20, PR #10) against the harness's default 5. The limit
+  // only has to be longer than the work; nothing here is asserted on time.
   it.runIf(pinned)('does not move when a note quoting every golden question is written after the pin', () => {
     // What happened to the live number: the notes about search quoted the
     // questions and outranked the answers. Written after the pin, they cannot.
@@ -180,7 +183,7 @@ describe('relevance on the frozen corpus', () => {
       data: { text: QUESTIONS.map((q) => q.query).join('. ') },
     };
     expect(golden(project(frozen([...all, quoting]))).recall).toBe(golden(state).recall);
-  });
+  }, 60_000);
 });
 
 /**
