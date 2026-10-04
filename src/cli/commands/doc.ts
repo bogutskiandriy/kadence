@@ -304,13 +304,52 @@ export function runDocEdit(
   };
 }
 
+/**
+ * `DOC-31:163-172` — the reference search and the prompt hook print for a
+ * section. Lines are 1-based and inclusive, counted over the body exactly as
+ * the search index counts them, so the reference opens what it matched.
+ */
+const SECTION_REF = /^(.+):(\d+)(?:-(\d+))?$/u;
+
+interface SectionRange {
+  from: number;
+  to: number;
+  /** How many lines the whole body has: the reader's sense of what is left. */
+  lines: number;
+}
+
+/** The lines asked for, or the refusal. A range past the end is cut there. */
+function sectionOf(body: string, from: number, to: number, ref: string): SectionRange | CommandResult {
+  const total = body.split('\n').length;
+  if (from < 1 || to < from || from > total) {
+    return failure(
+      2,
+      'invalid_argument',
+      `${ref}: lines run from 1 to ${total}, and a range reads first-last.\n  kadence doc show ${ref.replace(SECTION_REF, '$1')}`,
+      { received: ref, hint: 'kadence doc show DOC-1:12-30' },
+    );
+  }
+  return { from, to: Math.min(to, total), lines: total };
+}
+
 export function runDocShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): CommandResult {
   const ctx = resolveContext(cwd, env);
   if (!isContext(ctx)) return ctx;
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
-  const doc = findDoc(state, ref);
+  const match = SECTION_REF.exec(ref.trim());
+  const doc = findDoc(state, match === null ? ref : match[1]!);
   if (doc === undefined) return docNotFound(ref);
+
+  let range: SectionRange | null = null;
+  if (match !== null) {
+    const from = Number(match[2]);
+    const asked = sectionOf(doc.body, from, match[3] === undefined ? from : Number(match[3]), ref.trim());
+    if ('exitCode' in asked) return asked;
+    range = asked;
+  }
+  const body =
+    range === null ? doc.body : doc.body.split('\n').slice(range.from - 1, range.to).join('\n');
 
   const labels = taskLabels(state);
   const tasks = doc.tasks.map(labels).filter((l): l is string => l !== null);
@@ -318,8 +357,11 @@ export function runDocShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): Co
     `${doc.label}  ${doc.title}`,
     `  ${doc.revisions} revision${doc.revisions === 1 ? '' : 's'}, last ${doc.updatedAt.slice(0, 10)} by ${doc.updatedBy}${doc.source === 'agent' ? ' [agent]' : ''}`,
     ...(tasks.length > 0 ? [`  Explains: ${tasks.join(', ')}`] : []),
+    ...(range === null
+      ? []
+      : [`  Showing lines ${range.from}-${range.to} of ${range.lines} · the whole of it: kadence doc show ${doc.label}`]),
     '',
-    doc.body,
+    body,
   ];
   const conflictWarning =
     doc.conflicts.length === 0
@@ -334,7 +376,11 @@ export function runDocShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): Co
     exitCode: 0,
     warnings: [...warnings, ...conflictWarning],
     message: lines.join('\n'),
-    data: { schema: 'kadence/v1', ok: true, document: docInFull(doc, labels) },
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      document: range === null ? docInFull(doc, labels) : { ...docInFull(doc, labels), body, section: range },
+    },
   };
 }
 

@@ -1,0 +1,1 @@
+{"id":"01M42YMKYRK0NN4EYS00H3MPEH","type":"task.criterion_added","entity":"01M42YMAH6A7BQKFCG08WJW54J","actor":"bogutski2005@gmail.com","ts":"2026-10-04T07:56:44.376Z","source":"agent","data":{"text":"Codex: .codex/hooks.json with SessionStart (prime) and UserPromptSubmit (hook prompt), after checking its payload names prompt and session_id"}}

@@ -8,7 +8,7 @@ import { runStats } from './commands/stats.js';
 import { runCompact } from './commands/compact.js';
 import { runReport, REPORTS } from './commands/report.js';
 import { runCompletion, SHELLS } from './commands/completion.js';
-import { runNoteAdd, runNoteList } from './commands/note.js';
+import { runNoteAdd, runNoteList, runNoteShow } from './commands/note.js';
 import { runDocAdd, runDocEdit, runDocEditInEditor, runDocShow, runDocList, runDocLink } from './commands/doc.js';
 import { readFileSync } from 'node:fs';
 import {
@@ -186,6 +186,18 @@ function rawFlagLast(name: string, argv: readonly string[] = process.argv): stri
   return found;
 }
 
+/** Every value given for a repeatable flag, as typed, in order. */
+function rawFlagAll(name: string, argv: readonly string[] = process.argv): string[] {
+  const flag = `--${name}`;
+  const found: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === flag && argv[i + 1] !== undefined) found.push(argv[i + 1]!);
+    else if (arg.startsWith(`${flag}=`)) found.push(arg.slice(flag.length + 1));
+  }
+  return found;
+}
+
 function rawFlag(name: string, argv: readonly string[] = process.argv): string | undefined {
   const flag = `--${name}`;
   for (let i = 0; i < argv.length; i++) {
@@ -334,7 +346,7 @@ cli
   );
 
 cli
-  .command('note [text]', 'Record something learned; `note list` reads them back')
+  .command('note [text] [id]', 'Record something learned; `note list` and `note show <ULID>` read them back')
   .option('--task <ref>', 'The task it came out of')
   .option('--limit <n>', 'At most this many, newest first; 0 for all of them')
   .option('--offset <n>', 'list: start the page here')
@@ -342,9 +354,11 @@ cli
   .example('  kadence note "Tests need a git identity"')
   .example('  kadence note "The redirect drops the cookie" --task KAD-1')
   .example('  kadence note list --limit 5')
+  .example('  kadence note show 01K5...')
   .action(
     (
       text: string | undefined,
+      id: string | undefined,
       options: { task?: string; limit?: string; offset?: string; json?: boolean },
     ) => {
     const json = options.json === true;
@@ -364,6 +378,13 @@ cli
         }),
         json,
       );
+      return;
+    }
+    // `show` is the other reserved word: a note's ULID is the only handle it
+    // has, and search and the prompt hook hand those out (KAD-65).
+    if (text === 'show') {
+      if (id === undefined) emit(usage('Which note? It is opened by its ULID:\n  kadence note list'), json);
+      emit(runNoteShow(cwd, process.env, id), json);
       return;
     }
     if (text === undefined) {
@@ -666,11 +687,13 @@ cli
   .option('--kind <list>', `Narrow to: ${SEARCH_KINDS.join(' | ')}; comma-separated`)
   .option('--limit <n>', 'At most this many passages')
   .option('--all', 'Include superseded decisions, left out by default')
+  .option('--also <phrasing>', 'The same question in other words; repeat for 2-3. Fused into one answer')
   .option('--json', 'Machine-readable output for agents')
   .example('  kadence search "why are events append-only"')
+  .example('  kadence search "where is the website hosted" --also "landing page" --also "GitHub Pages"')
   .example('  kadence search "cookie redirect" --kind task,note')
   .example('  kadence search "ordering between machines" --json')
-  .action((query: string | undefined, options: { kind?: string; limit?: string; all?: boolean; json?: boolean }) => {
+  .action((query: string | undefined, options: { kind?: string; limit?: string; all?: boolean; also?: unknown; json?: boolean }) => {
     const json = options.json === true;
     const limit = options.limit === undefined ? undefined : Number(options.limit);
     if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
@@ -681,6 +704,8 @@ cli
         ...(options.kind === undefined ? {} : { kind: options.kind }),
         ...(limit === undefined ? {} : { limit }),
         ...(options.all === true ? { all: true } : {}),
+        // From argv as typed: cac turns `--also 007` into 7 and a repeat into an array.
+        ...(options.also === undefined ? {} : { also: rawFlagAll('also') }),
         json,
       }),
       json,
@@ -1621,7 +1646,7 @@ if (negativeEstimate !== -1) {
  * for good: `--title a --title b` stored `{"title":["a","b"]}` and reported
  * success, and `--json --json` read as "not JSON".
  */
-const REPEATABLE = new Set(['label', 'addLabel', 'removeLabel', 'rejected', 'doc']);
+const REPEATABLE = new Set(['label', 'addLabel', 'removeLabel', 'rejected', 'doc', 'also']);
 
 function collapseRepeats(options: Record<string, unknown>): void {
   for (const [name, value] of Object.entries(options)) {

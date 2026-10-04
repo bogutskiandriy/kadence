@@ -305,7 +305,7 @@ describe('runPrime', () => {
     const data = r.data!;
     expect(data['schema']).toBe('kadence/v1');
     expect(Object.keys(data).sort()).toEqual(
-      ['schema', 'ok', 'sprint', 'mine', 'mineTotal', 'documentation', 'documentationTotal', 'ready', 'attention', 'attentionTotal', 'decisions', 'notes', 'commands'].sort(),
+      ['schema', 'ok', 'sprint', 'mine', 'mineTotal', 'documentation', 'documentationTotal', 'staleDocumentation', 'staleDocumentationTotal', 'ready', 'attention', 'attentionTotal', 'decisions', 'notes', 'commands'].sort(),
     );
     expect((data['decisions'] as unknown[]).length).toBeLessThanOrEqual(5);
     expect((data['notes'] as unknown[]).length).toBeLessThanOrEqual(5);

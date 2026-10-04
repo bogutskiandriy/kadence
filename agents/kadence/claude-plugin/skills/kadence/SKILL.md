@@ -1,0 +1,60 @@
+---
+name: kadence
+description: Read and write the project's tasks, decisions, notes and documentation kept by kadence in .kadence/ — use at the start of a session, before grep when the question is why, where or how, and whenever work starts, finishes or a choice is made.
+---
+
+# kadence — the project's journal
+
+Tasks, decisions, notes and documentation live in `.kadence/` as plain files,
+shared through git. Read them through the CLI, never by opening event files:
+one event is one change, and the state is what they fold to.
+
+## Start here
+
+    kadence prime                  the sprint, your work, what is ready, recent decisions
+
+Set `KADENCE_SOURCE=agent` so what you write is marked as yours.
+
+## Looking something up
+
+When the question is why, where or how, run `kadence search "…" --json` before
+grep. It reads tasks, decisions, notes and documents together and returns up
+to five records with a quoted passage, the record's ULID and `coverage` — how
+much of the question it holds. Grep over `.kadence/events/` costs about 25
+times the context for fewer right answers. Ask it two or three ways at once,
+in the project's words: `--also "…" --also "…"`.
+
+Cheapest first; stop at the first that answers:
+
+    kadence search "…" --json              ~400 tokens
+    kadence note show <ULID> --json        ~180: a note's id from search
+    kadence decision show DEC-1 --json     ~300
+    kadence doc show DOC-1:12-30 --json    ~340: the section search pointed at
+    kadence task show KAD-1 --json         ~1,000: one task with its history
+    kadence board --json --summary         ~4,000: the state of the work
+
+An empty result means the journal does not know. Say so; do not guess.
+
+## Doing the work
+
+    kadence ready                          what can be started now
+    kadence task claim                     take the top of ready before starting
+    kadence task move KAD-1 done           change state; done releases the claim
+    kadence task ac list KAD-1             the criteria to check before done
+
+## Writing down what you learned
+
+    kadence decision add "…" --why "…" --rejected "…"   a choice, and what lost
+    kadence note "…" --task KAD-1                       learned, never a choice
+    kadence doc edit DOC-1 --file draft.md              a new revision
+
+A choice between approaches is a decision; something learned is a note. Nothing is edited or deleted: a correction is a new event.
+
+## Rules
+
+- `--json` output carries `schema: "kadence/v1"`; a failure carries
+  `error.code` and, where knowable, `allowed`. `kadence schema --json` is
+  the whole contract.
+- `KAD-N` and `DEC-N` are labels derived on read and can shift after a merge.
+  The ULID is the identity: keep it when you will refer back.
+- kadence never commits or pushes. What happens to the files is the human's call.

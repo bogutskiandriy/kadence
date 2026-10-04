@@ -5,7 +5,7 @@
 Tasks, notes, decisions and documentation live in `.kadence/` as plain files, shared through git.
 
     kadence prime                       start here: sprint, your work, what is ready
-    kadence search "…" --json           why, where, how: ~400 tokens; grep costs ~11k
+    kadence search "…" --json           why, where, how (+ --also "…" phrasings): ~400 tokens; grep ~11k
     kadence decision show DEC-1 --json  one record: ~300 (task show ~1k, doc show ~4k)
     kadence board --json --summary      the board's state: ~4k
     kadence decision list --json        every decision in force: ~8k

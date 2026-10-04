@@ -17,9 +17,17 @@ function run(args: string[], env: Record<string, string> = {}): Run {
   const r = spawnSync('node', [CLI, ...args], {
     cwd: dir,
     encoding: 'utf8',
-    env: { ...process.env, ...env },
+    // KADENCE_SOURCE is the variable these tests are about. Inherited from
+    // whoever runs the suite — an agent sets it, as the instructions say — it
+    // turned "counts as human" red under an agent and green under a person.
+    env: { ...withoutSource(process.env), ...env },
   });
   return { stdout: r.stdout, stderr: r.stderr, code: r.status ?? -1 };
+}
+
+function withoutSource(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const { KADENCE_SOURCE: _ignored, ...rest } = env;
+  return rest;
 }
 
 beforeEach(() => {

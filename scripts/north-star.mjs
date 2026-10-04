@@ -53,6 +53,15 @@ const QUERIES = [
   '"kadence prime"',
 ];
 
+/**
+ * The topic the README asks public repositories to add (KAD-64).
+ *
+ * Code search is a floor that can read zero for a repository with a journal
+ * on main — it did for this one. A topic is what a user chooses to show, and
+ * with no telemetry it is the only signal that does not depend on an index.
+ */
+const TOPIC = 'kadence-journal';
+
 // ---------------------------------------------------------------------------
 // Pure computation
 // ---------------------------------------------------------------------------
@@ -223,7 +232,11 @@ function gh(path, fields = {}, { allow404 = false } = {}) {
     if (/rate limit/i.test(text)) {
       const limits = ghRaw(['api', 'rate_limit']);
       const resources = limits.status === 0 ? JSON.parse(limits.stdout).resources : {};
-      const bucket = path.startsWith('search/code') ? resources.code_search : resources.core;
+      const bucket = path.startsWith('search/code')
+        ? resources.code_search
+        : path.startsWith('search/')
+          ? resources.search
+          : resources.core;
       const waitMs = bucket ? bucket.reset * 1000 - Date.now() + 2000 : 61_000;
       if (waitMs > 70_000) {
         throw new Fatal(`GitHub rate limit reached for ${path}; resets at ${new Date(Date.now() + waitMs).toISOString()}. Nothing was appended.`);
@@ -323,6 +336,9 @@ function runSearch({ extraRepos, includeSelf, maxFiles, notes }) {
   ensureGh();
   const { found, perQuery } = searchCandidates();
   const hits = found.size;
+  const tagged = gh('search/repositories', { q: `topic:${TOPIC}`, per_page: '100' });
+  const topicRepos = (tagged?.items ?? []).map((i) => i.full_name);
+  for (const r of topicRepos) found.add(r);
   for (const r of extraRepos) found.add(r);
   if (!includeSelf) found.delete(SELF);
   else found.add(SELF);
@@ -332,7 +348,10 @@ function runSearch({ extraRepos, includeSelf, maxFiles, notes }) {
     const repo = readRemoteRepo(name, maxFiles);
     if (repo && repo.journal) repos.push(repo);
   }
-  const autoNotes = [`code search: ${hits} candidate repo(s) from ${QUERIES.length} queries`];
+  const autoNotes = [
+    `code search: ${hits} candidate repo(s) from ${QUERIES.length} queries`,
+    `topic:${TOPIC}: ${topicRepos.length} repo(s)`,
+  ];
   if (extraRepos.length) autoNotes.push(`+${extraRepos.length} named with --repo`);
   if (includeSelf) autoNotes.push(`${SELF} included as a control`);
   if (repos.some((r) => r.sampled)) autoNotes.push('some journals sampled: author counts are lower bounds');

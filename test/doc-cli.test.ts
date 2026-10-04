@@ -197,6 +197,87 @@ describe('doc show', () => {
   });
 });
 
+describe('doc show for one section', () => {
+  // A whole document is ~3,600 tokens at the median — the costliest rung after
+  // search (KAD-55). Search and the prompt hook already hand out the lines of
+  // the section they matched, as DOC-1:5-7; that reference opens just those.
+  const RUNBOOK = [
+    '# Deploy runbook', //          1
+    '', //                          2
+    'Read this before a release.', // 3
+    '', //                          4
+    '## Staging', //                5
+    '', //                          6
+    'Staging needs the VPN.', //    7
+    '', //                          8
+    '## Production', //             9
+    '', //                         10
+    'Production needs two approvals.', // 11
+  ].join('\n');
+
+  function section(ref: string): Record<string, unknown> {
+    const r = runDocShow(dir, env, ref);
+    expect(r.ok, r.message).toBe(true);
+    return r.data!['document'] as Record<string, unknown>;
+  }
+
+  it('prints only the lines asked for, in text', () => {
+    runDocAdd(dir, env, 'Deploy runbook', { body: RUNBOOK });
+    const r = runDocShow(dir, env, 'DOC-1:5-8');
+    expect(r.message).toContain('Staging needs the VPN.');
+    expect(r.message).not.toContain('Production needs two approvals.');
+    expect(r.message).toMatch(/lines 5-8 of 11/);
+  });
+
+  it('carries the lines in body and says where they sit, in --json', () => {
+    runDocAdd(dir, env, 'Deploy runbook', { body: RUNBOOK });
+    const doc = section('DOC-1:5-8');
+    expect(doc['body']).toBe('## Staging\n\nStaging needs the VPN.\n');
+    expect(doc['section']).toEqual({ from: 5, to: 8, lines: 11 });
+    // The size of the whole document, as everywhere else: a caller deciding
+    // whether to read the rest still needs it.
+    expect(doc['bytes']).toBe(Buffer.byteLength(RUNBOOK, 'utf8'));
+    expect(doc['label']).toBe('DOC-1');
+  });
+
+  it('opens the section a search hit points at', () => {
+    runDocAdd(dir, env, 'Deploy runbook', { body: RUNBOOK });
+    // The same arithmetic the search index uses: from the heading line to the
+    // line before the next heading.
+    expect(section('DOC-1:9-11')['body']).toBe('## Production\n\nProduction needs two approvals.');
+  });
+
+  it('takes one line, and a ULID as well as a label', () => {
+    const added = runDocAdd(dir, env, 'Deploy runbook', { body: RUNBOOK });
+    const id = (added.data!['document'] as { id: string }).id;
+    expect(section(`${id}:7`)['body']).toBe('Staging needs the VPN.');
+  });
+
+  it('stops at the last line when the range runs past it — the document may have been revised since', () => {
+    runDocAdd(dir, env, 'Deploy runbook', { body: RUNBOOK });
+    const doc = section('DOC-1:9-40');
+    expect(doc['section']).toEqual({ from: 9, to: 11, lines: 11 });
+  });
+
+  it('refuses a range that starts past the end or runs backwards', () => {
+    runDocAdd(dir, env, 'Deploy runbook', { body: RUNBOOK });
+    expect(runDocShow(dir, env, 'DOC-1:40-50').error?.code).toBe('invalid_argument');
+    expect(runDocShow(dir, env, 'DOC-1:8-5').error?.code).toBe('invalid_argument');
+    expect(runDocShow(dir, env, 'DOC-1:0-3').error?.code).toBe('invalid_argument');
+  });
+
+  it('still names an unknown document with doc_not_found', () => {
+    expect(runDocShow(dir, env, 'DOC-9:1-3').error?.code).toBe('doc_not_found');
+  });
+
+  it('leaves the whole-document response exactly as it was', () => {
+    runDocAdd(dir, env, 'Deploy runbook', { body: RUNBOOK });
+    const doc = section('DOC-1');
+    expect(doc['body']).toBe(RUNBOOK);
+    expect(doc).not.toHaveProperty('section');
+  });
+});
+
 describe('doc list', () => {
   it('lists without bodies, so reading the index costs nothing', () => {
     runDocAdd(dir, env, 'Auth', { body: 'x'.repeat(4000) });

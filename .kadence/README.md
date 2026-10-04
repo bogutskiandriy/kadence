@@ -30,6 +30,11 @@ each with a quoted passage, its ULID and a `coverage` figure; grep over
 A/B on kadence's own journal, search took half the context and half the time and
 got more answers right.
 
+Ask it two or three ways at once, in the words this project uses:
+`kadence search "where is the website hosted" --also "landing page" --also "GitHub Pages"`.
+The phrasings are fused into one answer, each record once. On 50 held-out
+questions that took first place from 26 to 30 and left none unanswered.
+
 An empty result says so. Rephrase with the words the answer would use and search
 again before falling back to grep.
 
@@ -45,9 +50,11 @@ asked of kadence's own journal, in tokens of context:
 | Way | Tokens | When |
 |---|---|---|
 | The prompt hook's lines | ~90 | already there after `init`, unless `--no-hooks` |
+| `note show <ULID> --json` | ~180 | a note's `id` from search or the hook |
 | `decision show DEC-1 --json` | ~300 | you know the record |
 | `search "…"` / `search "…" --json` | ~320 / ~400 | why, where, how |
 | `task show KAD-1 --json` | ~1,000 | one task with its history |
+| `doc show DOC-1:12-30 --json` | ~340 | one section: the lines search and the hook print |
 | `doc show DOC-1 --json` | ~3,600 | the whole document, every section |
 | `board --json --summary` | ~4,000 | the state of the work |
 | `decision list --json` / `note list --json` | ~8,500 / ~9,200 | everything of one kind |

@@ -1,6 +1,7 @@
 import { resolveContext, isContext, loadState, claimantOf, type CommandResult } from './task.js';
 import { readyTasks, holdsClaim } from '../../core/query.js';
 import { attentionReport, describeSignal } from '../../core/attention.js';
+import { staleDocuments } from '../../core/staleness.js';
 import type { ProjectState, Task } from '../../core/projection.js';
 import { looseEventCount } from '../../core/store.js';
 
@@ -49,6 +50,12 @@ const DOC_LIMIT = 3;
  * and three names when there is. The rest is one command away.
  */
 const ATTENTION_LIMIT = 3;
+/**
+ * Documents older than the work they describe (KAD-67), under the same rule as
+ * attention: silence when there are none, three names when there are, newest
+ * close first, and the real count beside them.
+ */
+const STALE_DOC_LIMIT = 3;
 /** Days of silence. The same default `report attention` uses. */
 const ATTENTION_IDLE_DAYS = 7;
 const TITLE_LIMIT = 60;
@@ -267,6 +274,18 @@ export function runPrime(
     for (const d of documentation) lines.push(`  ${d.label} ${short(d.title)}  (${d.task})`);
   }
 
+  const allStale = staleDocuments(state);
+  const stale = allStale.slice(0, STALE_DOC_LIMIT).map((s) => ({
+    label: s.doc.label,
+    title: capped(s.doc.title),
+    tasks: s.tasks.map((t) => t.label),
+  }));
+  if (stale.length > 0) {
+    const part = allStale.length > stale.length ? `${stale.length} of ${allStale.length}` : `${stale.length}`;
+    lines.push('', `Documentation older than the work it describes (${part}):  (kadence doc edit DOC-N)`);
+    for (const d of stale) lines.push(`  ${d.label} ${short(d.title)}  (${d.tasks.join(', ')} done since)`);
+  }
+
   // A count, not a list: `ready` prints the list, and printing it twice is how
   // a preamble doubles in size without saying anything new.
   lines.push('', `Ready to start: ${ready.length}  (kadence ready)`);
@@ -330,6 +349,8 @@ export function runPrime(
       mineTotal: allMine.length,
       documentation,
       documentationTotal: allDocumentation.length,
+      staleDocumentation: stale,
+      staleDocumentationTotal: allStale.length,
       ready: ready.length,
       // The rows, not a count: a count of neglected work is a number nobody can
       // act on, and the whole point of the line is that it names something.

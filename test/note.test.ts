@@ -8,7 +8,7 @@ import type { FlowEvent } from '../src/core/event.js';
 import { createUlid } from '../src/core/ulid.js';
 import { runInit } from '../src/cli/commands/init.js';
 import { runTaskAdd, runTaskShow } from '../src/cli/commands/task.js';
-import { runNoteAdd, runNoteList } from '../src/cli/commands/note.js';
+import { runNoteAdd, runNoteList, runNoteShow } from '../src/cli/commands/note.js';
 import { runDecisionList } from '../src/cli/commands/decision.js';
 
 /**
@@ -149,5 +149,79 @@ describe('note commands', () => {
     expect(r.ok).toBe(true);
     expect(r.message).toMatch(/kadence note/);
     expect(r.message).toMatch(/decision/i);
+  });
+});
+
+describe('note show', () => {
+  // Agents handed a note's ULID — by search, by the prompt hook — reached for
+  // `note show <id>` twice and then spent three calls finding the text another
+  // way (KAD-53 runs). A note has no label (I7), so the ULID is the handle.
+  let dir: string;
+  const env = {} as NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'kadence-note-show-'));
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    execFileSync('git', ['config', 'user.email', 'tester@example.com'], { cwd: dir });
+    runInit(dir);
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  function recorded(text: string, task?: string): string {
+    const r = runNoteAdd(dir, env, text, task === undefined ? {} : { task });
+    expect(r.ok, r.message).toBe(true);
+    return (r.data!['note'] as { id: string }).id;
+  }
+
+  it('prints the text, the task label, the author and the time', () => {
+    runTaskAdd(dir, env, 'Fix login', {});
+    const id = recorded('The redirect drops the cookie', 'KAD-1');
+    const r = runNoteShow(dir, env, id);
+    expect(r.ok, r.message).toBe(true);
+    expect(r.message).toContain('The redirect drops the cookie');
+    expect(r.message).toContain('KAD-1');
+    expect(r.message).toContain('tester@example.com');
+    expect(r.message).toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it('returns the note shape under the kadence/v1 schema', () => {
+    const id = recorded('Tests need a git identity');
+    const r = runNoteShow(dir, env, id);
+    expect(r.data!['schema']).toBe('kadence/v1');
+    const note = r.data!['note'] as Record<string, unknown>;
+    expect(note['id']).toBe(id);
+    expect(note['text']).toBe('Tests need a git identity');
+    expect(note['task']).toBeNull();
+    expect(note['by']).toBe('tester@example.com');
+    expect(typeof note['at']).toBe('string');
+    expect(note['source']).toBe('human');
+  });
+
+  it('gives the whole text however long, which the preamble and the hook cap', () => {
+    const long = 'word '.repeat(400).trim();
+    const id = recorded(long);
+    const note = runNoteShow(dir, env, id).data!['note'] as { text: string };
+    expect(note.text).toBe(long);
+  });
+
+  it('accepts the ULID in lower case, as people retype it', () => {
+    const id = recorded('Case does not matter in a ULID');
+    expect(runNoteShow(dir, env, id.toLowerCase()).ok).toBe(true);
+  });
+
+  it('fails with note_not_found on a ULID that is not a note', () => {
+    runTaskAdd(dir, env, 'A task, not a note', {});
+    const task = runTaskShow(dir, env, 'KAD-1').data!['task'] as { id: string };
+    const r = runNoteShow(dir, env, task.id);
+    expect(r.ok).toBe(false);
+    expect(r.exitCode).toBe(1);
+    expect(r.error!.code).toBe('note_not_found');
+    expect(r.error!.hint).toMatch(/note list/);
+  });
+
+  it('says a note has no label when it is handed one', () => {
+    const r = runNoteShow(dir, env, 'KAD-1');
+    expect(r.error!.code).toBe('note_not_found');
+    expect(r.message).toMatch(/ULID/);
   });
 });

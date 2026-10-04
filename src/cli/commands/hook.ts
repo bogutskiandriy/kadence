@@ -24,7 +24,7 @@ import { resolveContext, isContext, loadState } from './task.js';
  *   a slash command is not a question.
  * - **Pointers first, passages when earned.** A passage is quoted only when its
  *   record holds the whole question (coverage at or above PARTIAL_COVERAGE),
- *   or when it is a note, which has no command to open it by.
+ *   or when it is a note, which is short enough to give whole.
  *   Below that a title is a place to look; a quoted near-miss is what makes a
  *   model fabricate (DEC-30).
  * - **Text, not instructions.** Whatever a teammate commits reaches every
@@ -59,9 +59,10 @@ const CANDIDATES = 9;
 const QUERY_CHARS = 500;
 const TITLE_CHARS = 80;
 /**
- * A note is given whole, up to this. There is no `note show` to open one with:
- * agents handed a note's ULID tried it and spent three calls finding the text
- * another way. Notes run 285 characters at the median.
+ * A note is given whole, up to this, so the common case costs no second call.
+ * Agents handed a note's ULID before `note show` existed spent three calls
+ * finding the text another way; the tail now names it for the longer ones.
+ * Notes run 285 characters at the median.
  */
 const NOTE_CHARS = 400;
 
@@ -139,7 +140,7 @@ function render(
   };
   const width = Math.max(...turnedDown.map((m) => m.label.length), ...hits.map((h) => ref(h).length));
   const head = 'kadence: if this is about why or how something was decided, the journal may already say:';
-  const tail = 'More: kadence search "…" --json · open one: task show / decision show / doc show';
+  const tail = 'More: kadence search "…" --also "other words" --json · open one: task show / decision show / doc show / note show';
 
   const lines = [head];
   const shown: string[] = [];

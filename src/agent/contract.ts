@@ -45,6 +45,11 @@ each with a quoted passage, its ULID and a \`coverage\` figure; grep over
 A/B on kadence's own journal, search took half the context and half the time and
 got more answers right.
 
+Ask it two or three ways at once, in the words this project uses:
+\`kadence search "where is the website hosted" --also "landing page" --also "GitHub Pages"\`.
+The phrasings are fused into one answer, each record once. On 50 held-out
+questions that took first place from 26 to 30 and left none unanswered.
+
 An empty result says so. Rephrase with the words the answer would use and search
 again before falling back to grep.
 
@@ -60,9 +65,11 @@ asked of kadence's own journal, in tokens of context:
 | Way | Tokens | When |
 |---|---|---|
 | The prompt hook's lines | ~90 | already there after \`init\`, unless \`--no-hooks\` |
+| \`note show <ULID> --json\` | ~180 | a note's \`id\` from search or the hook |
 | \`decision show DEC-1 --json\` | ~300 | you know the record |
 | \`search "…"\` / \`search "…" --json\` | ~320 / ~400 | why, where, how |
 | \`task show KAD-1 --json\` | ~1,000 | one task with its history |
+| \`doc show DOC-1:12-30 --json\` | ~340 | one section: the lines search and the hook print |
 | \`doc show DOC-1 --json\` | ~3,600 | the whole document, every section |
 | \`board --json --summary\` | ~4,000 | the state of the work |
 | \`decision list --json\` / \`note list --json\` | ~8,500 / ~9,200 | everything of one kind |
@@ -177,7 +184,7 @@ ${provenance(version)}
 Tasks, notes, decisions and documentation live in \`.kadence/\` as plain files, shared through git.
 
     kadence prime                       start here: sprint, your work, what is ready
-    kadence search "…" --json           why, where, how: ~400 tokens; grep costs ~11k
+    kadence search "…" --json           why, where, how (+ --also "…" phrasings): ~400 tokens; grep ~11k
     kadence decision show DEC-1 --json  one record: ~300 (task show ~1k, doc show ~4k)
     kadence board --json --summary      the board's state: ~4k
     kadence decision list --json        every decision in force: ~8k
@@ -301,6 +308,7 @@ export const ERROR_CODES = [
   'nothing_ready',
   'milestone_not_found',
   'doc_not_found',
+  'note_not_found',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -323,6 +331,7 @@ const ERROR_MEANINGS: Record<ErrorCode, string> = {
     'The arguments were understood, but the current state does not allow it \u2014 a closed sprint, or one already started.',
   milestone_not_found: 'No milestone carries that name, MS-N label or ULID.',
   doc_not_found: 'No document carries that ULID or DOC-N label.',
+  note_not_found: 'No note carries that ULID. A note has no label, so KAD-N and DEC-N never name one.',
   nothing_ready:
     'Nothing can be started right now: the board is empty, or every open task is blocked or claimed by someone else. The message says which.',
 };
@@ -401,8 +410,10 @@ export function buildContract(version: string): Record<string, unknown> {
         },
       },
       search: {
-        required: ['schema', 'ok', 'query', 'hits', 'hitsTotal'],
+        required: ['schema', 'ok', 'query', 'also', 'hits', 'hitsTotal'],
         notes: {
+          also:
+            'The phrasings given with --also, trimmed, always an array — empty for a plain search. With phrasings, `hits` is in fused order; each hit carries the score, coverage and span of the phrasing that ranked it highest.',
           hits:
             'Each: {kind, id, label, title, score, span, lines, at, by}, ordered by score. Never more than --limit and often fewer: a passage that shares only a common word with the question is dropped rather than returned, because a model handed something that merely looks relevant fabricates more than one handed nothing.',
           id:
@@ -410,7 +421,7 @@ export function buildContract(version: string): Record<string, unknown> {
           span:
             '{text, start, end} over the record’s own quotable text, with text.length === end - start. It is a quotation, not a summary: an agent citing it is citing the journal.',
           lines:
-            'For a document: the lines of the section the passage came from, so `doc show` can be read at the right place. Null for every other kind.',
+            'For a document: the lines of the section the passage came from. `doc show DOC-1:from-to` opens just those. Null for every other kind.',
           coverage:
             'How much of the question this record holds, 0 to 1, weighted by how rare each word is — not a ranking and not a probability. Measured over a golden set: where the first hit is right this is 1.00 at the median, where it is wrong 0.62. Below 0.7 the human output says the passage answers part of the question, and an agent should treat it as somewhere to look rather than as the answer.',
           hitsTotal:
@@ -480,11 +491,13 @@ export function buildContract(version: string): Record<string, unknown> {
         },
       },
       prime: {
-        required: ['sprint', 'mine', 'mineTotal', 'documentation', 'documentationTotal', 'ready', 'attention', 'attentionTotal', 'decisions', 'notes', 'commands'],
+        required: ['sprint', 'mine', 'mineTotal', 'documentation', 'documentationTotal', 'staleDocumentation', 'staleDocumentationTotal', 'ready', 'attention', 'attentionTotal', 'decisions', 'notes', 'commands'],
         notes: {
           mine: 'Capped; `mineTotal` is the real count. Each item: {label, title, status, claimedBy, contestedBy}. A task whose `contestedBy` is non-empty comes first; if `claimedBy` is not you, you lost the claim — talk to the holder before starting. Every free-text field in this payload carries at most 2000 characters and ends with “…” when it was longer; nothing a person writes comes near that.',
           documentation:
             'Documents linked to any work you hold, at most three: {label, title, task, bytes}; `documentationTotal` is the real count. No bodies — `kadence doc show DOC-N` returns one. Always an array.',
+          staleDocumentation:
+            'Documents a linked task has outrun — it reached done after the revision shown — at most three, most recent close first: {label, title, tasks}, `tasks` being the KAD-N labels that closed since. `staleDocumentationTotal` is the real count. Empty when every document is current, and then the human output says nothing. A new revision (`doc edit`) clears it; `task show` carries the same as `stale` on each `documentation` entry.',
           decisions:
             'The five in force, newest first: {label, title}. Titles only — `kadence decision list --json` carries the reasons.',
           notes:
@@ -513,12 +526,14 @@ export function buildContract(version: string): Record<string, unknown> {
         required: ['id', 'label', 'title', 'bytes', 'revisions', 'tasks', 'updatedAt', 'updatedBy', 'source', 'conflicted'],
         notes: {
           label: 'DOC-N, derived from ULID order during the fold, exactly like KAD-N. It can change when a branch merges.',
-          body: 'Present in `doc show` only. `doc list` and `task show` carry the size in `bytes` so a caller can decide whether to read it.',
+          body: 'Present in `doc show` only. `doc list` and `task show` carry the size in `bytes` so a caller can decide whether to read it. For `doc show DOC-1:12-30` it holds those lines only, and `bytes` is still the whole document.',
+          section:
+            'Present only when `doc show` was given a range: {from, to, lines} — 1-based and inclusive, as search counts them, cut at the last line when the range runs past it; `lines` is the length of the whole body.',
           conflicts:
             'Present in `doc show` only, always an array. Non-empty means two revisions were written on top of the same one; `body` shows the later, each entry here carries another. `doc edit` settles it.',
           tasks: 'KAD-N labels of the tasks this document explains.',
           documentation:
-            '`task show` carries `documentation[]` — {id, label, title, bytes, updatedAt, conflicted} for each document linked to the task, never bodies.',
+            '`task show` carries `documentation[]` — {id, label, title, bytes, updatedAt, conflicted, stale} for each document linked to the task, never bodies. `stale` is true when the task reached done after the revision shown.',
         },
       },
       error: {
@@ -557,8 +572,8 @@ export function buildContract(version: string): Record<string, unknown> {
       {
         name: 'search',
         summary:
-          'One question over everything written down: tasks with their criteria and comments, decisions with their reason and the alternative they rejected, notes, and documents cut at their headings. Lexical, not semantic — it finds the words that are there, which on a vocabulary of ULIDs and KAD-N is the stronger method rather than the weaker one. Five passages by default, each carrying the ULID of the record and a quoted span. An empty result means the journal has no answer, which is a result and not a failure.',
-        flags: ['--json', '--kind', '--limit', '--all'],
+          'One question over everything written down: tasks with their criteria and comments, decisions with their reason and the alternative they rejected, notes, and documents cut at their headings. Lexical, not semantic — it finds the words that are there, which on a vocabulary of ULIDs and KAD-N is the stronger method rather than the weaker one. Five passages by default, each carrying the ULID of the record and a quoted span. An empty result means the journal has no answer, which is a result and not a failure. `--also "…"`, repeated, adds phrasings of the same question: each is searched on its own and the lists are fused by reciprocal rank, each passage once, whatever order they came in.',
+        flags: ['--json', '--kind', '--limit', '--all', '--also'],
         json: true,
       },
       {
@@ -623,6 +638,13 @@ export function buildContract(version: string): Record<string, unknown> {
         json: true,
       },
       {
+        name: 'note show',
+        summary:
+          'One note, whole, by its ULID — the `id` search and the prompt hook hand back. A note has no label, so KAD-N and DEC-N do not open one.',
+        args: ['id'],
+        json: true,
+      },
+      {
         name: 'decision add',
         summary: 'Record why something was chosen, and what was turned down.',
         args: ['title'],
@@ -659,7 +681,13 @@ export function buildContract(version: string): Record<string, unknown> {
         flags: ['--body', '--stdin', '--file', '--title', '--json'],
         json: true,
       },
-      { name: 'doc show', summary: 'One document with its body.', args: ['ref'], json: true },
+      {
+        name: 'doc show',
+        summary:
+          'One document with its body. `DOC-1:12-30` — the reference search and the prompt hook print — returns only those lines, about a sixth of the cost of the whole.',
+        args: ['ref'],
+        json: true,
+      },
       {
         name: 'doc list',
         summary: 'Documentation without bodies: titles, sizes, the tasks each explains.',

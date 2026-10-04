@@ -161,6 +161,44 @@ export function runNoteList(
   };
 }
 
+/**
+ * One note, whole, by its ULID.
+ *
+ * Search and the prompt hook hand out a note's ULID, and agents given one
+ * reached for `note show` twice before finding the text another way (KAD-53
+ * runs). A note has no label (I7) — nothing to number it by — so the ULID is
+ * the only handle, and a KAD-N or DEC-N given here is told so.
+ */
+export function runNoteShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): CommandResult {
+  const ctx = resolveContext(cwd, env);
+  if (!isContext(ctx)) return ctx;
+
+  const { state, warnings } = loadState(ctx.root, ctx.actor);
+  const wanted = ref.trim().toUpperCase();
+  const note = state.notes.find((n) => n.id === wanted);
+  if (note === undefined) {
+    return failure(
+      1,
+      'note_not_found',
+      `No note ${ref}. A note has no label; it is opened by its ULID.\n  kadence note list`,
+      { hint: 'kadence note list --json' },
+    );
+  }
+
+  const label = labelOf(state);
+  const task = label(note.task);
+  const lines = [note.text, ''];
+  if (task !== null) lines.push(`Task:  ${task}`);
+  lines.push(`By:    ${note.by}${note.source === 'agent' ? ' (agent)' : ''}`, `At:    ${note.at}`, `Id:    ${note.id}`);
+  return {
+    ok: true,
+    exitCode: 0,
+    warnings,
+    message: lines.join('\n'),
+    data: { schema: 'kadence/v1', ok: true, note: serializeNote(note, label) },
+  };
+}
+
 /** Task ULIDs mean nothing to a reader; labels are what they see everywhere else. */
 export function labelOf(state: ProjectState): (id: string | null) => string | null {
   return (id) => (id === null ? null : (state.tasks.find((t) => t.id === id)?.label ?? null));

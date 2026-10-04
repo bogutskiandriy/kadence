@@ -33,6 +33,44 @@
   nothing. Markdown headings survive — the editor helper used to strip every
   line starting with `#`, as git does, which would have removed them. Without
   a terminal (an agent, a pipe) it says how to pass the text instead.
+- `kadence note show <ULID>` — one note, whole, by the `id` that search and
+  the prompt hook hand back (~180 tokens). A note has no label, so `KAD-N`
+  is refused with `note_not_found`, a new error code. The hook's last line
+  names it.
+- `kadence doc show DOC-31:163-172` opens just that section — the reference
+  search and the prompt hook already print. On the hook's references for the
+  golden questions: ~340 tokens instead of ~2,300 (median ratio 0.17). In
+  `--json` the lines are in `body` and `section` says where they sit; `bytes`
+  is still the whole document.
+- A document older than the work it describes is said so: when a task linked
+  to it reaches done a day or more after its last revision, `prime` lists it
+  (at most three, under "Documentation older than the work it describes") and
+  `task show` marks it, with `stale` on each `documentation` entry in
+  `--json`. A new revision clears it. Within a day it stays quiet — on this
+  repository's journal the literal rule flagged two documents, both written
+  minutes before their task closed (DEC-49).
+- Search folds plurals, `-ed` and `-ing` onto the word they came from, on
+  both sides, and leaves identifiers (`KAD-42`, `state.json`, `blocked_by`)
+  as written. A record is ranked when it holds a tenth of the question; the
+  search answers only when its best record holds 0.35, so nonsense still gets
+  nothing. On 50 held-out questions: top three 33 → 38, top five 35 → 40,
+  first place 27 → 26 (DEC-50).
+- The relevance benchmark runs on a frozen corpus — the journal as of a pinned
+  event — so a note quoting the golden questions can no longer move the
+  number; the live journal is still searched as a drift alarm. Fifty held-out
+  questions with their target records and three blind phrasings each are a
+  fixture, reported on every run and never a floor.
+- `kadence search "q" --also "p1" --also "p2"` — the same question in other
+  words, searched one by one and fused by reciprocal rank into one answer,
+  each passage once. On 50 held-out questions with three blind phrasings:
+  first place 26 → 30, top three 38 → 40, none left unanswered. `--json`
+  gains `also`, always an array. The instruction section and the prompt
+  hook's last line name it (DEC-51).
+- An agent skill package: `agents/kadence/SKILL.md` (60 lines), and from it
+  a Claude Code plugin and a Cursor rule, written by
+  `node scripts/agent-package.mjs`; `--check` fails when either has drifted
+  from the source. A test holds every command the skill names to the ones
+  `schema --json` publishes. Not in the npm package.
 - A test that runs agents side by side: eight processes in one working tree,
   three worktrees merged at once, two claims on one task. Nothing is lost;
   the double claim is reported.
