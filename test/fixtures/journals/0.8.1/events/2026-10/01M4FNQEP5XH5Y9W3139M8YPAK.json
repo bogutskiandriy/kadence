@@ -1,0 +1,1 @@
+{"id":"01M4FNQEP5XH5Y9W3139M8YPAK","type":"doc.written","entity":"01M4FNQEK9FCTACK0ZBJSAPPR1","actor":"fixture@example.com","ts":"2026-10-09T06:31:07.717Z","source":"agent","data":{"title":"How login works","body":"Sessions live in a cookie set after the redirect.","parents":["01M4FNQEK9FCTACK0ZBJSAPPR1"]}}

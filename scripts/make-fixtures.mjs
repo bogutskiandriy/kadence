@@ -23,7 +23,7 @@ import { join, resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const OUT = join(ROOT, 'test', 'fixtures', 'journals');
-const VERSIONS = process.argv.length > 2 ? process.argv.slice(2) : ['0.1.5', '0.2.2', '0.3.2', '0.4.1', '0.5.0', '0.6.0', '0.7.0', '0.8.0'];
+const VERSIONS = process.argv.length > 2 ? process.argv.slice(2) : ['0.1.5', '0.2.2', '0.3.2', '0.4.1', '0.5.0', '0.6.0', '0.7.0', '0.8.0', '0.8.1'];
 
 /**
  * One scenario for every version. Later commands do not exist in early
