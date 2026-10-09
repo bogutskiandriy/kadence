@@ -1,6 +1,6 @@
 {
   "name": "kadence",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Read and write the project's tasks, decisions, notes and documentation kept by kadence in .kadence/ — use at the start of a session, before grep when the question is why, where or how, and whenever work starts, finishes or a choice is made.",
   "author": {
     "name": "kadence"

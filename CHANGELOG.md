@@ -2,7 +2,21 @@
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-10-09
+
 **A journal outlives the version that wrote it, and now that is tested.**
+
+### A patch number on a minor's worth of change
+
+By DOC-64's own rule this is a 0.9.0: two commands answer differently with
+the same input. It is 0.8.1 by the owner's call (DEC-53, KAD-72).
+Nothing below renames or removes a field in `kadence/v1` or changes the shape
+of an event; every `--json` change is an added field.
+
+| Unchanged command | 0.8.0 | 0.8.1 | The old answer |
+|---|---|---|---|
+| `kadence init` in a repository with `.codex/`, `.cursor/`, `.github/hooks/` or `.github/copilot-instructions.md` | wrote hooks for Claude Code only | also writes `.codex/hooks.json`, `.cursor/hooks.json` or `.github/hooks/kadence.json`, merged into any file already there | `--no-hooks` (writes no hooks at all) |
+| `kadence search`, the prompt hook, `task list --search` | matched words as written; a record needed more of the question to rank | `tasks` finds `task`, `blocked` finds `block`; a record ranks from a tenth of the question, answers from 0.35 | none |
 
 ### Added
 
