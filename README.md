@@ -421,7 +421,7 @@ included: `kadence search "compatibility policy"` or `kadence doc show DOC-65`.
 npm install
 npm test            # 1,352 tests; builds dist/cli.js first
 npm run typecheck
-npm run build       # dist/cli.js 145 KB, blessed kept external (82 KB at 0.4.1)
+npm run build       # dist/cli.js 149 KB, blessed kept external (82 KB at 0.4.1)
 ```
 
 `CLAUDE.md` documents the invariants, the boundaries, and the decisions that
