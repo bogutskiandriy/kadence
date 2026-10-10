@@ -1,5 +1,7 @@
 import cac from 'cac';
 import { runInit, HOOK_AGENTS, type HookAgent } from './commands/init.js';
+import { codaGreeting } from './coda.js';
+import { colorsEnabled } from './output.js';
 import { runReady } from './commands/ready.js';
 import { runSearch, SEARCH_KINDS } from './commands/search.js';
 import { runPromptHook, runSessionHook } from './commands/hook.js';
@@ -871,7 +873,13 @@ cli
       hooks: options.hooks !== false,
       hooksFor: asked as HookAgent[],
     });
-    emit({ ok: r.ok, message: r.message, exitCode: r.ok ? 0 : 1 }, false);
+    // Coda only for a person at a terminal, and only on a fresh setup (KAD-80).
+    const tty = process.stdout.isTTY === true;
+    const message =
+      r.ok && !r.alreadyInitialized
+        ? codaGreeting(r.message, { tty, color: colorsEnabled(process.env, tty), version: __VERSION__ })
+        : r.message;
+    emit({ ok: r.ok, message, exitCode: r.ok ? 0 : 1 }, false);
   });
 
 cli
