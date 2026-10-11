@@ -25,7 +25,7 @@ the CLI. No server required.
     kadence search "…" --json            why, where, how — before grep or a list
     kadence ready --json                 what can be started right now
     kadence task claim KAD-42           take it; no argument takes the top of ready
-    kadence board --json                 the whole board
+    kadence board --json                 the state of every task; --history for all of it
     kadence task list --json             all tasks
     kadence task show KAD-42 --json     one task with its history
     kadence task add "title" -d "..." --type bug --estimate 3
@@ -71,11 +71,11 @@ asked of kadence's own journal, in tokens of context:
 | \`task show KAD-1 --json\` | ~1,000 | one task with its history |
 | \`doc show DOC-1:12-30 --json\` | ~340 | one section: the lines search and the hook print |
 | \`doc show DOC-1 --json\` | ~3,600 | the whole document, every section |
-| \`board --json --summary\` | ~4,000 | the state of the work |
+| \`board --json\` | ~4,000 | the state of the work |
 | \`decision list --json\` / \`note list --json\` | ~8,500 / ~9,200 | everything of one kind |
 | grep over \`.kadence/events/\`, three files read | ~11,000 (p90 ~21,000) | whole events, a document at a time |
 | \`task list --json\` | ~16,000 | every task; \`--search "…"\` narrows it with the same matching as search |
-| \`board --json\` | ~51,000 | every task in full |
+| \`board --json --history\` | ~51,000 | every task in full |
 
 ## JSON contract
 
@@ -132,8 +132,9 @@ Asking is also cheaper, and stays cheap: \`task show --json\` is about 950 bytes
 whether the project holds ten tasks or a thousand, while the journal behind it
 grows past 500 KB.
 
-\`board --json\` is the exception: it returns every task in full, which on a large
-project is a lot of description you did not ask for. Narrow it:
+\`board --json\` gives the state of each task and leaves out what grows with the
+work — history, comments, description. \`--history\` brings them back; on a large
+project that is a lot you did not ask for. Narrow it further:
 
     kadence board --json --fields label,status,assignee
     kadence task list --json --fields id,label,status
@@ -309,6 +310,7 @@ export const ERROR_CODES = [
   'milestone_not_found',
   'doc_not_found',
   'note_not_found',
+  'journal_damaged',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -332,6 +334,8 @@ const ERROR_MEANINGS: Record<ErrorCode, string> = {
   milestone_not_found: 'No milestone carries that name, MS-N label or ULID.',
   doc_not_found: 'No document carries that ULID or DOC-N label.',
   note_not_found: 'No note carries that ULID. A note has no label, so KAD-N and DEC-N never name one.',
+  journal_damaged:
+    'An event file could not be read, so the state is missing whatever it held. `events.damaged` names the files; git has every version of them.',
   nothing_ready:
     'Nothing can be started right now: the board is empty, or every open task is blocked or claimed by someone else. The message says which.',
 };
@@ -406,7 +410,7 @@ export function buildContract(version: string): Record<string, unknown> {
         required: ['schema', 'ok', 'columns', 'tasksTotal', 'tasksOffset'],
         notes: {
           columns:
-            'With --summary each task carries only the state fields, never `history` or `comments`. The response without the flag is unchanged \u2014 the contract only ever gains.',
+            'Each task carries only the state fields, never `history` or `comments` \u2014 the same set --summary selected. --history returns every task in full. Changed after 0.8.2 under the deprecation policy (DEC-55): up to 0.8.2, the response without a flag was every task in full.',
         },
       },
       search: {
@@ -556,8 +560,8 @@ export function buildContract(version: string): Record<string, unknown> {
       {
         name: 'board',
         summary:
-          'The whole board, grouped by column. Every task in full \u2014 pass --summary for the state without history and comments, which is what makes a large board big.',
-        flags: ['--json', '--fields', '--summary'],
+          'The whole board, grouped by column: the state of each task, without the history and comments that make a large board big. --history returns every task in full. --summary is accepted and answers the same as no flag.',
+        flags: ['--json', '--fields', '--history', '--summary'],
         json: true,
       },
       {
@@ -759,6 +763,13 @@ export function buildContract(version: string): Record<string, unknown> {
         summary:
           'Fold months older than --keep-months into one archive file each. Same events, faster cold start; an archived month is one file, so compact on one branch and merge before compacting on another.',
         flags: ['--keep-months', '--dry-run', '--json'],
+        json: true,
+      },
+      {
+        name: 'doctor',
+        summary:
+          'Fold the whole journal whatever the cache says, put the result in .kadence/state.json, and report: events read and damaged, whether the cache had agreed with the journal, and what the fold surfaces (contested claims, cycles, columns not in the board). Never touches an event. Exit 1 with journal_damaged when a file cannot be read; surfaced conflicts are not errors.',
+        flags: ['--json'],
         json: true,
       },
       {

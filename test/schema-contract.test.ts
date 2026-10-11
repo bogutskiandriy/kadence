@@ -178,6 +178,42 @@ describe('the schema cannot drift from the code', () => {
     },
     60_000,
   );
+
+  // The test above proves schema → code. This one proves code → schema: an
+  // action added to the CLI without a contract entry passed a green suite, and
+  // the story map found "it omits several today" (G3, DOC-34). The list comes
+  // from the binary, not from the source — `--help` for the commands, and the
+  // `allowed` an unknown action answers with for their actions — so it is the
+  // dispatch an agent actually meets.
+  it(
+    'names every command and every action the binary accepts',
+    () => {
+      const published = new Set(
+        (json(['schema', '--json']).contract.commands as { name: string }[]).map((c) => c.name),
+      );
+      const help = run(['--help']).stdout;
+      const commands = [...help.slice(help.indexOf('Commands:')).matchAll(/^ {2}([a-z]+)\b/gm)].map((m) => m[1]!);
+      expect(commands.length, 'the help lists the commands').toBeGreaterThan(10);
+
+      const missing: string[] = [];
+      for (const command of commands) {
+        const covered = [...published].some((n) => n === command || n.startsWith(`${command} `));
+        if (!covered) missing.push(command);
+
+        const r = run([command, 'no-such-action', '--json']);
+        const allowed = r.stdout.startsWith('{') ? (JSON.parse(r.stdout).error?.allowed as string[] | undefined) : undefined;
+        for (const action of allowed ?? []) {
+          if (!published.has(`${command} ${action}`)) missing.push(`${command} ${action}`);
+        }
+      }
+      // `note` takes free text, so an unknown word is a note, not an error;
+      // its two reading actions are named here instead.
+      for (const name of ['note list', 'note show']) if (!published.has(name)) missing.push(name);
+
+      expect(missing, 'commands the CLI accepts and schema --json does not name').toEqual([]);
+    },
+    60_000,
+  );
 });
 
 describe('decisions are reachable and published', () => {

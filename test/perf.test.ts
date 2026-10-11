@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createUlid } from '../src/core/ulid.js';
 import { readAll, eventsDir } from '../src/core/store.js';
 import { project } from '../src/core/projection.js';
-import { loadOrBuild, snapshotPath } from '../src/core/snapshot.js';
+import { loadOrBuild, rebuild, snapshotPath } from '../src/core/snapshot.js';
 import { compact } from '../src/core/store.js';
 import { serialize, type FlowEvent } from '../src/core/event.js';
 import { execFileSync } from 'node:child_process';
@@ -139,6 +139,22 @@ describe(`performance on ${EVENT_COUNT} events`, () => {
     // eslint-disable-next-line no-console
     console.log(`  cold start with compacted archive: ${ms.toFixed(0)} ms`);
     expect(ms).toBeLessThan(COLD_BUDGET_MS);
+  }, 120_000);
+
+  it(`doctor's rebuild over the same journal fits within ${COLD_BUDGET_MS} ms`, () => {
+    // A cold start by design — it reads every event whatever the cache says —
+    // plus comparing against the cache it found, which is the worst case, so
+    // the cache is left in place rather than deleted as measureCold does.
+    loadOrBuild(root);
+    let best = Infinity;
+    for (let i = 0; i < 3; i++) {
+      const t = performance.now();
+      expect(rebuild(root).state.tasks).toHaveLength(500);
+      best = Math.min(best, performance.now() - t);
+    }
+    // eslint-disable-next-line no-console
+    console.log(`  doctor rebuild with compacted archive: ${best.toFixed(0)} ms`);
+    expect(best).toBeLessThan(COLD_BUDGET_MS);
   }, 120_000);
 
   it(`ready over 10k events fits within ${COLD_BUDGET_MS} ms, cache and all`, () => {

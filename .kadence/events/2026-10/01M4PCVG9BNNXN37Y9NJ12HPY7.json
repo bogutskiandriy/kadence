@@ -1,0 +1,1 @@
+{"id":"01M4PCVG9BNNXN37Y9NJ12HPY7","type":"task.criterion_added","entity":"01M4PCVFVVM3ZWHWHVWBY6FQVW","actor":"bogutski2005@gmail.com","ts":"2026-10-11T21:10:44.267Z","source":"agent","data":{"text":"Rebuilds state.json from events and says whether the cache was stale; never touches an event"}}

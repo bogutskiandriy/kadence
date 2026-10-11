@@ -139,6 +139,70 @@ export function loadOrBuild(root: string, currentActor?: string): LoadResult {
   return { state, fromCache: false, incomingEvents, health };
 }
 
+/** How the cache stood when `rebuild` found it. */
+export type CacheStanding = 'fresh' | 'stale' | 'missing' | 'outdated';
+
+export interface RebuildResult {
+  /** What a normal read would have done with the cache it found. */
+  before: CacheStanding;
+  /**
+   * Whether a cache that passed the fingerprint held the state the journal
+   * folds to. Null when it did not pass: it was about to be rebuilt anyway.
+   */
+  agreed: boolean | null;
+  /** False when the journal is damaged — a damaged journal is never cached. */
+  written: boolean;
+  read: ReturnType<typeof readAll>;
+  state: ProjectState;
+}
+
+/**
+ * Folds the whole journal, whatever the cache says, and puts the result in
+ * its place — `kadence doctor`'s half of I6.
+ *
+ * The fingerprint answers "did anything change" from names, count and bytes,
+ * which is what keeps a warm read at 6 ms; an edit that keeps all three passes
+ * it. This is the one path that does not trust it, so it can say whether the
+ * cache was telling the truth, not only whether it looked current.
+ */
+export function rebuild(root: string): RebuildResult {
+  const fingerprint = scanFingerprint(eventsDir(root));
+  const cached = readSnapshot(root);
+  const before: CacheStanding =
+    cached === null
+      ? 'missing'
+      : cached.version !== SNAPSHOT_VERSION
+        ? 'outdated'
+        : cached.lastEventId === fingerprint.lastEventId &&
+            cached.eventCount === fingerprint.count &&
+            cached.eventBytes === fingerprint.bytes
+          ? 'fresh'
+          : 'stale';
+
+  const read = readAll(root);
+  const state = project(read.events);
+  // Compared as JSON because the cache is JSON: whatever does not survive a
+  // round trip is not something the cache could have served either.
+  const agreed = before === 'fresh' ? JSON.stringify(cached!.state) === JSON.stringify(state) : null;
+
+  const written =
+    read.corrupted.length === 0 &&
+    writeSnapshot(root, {
+      version: SNAPSHOT_VERSION,
+      lastEventId: fingerprint.lastEventId,
+      eventCount: fingerprint.count,
+      eventBytes: fingerprint.bytes,
+      health: {
+        corrupted: 0,
+        total: read.events.length,
+        unknownTypes: read.unknownTypes,
+        systemic: false,
+      },
+      state,
+    });
+  return { before, agreed, written, read, state };
+}
+
 interface Fingerprint {
   lastEventId: string;
   count: number;
@@ -226,15 +290,18 @@ function readSnapshot(root: string): Snapshot | null {
   }
 }
 
-function writeSnapshot(root: string, snapshot: Snapshot): void {
+/** Says whether it wrote, for the one caller that reports it (`rebuild`). */
+function writeSnapshot(root: string, snapshot: Snapshot): boolean {
   try {
     mkdirSync(dataDir(root), { recursive: true });
     const target = snapshotPath(root);
     const tmp = `${target}.tmp`;
     writeFileSync(tmp, JSON.stringify(snapshot), 'utf8');
     renameSync(tmp, target);
+    return true;
   } catch {
     // No write permission — the CLI must keep working, just slower.
+    return false;
   }
 }
 
