@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.8.2] — 2026-10-11
+
+**Coda says hello, once, to the person who ran `init`.**
+
+### Added
+
+- `kadence init` greets a person at a terminal with Coda, the character the
+  site carries: three rows of half blocks in one colour beside `kadence vX`,
+  the message's first line and "Coda keeps what you decide, and why." Only
+  on a fresh setup and only when stdout is a TTY; colour only when colours
+  are enabled, `NO_COLOR` honoured (KAD-80).
+
+Nothing an agent reads changes: in a pipe, under `--json`, in `prime` and in
+the hooks, `init` answers byte for byte as in 0.8.1 — a test runs it through
+a real pipe to hold that. No `kadence/v1` field and no event shape changes.
+
 ## [0.8.1] — 2026-10-09
 
 **A journal outlives the version that wrote it, and now that is tested.**
