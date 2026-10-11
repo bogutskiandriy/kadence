@@ -219,7 +219,8 @@ milestones, acceptance criteria and a definition of done, templates, custom
 columns, reports folded from the same journal (`report flow`, `cfd`,
 `attention`; burndown, velocity and workload are in the repository and not yet
 on npm), a self-contained HTML or Markdown export, `compact` for long journals,
-and shell completion. None of it is required, and none of it is the point —
+`doctor` to rebuild the cache and check every event reads, and shell
+completion. None of it is required, and none of it is the point —
 it is what the journal happens to know. `--help` on each command is the
 reference, and `kadence doc list` is what the journal knows about itself.
 
@@ -287,12 +288,13 @@ is not the saving the industry benchmarks suggest — it would be a second way t
 say the same thing, and it would not work for agents that have no MCP client at
 all.
 
-Ask for only what you need — a board of a thousand tasks is 855 KB in full,
-275 KB with `--summary`, and 104 KB with the three fields an agent actually
+Ask for only what you need — a board of a thousand tasks is 855 KB in full
+with `--history`, 275 KB by default, which leaves out the history and comments
+that grow with the work, and 104 KB with the three fields an agent actually
 reads:
 
 ```bash
-kadence board --json --summary
+kadence board --json
 kadence board --json --fields label,status,assignee
 ```
 

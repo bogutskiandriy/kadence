@@ -8,6 +8,7 @@ import { runPromptHook, runSessionHook } from './commands/hook.js';
 import { runPrime } from './commands/prime.js';
 import { runStats } from './commands/stats.js';
 import { runCompact } from './commands/compact.js';
+import { runDoctor } from './commands/doctor.js';
 import { runReport, REPORTS } from './commands/report.js';
 import { runCompletion, SHELLS } from './commands/completion.js';
 import { runNoteAdd, runNoteList, runNoteShow } from './commands/note.js';
@@ -823,6 +824,15 @@ cli
   });
 
 cli
+  .command('doctor', 'Rebuild the cache from the events, check the journal reads cleanly, report what it found')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence doctor')
+  .example('  kadence doctor --json')
+  .action((options: { json?: boolean }) => {
+    emit(runDoctor(process.cwd(), process.env), options.json === true);
+  });
+
+cli
   .command('completion [action]', 'Shell completion; "install" writes it where your shell looks')
   .option('--shell <name>', `Shell: ${SHELLS.join(' | ')}; detected from $SHELL by default`)
   .option('--force', 'Overwrite a completion file kadence did not write')
@@ -1342,7 +1352,8 @@ cli
   .option('--statuses <list>', 'Comma-separated columns, e.g. "todo,doing,done"')
   .option('--dod <list>', 'Criteria every new task starts with, e.g. "tests green,docs updated"')
   .option('--started <status>', 'The column where work counts as started; cycle time is measured from it')
-  .option('--summary', 'JSON only: column state without history or comments')
+  .option('--history', 'JSON only: every task in full, with its history and comments')
+  .option('--summary', 'JSON only: what --json returns already; kept so older calls still work')
   .option('--html', 'export: one self-contained HTML file, no server and no network')
   .option('--md', 'export: markdown for a README or a pull request')
   .option('--readme', 'export: update the section between markers in README.md')
@@ -1355,7 +1366,8 @@ cli
   .example('  kadence board')
   .example('  kadence board --assignee me --sprint')
   .example('  kadence board --json --fields label,status,assignee')
-  .example('  kadence board --json --summary        the state, without the history')
+  .example('  kadence board --json                  the state of each task, without the history')
+  .example('  kadence board --json --history        every task in full')
   .example('  kadence board config')
   .example('  kadence board config --statuses "todo,doing,review,done"')
   .example('  kadence board config --dod "tests green,docs updated"')
@@ -1364,7 +1376,7 @@ cli
   .example('  kadence board export --md --readme')
   .action((action: string | undefined, options: {
       assignee?: string; sprint?: boolean; statuses?: string; dod?: string; started?: string; fields?: string;
-      summary?: boolean; html?: boolean; md?: boolean; readme?: boolean; file?: string; json?: boolean;
+      history?: boolean; html?: boolean; md?: boolean; readme?: boolean; file?: string; json?: boolean;
       limit?: string; offset?: string;
     }) => {
     const boardPage = paging(options);
@@ -1408,7 +1420,7 @@ cli
         },
         // Selection only narrows JSON; the human board renders its own columns.
         options.json === true ? options.fields : undefined,
-        options.json === true && options.summary === true,
+        options.json === true && options.history === true,
       ),
       options.json === true,
     );

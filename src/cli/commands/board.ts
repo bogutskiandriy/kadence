@@ -39,7 +39,8 @@ export interface BoardFilters {
 }
 
 /**
- * The narrow field set behind `--summary`.
+ * What `board --json` returns for each task unless asked for more — the field
+ * set `--summary` used to select, and the default since DEC-55.
  *
  * `history` and `comments` are what make a board response grow without bound:
  * they scale with how long a task has been worked on, not with how many tasks
@@ -57,8 +58,8 @@ export const SUMMARY_FIELDS = [
   'assignee',
   'claimedBy',
   // A contested task must not read as a cleanly owned one. The contract calls
-  // this a promise an agent branches on before starting work, and --summary is
-  // the response large boards are steered towards.
+  // this a promise an agent branches on before starting work, and this is the
+  // response every agent gets.
   'contestedBy',
   'blockedBy',
   'sprint',
@@ -71,7 +72,7 @@ export function runBoard(
   env: NodeJS.ProcessEnv,
   filters: BoardFilters,
   fieldSpec?: string,
-  summary = false,
+  history = false,
 ): CommandResult {
   const ctx = resolveContext(cwd, env);
   if (!isContext(ctx)) return ctx;
@@ -79,9 +80,11 @@ export function runBoard(
   // Validated before any work: a typo in --fields should cost nothing.
   const { fields: chosen, error: fieldError } = parseFields(fieldSpec);
   if (fieldError !== null) return fieldError;
-  // An explicit --fields wins: someone naming fields has said what they want,
-  // and --summary is a shorthand for one particular set.
-  const fields = chosen ?? (summary ? [...SUMMARY_FIELDS] : null);
+  // An explicit --fields wins: someone naming fields has said what they want.
+  // Otherwise the state of each task, and its history only when asked for —
+  // the history is what grows without bound, and it grows with how long the
+  // work took, not with how much of it there is (G5, DEC-55).
+  const fields = chosen ?? (history ? null : [...SUMMARY_FIELDS]);
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);
 

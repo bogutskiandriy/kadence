@@ -279,7 +279,9 @@ describe('large responses survive the pipe', () => {
     () => {
       buildFatBoard();
 
-      const r = run(['board', '--json']);
+      // --history: since DEC-55 it is the board response that can still be
+      // large, and the one this guard has to cover.
+      const r = run(['board', '--json', '--history']);
       expect(r.stdout.length).toBeGreaterThan(131072);
       expect(() => JSON.parse(r.stdout)).not.toThrow();
     },

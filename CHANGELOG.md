@@ -2,6 +2,52 @@
 
 ## [Unreleased]
 
+### ⚠️ Upgrading — `board --json` returns the state, not the history
+
+Nothing was renamed or removed from `kadence schema --json`, so `kadence/v1`
+stands. What `board --json` returns **by default** changed:
+
+| Was | Is | To get the old answer |
+|---|---|---|
+| every task in full, `history` and `comments` included | the state of each task: the fields `--summary` selected | `--history` |
+
+The response grew with how long the work took, not with how much of it there
+was: 17 KB at 30 events and 82 KB at 300 on the same thirty tasks, about 240
+bytes for every event. Agents are who call `board --json`, and one that did not
+know `--summary` paid for the whole history on every call (G5, DEC-55, KAD-84).
+`--summary` still works and now answers the same as no flag, so instructions
+that say `board --json --summary` read the same on old and new versions.
+
+### Added — `kadence doctor`
+
+Rebuild, verify, report (G5, KAD-85). It folds the whole journal whatever the
+cache says, writes the result to `.kadence/state.json`, and reports three
+things: how many events read and which files did not; whether the cache it
+found had agreed with the journal; and what the fold surfaces — contested
+claims, cycles, columns not in the board, documents edited on two branches.
+
+- The cache check is the part a normal read cannot do. The fingerprint is
+  names, count and bytes, and an edit that keeps all three passes it; `doctor`
+  compares the state itself and says when a cache looked current and was not.
+- Never touches an event. The one file it writes is the cache, which I6 says
+  changes nothing.
+- Exit 1 with the new error code `journal_damaged` when a file cannot be read,
+  and the files named in `events.damaged`. Surfaced conflicts are not errors:
+  they are the journal keeping both sides, and a doctor that failed on them
+  would fail on every team that merges.
+- 31 ms on 10,000 events with a compacted archive, in the perf suite against
+  the same 200 ms budget as a cold start.
+
+### Tested
+
+- Every command and action the binary accepts is named in `schema --json`.
+  The suite proved only the other direction — that what the schema names
+  exists — so an action added without a contract entry passed it (G3, KAD-82).
+- The install smoke test runs the packed tarball without installing it, the
+  way a person first tries a tool: `npx`, `pnpm dlx` and `bunx`, on macOS,
+  Linux and Windows. A global `kadence` on `PATH` is kept out of those runs,
+  because `npx` answers with it when the package brings no bin (G4, KAD-83).
+
 ## [0.8.2] — 2026-10-11
 
 **Coda says hello, once, to the person who ran `init`.**
