@@ -47,6 +47,14 @@ claims, cycles, columns not in the board, documents edited on two branches.
   way a person first tries a tool: `npx`, `pnpm dlx` and `bunx`, on macOS,
   Linux and Windows. A global `kadence` on `PATH` is kept out of those runs,
   because `npx` answers with it when the package brings no bin (G4, KAD-83).
+- `schema --json` only ever gains, now under test. Each release fixture keeps
+  the contract that version published, captured from npm by
+  `make-fixtures.mjs` (`--schema-only` backfills without touching a committed
+  journal); a command, flag, error code or field missing today fails against
+  every release that had it. All nine since 0.2.2 hold (G3, KAD-86).
+- Compaction runs on a real journal: a copy of this repository's own, 1,400+
+  events over two months, every month archived, then held to the same folded
+  state, the same `board --json --history` and a clean `doctor` (G5, KAD-87).
 
 ## [0.8.2] — 2026-10-11
 
