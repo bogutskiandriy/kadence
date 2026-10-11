@@ -1,0 +1,1 @@
+{"id":"01M4PCV3V888GM1SZZ84ST5ND6","type":"task.criterion_added","entity":"01M4PCV3HZSK4XB8K0HHGKDXQ6","actor":"bogutski2005@gmail.com","ts":"2026-10-11T21:10:31.528Z","source":"agent","data":{"text":"board --json without flags returns the summary shape; size does not grow with events (test at real size)"}}

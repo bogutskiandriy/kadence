@@ -1,0 +1,1 @@
+{"id":"01M4PCV36NVPJ9YNVWXYK1AJNF","type":"task.criterion_added","entity":"01M4PCV2WAHRCBX0S30DXSCQTJ","actor":"bogutski2005@gmail.com","ts":"2026-10-11T21:10:30.869Z","source":"agent","data":{"text":"install-smoke.mjs has a dlx mode that never runs an install step first"}}
