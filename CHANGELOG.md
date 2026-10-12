@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- The guided `kadence init` recommends Claude Code's hooks whether or not
+  `.claude/` is already there, as plain `init` always has (DEC-35). In a
+  repository that showed only Codex or Cursor, Recommended meant those alone
+  and wrote no Claude Code hooks. What was found is still said as found
+  (`(detected)`); the recommended setup adds Claude Code to it. Found
+  re-taking the site's screenshot of `init`.
+
 ## [0.9.0] — 2026-10-12
 
 A minor by DOC-64's rule: the default answer of `board --json` changed (see

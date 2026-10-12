@@ -142,11 +142,14 @@ class Guide {
   async setup(): Promise<number> {
     const p = this.p;
     const found = findAdrs(this.root);
+    // What shows in the repository, said as found; and what is recommended,
+    // which is that plus Claude Code always — plain `kadence init` writes its
+    // hooks by default (DEC-35), and the guided one must not mean less.
     const detected: Agent[] = [
       ...(existsSync(join(this.root, '.claude')) || existsSync(join(this.root, 'CLAUDE.md')) ? ['claude' as const] : []),
       ...agentsInUse(this.root),
     ];
-    if (detected.length === 0) detected.push('claude');
+    const recommended: Agent[] = ['claude', ...detected.filter((a) => a !== 'claude')];
     const names = (agents: readonly Agent[]) => AGENTS.filter((a) => agents.includes(a.value)).map((a) => a.label).join(', ');
 
     this.header('Nothing is written until you say so.');
@@ -154,7 +157,7 @@ class Guide {
     this.step('Found in this repository');
     for (const [k, v] of [
       ['Repository', `${p.green(SYM.ok)} git`],
-      ['Agents', `${p.green(SYM.ok)} ${names(detected)}  ${p.dim('(detected)')}`],
+      ['Agents', detected.length > 0 ? `${p.green(SYM.ok)} ${names(detected)}  ${p.dim('(detected)')}` : p.dim('· none found — Claude Code is the default')],
       ['ADRs', found.dir !== null ? `${p.green(SYM.ok)} ${found.adrs.length} in ${found.dir}/` : p.dim('· none found')],
       ['Journal', p.dim('· not set up yet')],
     ] as const) {
@@ -164,7 +167,7 @@ class Guide {
 
     const how = await this.ask(
       select('How do you want to set it up?', [
-        { value: 'recommended', label: 'Recommended', hint: `hooks for ${names(detected)} · default columns · no definition of done` },
+        { value: 'recommended', label: 'Recommended', hint: `hooks for ${names(recommended)} · default columns · no definition of done` },
         { value: 'customize', label: 'Customize', hint: 'agents, columns, definition of done' },
         { value: 'not-now', label: 'Not now', hint: 'nothing is written' },
       ]),
@@ -175,7 +178,7 @@ class Guide {
       return 0;
     }
 
-    let agents: Agent[] = detected;
+    let agents: Agent[] = recommended;
     let columns: string | null = null;
     let dod: string | null = null;
     if (how === 'customize') {
@@ -183,7 +186,7 @@ class Guide {
         multiselect(
           'Which agents work in this repository?',
           AGENTS.map((a) => ({ value: a.value, label: a.label, hint: a.hook + (detected.includes(a.value) ? '  (detected)' : '') })),
-          detected,
+          recommended,
         ),
       );
       columns = await this.ask(
