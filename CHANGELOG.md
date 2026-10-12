@@ -2,6 +2,60 @@
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-10-12
+
+A minor by DOC-64's rule: the default answer of `board --json` changed (see
+⚠️ Upgrading below). Everything since 0.8.2 is in it.
+
+**Coda sets kadence up with you — and the hook catches a reopened decision
+from the first day.**
+
+### Added — a guided `kadence init` for a person at a terminal
+
+Recorded first as a prototype, then built (KAD-89):
+
+- **What it found, then one question.** The agents in use, an ADR folder, the
+  repository — then "How do you want to set it up?" with Recommended,
+  Customize (agents, columns, a definition of done that also fits work that
+  is not code) and Not now. Nothing is written before the answer.
+- **The decisions you already have.** ADRs in `docs/adr`, `docs/decisions` or
+  `adr` (MADR and Nygard) are offered with a preview — ◼ to keep, space to
+  leave one out — and recorded with a link to their file. Without ADRs, Coda
+  asks for one decision by hand.
+- **What a teammate's agent will see.** The real prompt hook, run on what was
+  just written, for "should we switch to <what you ruled out>?".
+- **A line for a teammate, the files to commit, how to undo.** kadence still
+  never commits.
+- **Run it again** for a checkup: what is in place, the ADRs not in the
+  journal yet, whether a second person has written to it.
+- Ctrl-C at any question keeps what is written and says so. clack-style
+  prompts (○ ●, ◻ ◼, one rail), hand-rolled with no dependency, in their own
+  chunk: no other command loads them, and CI checks that.
+
+### Changed — `kadence init` never asks an agent, and tells it what next
+
+- No question when stdin or stdout is a pipe, with any flag, in CI, or where
+  `AI_AGENT`, `CLAUDECODE`, `CURSOR_AGENT`, `CODEX_SANDBOX`, `GEMINI_CLI`,
+  `OPENCODE_CLIENT` or `KADENCE_SOURCE=agent` is set. `KADENCE_INTERACTIVE=0`
+  turns questions off; `=1` allows them past an agent marker, never past a
+  pipe (KAD-90).
+- The plain output ends with **"Next, if an agent is reading this:"** — the
+  ADR folder and the command to record each one, one decision to ask the
+  human for, and that a person can run the guided setup.
+- Coda now greets only a person: an agent whose output is a terminal no
+  longer gets the drawing (KAD-80's rule, which a TTY alone did not hold).
+
+### Fixed — rejected-before, on a journal one day old and on long ones
+
+The prompt hook names a decision when a prompt proposes what it turned down
+(KAD-61). It was silent on a fresh journal — exactly where onboarding shows
+it — and on this repository's journal had drifted, unnoticed, to 4 of 10
+named and 3 false alarms. It now reads only the alternative's name (not the
+reason it lost, which ordinary work shares), puts a title's "not X" on X's
+side, needs the prompt to name an alternative rather than share one word with
+it, and weighs the choice by its title: 9 of 10, no false alarm, and a
+one-decision journal answers. The set is a test now (KAD-88, DEC-56).
+
 ### ⚠️ Upgrading — `board --json` returns the state, not the history
 
 Nothing was renamed or removed from `kadence schema --json`, so `kadence/v1`
@@ -47,6 +101,14 @@ claims, cycles, columns not in the board, documents edited on two branches.
   way a person first tries a tool: `npx`, `pnpm dlx` and `bunx`, on macOS,
   Linux and Windows. A global `kadence` on `PATH` is kept out of those runs,
   because `npx` answers with it when the package brings no bin (G4, KAD-83).
+- `schema --json` only ever gains, now under test. Each release fixture keeps
+  the contract that version published, captured from npm by
+  `make-fixtures.mjs` (`--schema-only` backfills without touching a committed
+  journal); a command, flag, error code or field missing today fails against
+  every release that had it. All nine since 0.2.2 hold (G3, KAD-86).
+- Compaction runs on a real journal: a copy of this repository's own, 1,400+
+  events over two months, every month archived, then held to the same folded
+  state, the same `board --json --history` and a clean `doctor` (G5, KAD-87).
 
 ## [0.8.2] — 2026-10-11
 

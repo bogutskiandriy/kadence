@@ -4,6 +4,7 @@
  * compatibility test (KAD-59, gate G3 in DOC-32).
  *
  *   node scripts/make-fixtures.mjs [version ...]
+ *   node scripts/make-fixtures.mjs --schema-only [version ...]
  *
  * Each version is installed from npm into a scratch directory and driven
  * through the same scenario. What it wrote under .kadence/events is copied to
@@ -12,6 +13,10 @@
  * it accepted. The compatibility test folds the events with today's code and
  * holds it to that view — so the fixture is what a user's repository really
  * contains, not what we remember the format to have been.
+ *
+ * Beside them, schema.json: the contract that version published, for the
+ * test that holds `schema --json` to only ever gaining (G3). --schema-only
+ * writes just that, leaving a committed journal and its ULIDs as they are.
  *
  * Run by hand, once per release; the output is committed. It needs the
  * registry to install the old versions. kadence itself makes no network call.
@@ -23,7 +28,10 @@ import { join, resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const OUT = join(ROOT, 'test', 'fixtures', 'journals');
-const VERSIONS = process.argv.length > 2 ? process.argv.slice(2) : ['0.1.5', '0.2.2', '0.3.2', '0.4.1', '0.5.0', '0.6.0', '0.7.0', '0.8.0', '0.8.1'];
+const args = process.argv.slice(2);
+const schemaOnly = args.includes('--schema-only');
+const named = args.filter((a) => a !== '--schema-only');
+const VERSIONS = named.length > 0 ? named : ['0.1.5', '0.2.2', '0.3.2', '0.4.1', '0.5.0', '0.6.0', '0.7.0', '0.8.0', '0.8.1'];
 
 /**
  * One scenario for every version. Later commands do not exist in early
@@ -92,6 +100,21 @@ for (const version of VERSIONS) {
     const bin = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin.kadence;
     const cli = join(install, 'node_modules', 'kadence', bin);
 
+    // Byte for byte what the version answered: the test reads what agents
+    // were told, so nothing here reformats it. Versions before `schema` had
+    // no contract to keep.
+    const dest = join(OUT, version);
+    const schema = run(install, 'node', [cli, 'schema', '--json']);
+    const hasSchema = schema.ok && schema.out.startsWith('{');
+    if (hasSchema) {
+      mkdirSync(dest, { recursive: true });
+      writeFileSync(join(dest, 'schema.json'), schema.out);
+    }
+    if (schemaOnly) {
+      console.log(`${version}: ${hasSchema ? 'schema.json written' : 'no schema command'}`);
+      continue;
+    }
+
     const repo = join(work, 'repo');
     mkdirSync(repo);
     run(repo, 'git', ['init', '-q']);
@@ -109,8 +132,7 @@ for (const version of VERSIONS) {
     const tasks = view(repo, cli, ['task', 'list', '--json', '--limit', '0'], ['task', 'list', '--json']);
     const decisions = view(repo, cli, ['decision', 'list', '--all', '--json'], ['decision', 'list', '--json']);
 
-    const dest = join(OUT, version);
-    rmSync(dest, { recursive: true, force: true });
+    rmSync(join(dest, 'events'), { recursive: true, force: true });
     mkdirSync(dest, { recursive: true });
     cpSync(join(repo, '.kadence', 'events'), join(dest, 'events'), { recursive: true });
     writeFileSync(

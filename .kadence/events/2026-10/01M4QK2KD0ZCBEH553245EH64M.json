@@ -1,0 +1,1 @@
+{"id":"01M4QK2KD0ZCBEH553245EH64M","type":"task.criterion_added","entity":"01M4QK2K3WJWZEABC6GC5YPTD6","actor":"bogutski2005@gmail.com","ts":"2026-10-12T08:18:42.720Z","source":"agent","data":{"text":"On a TTY with no flags and no agent markers, init asks before it writes; Not now writes nothing"}}

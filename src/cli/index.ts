@@ -1,5 +1,5 @@
 import cac from 'cac';
-import { runInit, HOOK_AGENTS, type HookAgent } from './commands/init.js';
+import { runInit, shouldGuide, greetsPerson, HOOK_AGENTS, type HookAgent } from './commands/init.js';
 import { codaGreeting } from './coda.js';
 import { colorsEnabled } from './output.js';
 import { runReady } from './commands/ready.js';
@@ -868,7 +868,24 @@ cli
   .example('  kadence init')
   .example('  kadence init --no-hooks')
   .example('  kadence init --hooks-for codex,cursor')
-  .action((options: { hooks?: boolean; hooksFor?: unknown }) => {
+  .action(async (options: { hooks?: boolean; hooksFor?: unknown }) => {
+    // A person at a terminal who passed no flag gets Coda's guided setup; an
+    // agent, a script or any flag gets the plain one and never a question
+    // (KAD-89, KAD-90). Loaded lazily: nothing else pays for it.
+    const flags = process.argv.slice(process.argv.indexOf('init') + 1).some((a) => a.startsWith('-'));
+    if (shouldGuide(process.env, { stdin: process.stdin.isTTY === true, stdout: process.stdout.isTTY === true, flags })) {
+      const { runGuidedInit } = await import('./onboarding.js');
+      process.exit(
+        await runGuidedInit({
+          io: { input: process.stdin, output: process.stdout },
+          cwd: process.cwd(),
+          env: process.env,
+          version: __VERSION__,
+          color: colorsEnabled(process.env, true),
+          pause: (ms) => new Promise((r) => setTimeout(r, ms)),
+        }),
+      );
+    }
     // On by default since KAD-56: search goes unused unless it is put in front
     // of the agent. `--no-hooks` is the way out, and the message says so.
     const asked = (rawFlagLast('hooks-for') ?? '')
@@ -884,7 +901,7 @@ cli
       hooksFor: asked as HookAgent[],
     });
     // Coda only for a person at a terminal, and only on a fresh setup (KAD-80).
-    const tty = process.stdout.isTTY === true;
+    const tty = greetsPerson(process.env, process.stdout.isTTY === true);
     const message =
       r.ok && !r.alreadyInitialized
         ? codaGreeting(r.message, { tty, color: colorsEnabled(process.env, tty), version: __VERSION__ })

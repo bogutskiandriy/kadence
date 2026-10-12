@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path';
 import { findRepoRoot } from '../../core/git.js';
 import { eventsDir, dataDir } from '../../core/store.js';
 import { agentReadme, upsertAgentsSection } from '../../agent/contract.js';
+import { findAdrs } from '../adr.js';
 
 const GITIGNORE_ENTRY = '.kadence/state.json';
 
@@ -22,6 +23,73 @@ export interface InitResult {
   message: string;
   alreadyInitialized: boolean;
   root: string | null;
+  /** What to commit: every file or folder init wrote or changed. */
+  written: string[];
+}
+
+/**
+ * Markers an agent's shell carries. `AI_AGENT` is the generic one; the rest
+ * are what Claude Code, Cursor's agent, Codex, Gemini CLI and opencode set.
+ * Left out on purpose: markers an editor's own terminal also sets for the
+ * person typing in it, such as Cursor's CURSOR_TRACE_ID.
+ */
+const AGENT_MARKERS = ['AI_AGENT', 'CLAUDECODE', 'CURSOR_AGENT', 'CODEX_SANDBOX', 'CODEX_THREAD_ID', 'GEMINI_CLI', 'OPENCODE_CLIENT'];
+
+/**
+ * Whether `kadence init` may ask questions (KAD-89, KAD-90).
+ *
+ * Only a person at a terminal who passed no flag. An agent's prompt hangs on
+ * a question it cannot answer — Claude Code's shell passes no stdin — so any
+ * doubt means no question: a pipe on either side, CI, an agent's marker, any
+ * flag, a dumb terminal. `KADENCE_INTERACTIVE=0` turns it off; `=1` turns it
+ * on past an agent marker, never past a pipe, because a pipe cannot answer.
+ */
+/** Whether the environment says an agent, not a person, is running this. */
+function agentMarked(env: NodeJS.ProcessEnv): boolean {
+  if (env['KADENCE_SOURCE'] === 'agent') return true;
+  return AGENT_MARKERS.some((m) => env[m] !== undefined && env[m] !== '');
+}
+
+/**
+ * Whether init's success message carries Coda (KAD-80): for a person reading
+ * a terminal, never for an agent — not even one whose output is a terminal.
+ */
+export function greetsPerson(env: NodeJS.ProcessEnv, stdoutIsTty: boolean): boolean {
+  return stdoutIsTty && !agentMarked(env);
+}
+
+export function shouldGuide(
+  env: NodeJS.ProcessEnv,
+  io: { stdin: boolean; stdout: boolean; flags: boolean },
+): boolean {
+  if (!io.stdin || !io.stdout) return false;
+  if (env['KADENCE_INTERACTIVE'] === '0') return false;
+  if (env['TERM'] === 'dumb') return false;
+  if (env['KADENCE_INTERACTIVE'] === '1') return true;
+  if (io.flags) return false;
+  if (env['CI'] !== undefined && env['CI'] !== '' && env['CI'] !== 'false') return false;
+  return !agentMarked(env);
+}
+
+/**
+ * What an agent that ran init should do next (B1–B3 in the onboarding).
+ *
+ * The guided setup is for a person; an agent gets the same steps as
+ * instructions it can follow — the ADRs to offer, one decision to ask for —
+ * and is told that the person can have the guided version.
+ */
+function nextForAgent(root: string): string {
+  const { dir, adrs } = findAdrs(root);
+  const steps: string[] = [];
+  if (dir !== null) {
+    steps.push(
+      `${dir}/ holds ${adrs.length} ADR${adrs.length === 1 ? '' : 's'}. Ask the human whether to record them as decisions; for each:\n` +
+        `     kadence decision add "<title>" --why "<reason>" --rejected "<option>" --doc ${dir}/<file>`,
+    );
+  }
+  steps.push('Ask the human for one decision the team already made, and record it the same way.');
+  steps.push('A person gets a guided setup by running kadence init in a terminal.');
+  return `\n\nNext, if an agent is reading this:\n${steps.map((t, i) => `  ${i + 1}. ${t}`).join('\n')}`;
 }
 
 /**
@@ -47,6 +115,17 @@ export interface InitOptions {
    * of these directories belongs to another tool (DEC-52).
    */
   hooksFor?: readonly HookAgent[];
+  /**
+   * Write hooks for exactly `hooksFor`, not also for agents found in use.
+   * The guided setup sets it, because there a person has just said which
+   * agents they want — unchecking one has to mean it.
+   */
+  exactly?: boolean;
+}
+
+/** The agents besides Claude Code whose use shows in this repository (DEC-52). */
+export function agentsInUse(root: string): HookAgent[] {
+  return HOOK_AGENTS.filter((a) => inUse(root, a));
 }
 
 /** The agents besides Claude Code whose hooks can put text in front of the model (DEC-48). */
@@ -63,6 +142,7 @@ export function runInit(cwd: string, version = 'dev', options: InitOptions = {})
       message:
         'kadence lives inside a git repository, and there is none here.\n' +
         'Create one and try again:\n  git init',
+      written: [],
     };
   }
 
@@ -80,7 +160,9 @@ export function runInit(cwd: string, version = 'dev', options: InitOptions = {})
   for (const name of INSTRUCTION_FILES) ensureInstructionFile(root, name, version);
 
   const withHooks = options.hooks !== false;
-  const agents = withHooks ? installAgentHooks(root, options.hooksFor ?? []) : { written: [], said: [] };
+  const agents = withHooks
+    ? installAgentHooks(root, options.hooksFor ?? [], options.exactly === true)
+    : { written: [], said: [] };
   const hookNote = withHooks
     ? `\n\n${[installSessionHook(root), ...agents.said].join('\n')}` +
       (agents.written.length === 0 && (options.hooksFor ?? []).length === 0
@@ -96,6 +178,7 @@ export function runInit(cwd: string, version = 'dev', options: InitOptions = {})
     ok: true,
     alreadyInitialized: already,
     root,
+    written: toCommit,
     message: already
       ? `kadence is already initialised.${hookNote}`
       : 'kadence is ready.\n\n' +
@@ -104,7 +187,8 @@ export function runInit(cwd: string, version = 'dev', options: InitOptions = {})
         '  kadence board\n\n' +
         `Commit ${toCommit.join(', ')} so a teammate's agent finds them.\n` +
         'Files were created but not committed — that call is yours.' +
-        hookNote,
+        hookNote +
+        nextForAgent(root),
   };
 }
 
@@ -321,11 +405,15 @@ function writeObject(path: string, value: Record<string, unknown>): void {
  * as `.claude/settings.json` — every other hook kept, ours once, and a file
  * that does not parse never rewritten.
  */
-function installAgentHooks(root: string, named: readonly HookAgent[]): { written: string[]; said: string[] } {
+function installAgentHooks(
+  root: string,
+  named: readonly HookAgent[],
+  exactly = false,
+): { written: string[]; said: string[] } {
   const written: string[] = [];
   const said: string[] = [];
   for (const agent of HOOK_AGENTS) {
-    if (!named.includes(agent) && !inUse(root, agent)) continue;
+    if (!named.includes(agent) && (exactly || !inUse(root, agent))) continue;
     const rel = agent === 'codex' ? '.codex/hooks.json' : agent === 'cursor' ? '.cursor/hooks.json' : '.github/hooks/kadence.json';
     const path = join(root, rel);
     const file = readObject(path);
