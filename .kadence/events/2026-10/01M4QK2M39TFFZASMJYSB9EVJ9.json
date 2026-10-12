@@ -1,0 +1,1 @@
+{"id":"01M4QK2M39TFFZASMJYSB9EVJ9","type":"task.criterion_added","entity":"01M4QK2K3WJWZEABC6GC5YPTD6","actor":"bogutski2005@gmail.com","ts":"2026-10-12T08:18:43.433Z","source":"agent","data":{"text":"Prompt components and the flow are tested through a fake TTY; the fast path does not load them (CI grep)"}}
