@@ -1,0 +1,1 @@
+{"id":"01M4QPEH5C18WJZ6GWJPXP2F28","type":"task.criterion_added","entity":"01M4QPEGT2AC5TJ92Q37ZFKXTX","actor":"bogutski2005@gmail.com","ts":"2026-10-12T09:17:39.372Z","source":"agent","data":{"text":"A test fails on 0.9.0's behaviour: .codex and .cursor only, Enter on Recommended, no .claude/settings.json"}}

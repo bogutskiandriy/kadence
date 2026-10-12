@@ -97,6 +97,27 @@ describe('A1 · a person, no ADRs', () => {
   });
 });
 
+describe('the recommended setup', () => {
+  it('always includes Claude Code, as plain init does, even where only other agents show', async () => {
+    // Found re-taking the site's screenshot: .codex and .cursor but no .claude
+    // made "Recommended" mean Cursor and Codex only, and wrote no Claude Code
+    // hooks — while plain `kadence init` writes them by default (DEC-35).
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    execFileSync('git', ['config', 'user.email', 'lead@acme.dev'], { cwd: dir });
+    mkdirSync(join(dir, '.codex'));
+    mkdirSync(join(dir, '.cursor'));
+
+    const { code, screen } = await guided(ENTER, ENTER);
+
+    expect(code).toBe(0);
+    expect(screen).toContain('✔ Cursor, Codex  (detected)');
+    expect(screen).toContain('hooks for Claude Code, Cursor, Codex');
+    expect(existsSync(join(dir, '.claude', 'settings.json'))).toBe(true);
+    expect(existsSync(join(dir, '.codex', 'hooks.json'))).toBe(true);
+    expect(existsSync(join(dir, '.cursor', 'hooks.json'))).toBe(true);
+  });
+});
+
 describe('A2 · a person, a repository with ADRs', () => {
   it('offers every ADR, records each with its link, and shows the hook on one of them', async () => {
     repo(true);
