@@ -47,6 +47,10 @@ KAD-81 moved backlog → done (DEC-58).
 - `perf.test.ts` measured cold `loadState` and `loadOrBuild` one after the
   other, so load on a shared runner failed it with nothing changed; the two
   are now taken in turns.
+- The prompt hook's "rejected before" raised the alarm on "write a test for
+  the prompt hook" because a decision had rejected "a flag on hook prompt". A
+  word the chosen side shares is the topic; only the alternative's own words
+  now count towards naming it.
 
 ## [0.9.1] — 2026-10-12
 
