@@ -151,7 +151,7 @@ describe('runPrime', () => {
 
   it('points at decision add when no decision is in force', () => {
     const r = runPrime(dir, env, {});
-    expect(r.message).toContain('record why: kadence decision add "…" --why "…"');
+    expect(r.message).toContain('record why: kadence decision add "…" --why "…" --rejected "…"');
   });
 
   it('drops the decision hint once a decision is in force', () => {

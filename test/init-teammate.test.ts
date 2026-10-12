@@ -58,6 +58,14 @@ describe('T106 — the instruction-file section teaches writes', () => {
     expect(section).toContain('kadence decision list --json');
   });
 
+  // KAD-75: 9 of 10 agents recorded a decision unprompted from this section,
+  // and 0 of 9 used --rejected. 7 put the lost option in the why, where the
+  // prompt hook's rejected-before cannot read it. The section never named it.
+  it('names --rejected beside decision add, and what it is for', () => {
+    expect(section).toMatch(/--rejected "[^"]*"/);
+    expect(section).toMatch(/--rejected[^\n]*warn/);
+  });
+
   it('says in one line what to do when kadence is not on PATH, without assuming network', () => {
     const lines = section.split('\n').filter((l) => l.includes('npm install -g kadence'));
     expect(lines).toHaveLength(1);
@@ -212,7 +220,7 @@ describe('T109 — what init tells the person who ran it', () => {
   it('suggests a first task and a first decision', () => {
     const r = runInit(dir);
     expect(r.message).toContain('kadence task add "first task"');
-    expect(r.message).toMatch(/kadence decision add "[^"]*" --why "/);
+    expect(r.message).toMatch(/kadence decision add "[^"]*" --why "[^"]*" --rejected "/);
   });
 
   it('names what to commit so a teammate\'s agent finds it, and does not commit', () => {

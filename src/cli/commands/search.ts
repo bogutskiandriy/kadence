@@ -109,7 +109,7 @@ function nothing(query: string, narrowed: boolean): string {
       ? 'That is with --kind narrowing the search. Try it without.'
       : 'Either it was never written down, or it is written in other words.',
     'Record it once you know:',
-    '  kadence note "…"   ·   kadence decision add "…" --why "…"',
+    '  kadence note "…"   ·   kadence decision add "…" --why "…" --rejected "…"',
   ].join('\n');
 }
 

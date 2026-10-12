@@ -183,7 +183,7 @@ export function runInit(cwd: string, version = 'dev', options: InitOptions = {})
       ? `kadence is already initialised.${hookNote}`
       : 'kadence is ready.\n\n' +
         '  kadence task add "first task"\n' +
-        '  kadence decision add "What we chose" --why "Why we chose it"\n' +
+        '  kadence decision add "What we chose" --why "Why we chose it" --rejected "What lost: why"\n' +
         '  kadence board\n\n' +
         `Commit ${toCommit.join(', ')} so a teammate's agent finds them.\n` +
         'Files were created but not committed — that call is yours.' +
