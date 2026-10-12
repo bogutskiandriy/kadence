@@ -72,3 +72,35 @@ describe('an unknown task action', () => {
     for (const action of allowed) expect(text, action).toMatch(new RegExp(`\\b${action}\\b`));
   });
 });
+
+describe('text that looks like a number, or is empty', () => {
+  // The parser turns an option value that reads as a number into one, and ""
+  // into 0. `task edit --title 2026` wrote {"title":2026} into the journal and
+  // reported success; `decision add --why ""` crashed on `.trim`. A journal is
+  // append-only, so a number stored where text belongs stays there.
+  it('keeps a title, description and criterion that look like numbers as text', () => {
+    expect(run('task', 'edit', 'KAD-1', '--title', '2026').status).toBe(0);
+    expect(run('task', 'add', 'Budget', '-d', '42', '--ac', '1e3').status).toBe(0);
+    const tasks = json('task', 'list').tasks as Array<{ title: unknown; description: unknown }>;
+    expect(tasks[0]!.title).toBe('2026');
+    expect(tasks[1]!.description).toBe('42');
+    expect(json('task', 'ac', 'list', 'KAD-2').criteria[0].text).toBe('1e3');
+  });
+
+  it('refuses an empty --why as a usage error, not a crash', () => {
+    for (const args of [
+      ['decision', 'add', 'Keep it', '--why', ''],
+      ['decision', 'add', 'Keep it', '--why', 'ok', '--rejected', ''],
+      ['task', 'edit', 'KAD-1', '--title', ''],
+    ]) {
+      const r = run(...args, '--json');
+      expect(r.stderr, args.join(' ')).not.toContain('TypeError');
+      expect(r.status, args.join(' ')).toBe(2);
+    }
+  });
+
+  it('still reads --limit and --estimate as numbers', () => {
+    expect(run('task', 'add', 'Sized', '--estimate', '3').status).toBe(0);
+    expect(json('task', 'list', '--limit', '1').tasks).toHaveLength(1);
+  });
+});

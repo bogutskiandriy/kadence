@@ -609,7 +609,13 @@ export function buildContract(version: string): Record<string, unknown> {
         args: ['ref'],
         json: true,
       },
-      { name: 'task add', summary: 'Create a task.', args: ['title'], json: true },
+      {
+        name: 'task add',
+        summary: 'Create a task. `--ac` adds an acceptance criterion and repeats; they follow the board definition of done.',
+        args: ['title'],
+        flags: ['--ac', '--no-dod', '--json'],
+        json: true,
+      },
       {
         name: 'task move',
         summary: 'Change status. Accepts several refs, all or nothing.',

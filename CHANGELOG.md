@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`task add "…" --ac "…"`**, repeatable: acceptance criteria on the command
+  that creates the task, after the board's definition of done, each printed
+  with the number `ac check` takes. Reached for by an agent checking 0.10.0,
+  and refused; criteria went on one command at a time.
+
+### Fixed
+
+- An option value that reads as a number, or is empty, is kept as the text
+  typed. The parser turned `--title 2026` into a number and `""` into 0:
+  `task edit --title 2026` wrote `{"title":2026}` into the journal and
+  reported success, `task add -d 42` stored a numeric description, and
+  `decision add --why ""`, `--rejected ""` and `task ac waive --why ""`
+  crashed with a TypeError. Empty ones are now usage errors (exit 2).
+
 ### Changed
 
 - The section `kadence init` writes into AGENTS.md and CLAUDE.md, prime's hint

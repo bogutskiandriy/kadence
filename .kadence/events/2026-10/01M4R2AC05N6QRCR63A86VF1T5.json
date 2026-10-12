@@ -1,0 +1,1 @@
+{"id":"01M4R2AC05N6QRCR63A86VF1T5","type":"task.criterion_added","entity":"01M4R2ABRETRDW7EKKE0VNBW4Y","actor":"bogutski2005@gmail.com","ts":"2026-10-12T12:45:05.925Z","source":"agent","data":{"text":"A value that reads as a number or is empty reaches the handler as the text typed: no number in the journal, no TypeError"}}
