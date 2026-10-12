@@ -1,4 +1,5 @@
 import type { Task, Priority, Cycle, Note } from '../core/projection.js';
+import { isOpen } from '../core/projection.js';
 import { DEFAULT_LIST_LIMIT } from '../agent/contract.js';
 
 /**
@@ -158,7 +159,7 @@ export function boardLine(t: Task, colors: boolean): string {
 
   // Unfinished evidence behind a done task is the one thing a board should say
   // out loud: it moved, and the checklist did not agree.
-  const open = t.criteria.filter((c) => !c.checked).length;
+  const open = t.criteria.filter(isOpen).length;
   if (open > 0) {
     parts.push(
       paint(`[${t.criteria.length - open}/${t.criteria.length}]`, ANSI.yellow, colors),
@@ -310,9 +311,13 @@ export function renderTaskDetail(t: Task, notes: readonly Note[] = []): string {
   }
 
   if (t.criteria.length > 0) {
-    const done = t.criteria.filter((c) => c.checked).length;
+    // Settled is checked or waived: a criterion that does not apply is not
+    // work left to do.
+    const done = t.criteria.filter((c) => !isOpen(c)).length;
     lines.push('', `  Acceptance criteria (${done}/${t.criteria.length}):`);
-    for (const c of t.criteria) lines.push(`    ${c.n}. [${c.checked ? 'x' : ' '}] ${c.text}`);
+    for (const c of t.criteria) {
+      lines.push(c.waived !== null ? `    ${c.n}. [-] ${c.text} \u2014 does not apply: ${c.waived.why}` : `    ${c.n}. [${c.checked ? 'x' : ' '}] ${c.text}`);
+    }
   }
 
   if (notes.length > 0) {

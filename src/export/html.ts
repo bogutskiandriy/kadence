@@ -2,6 +2,7 @@ import type { ProjectState, Task } from '../core/projection.js';
 import { TERMINAL_STATUS, CANCELLED_STATUS } from '../core/projection.js';
 import { sprintReport } from '../core/velocity.js';
 import type { Burndown } from '../core/burndown.js';
+import { isOpen } from '../core/projection.js';
 import { esc } from './page.js';
 
 /**
@@ -89,7 +90,7 @@ function card(task: Task, state: ProjectState): string {
     pills.push(`<span class="pill danger">blocked by ${task.blockedBy.length}</span>`);
   }
   if (task.criteria.length > 0) {
-    const done = task.criteria.filter((c) => c.checked).length;
+    const done = task.criteria.filter((c) => !isOpen(c)).length;
     const cls = done === task.criteria.length ? 'pill' : 'pill warn';
     pills.push(`<span class="${cls}">${done}/${task.criteria.length} criteria</span>`);
   }
@@ -113,7 +114,9 @@ function card(task: Task, state: ProjectState): string {
       : `<ul class="criteria">${task.criteria
           .map(
             (c) =>
-              `<li class="${c.checked ? 'checked' : ''}">${c.checked ? '\u2611' : '\u2610'} ${esc(c.text)}</li>`,
+              c.waived !== null
+                ? `<li class="checked">\u2296 ${esc(c.text)} \u2014 does not apply: ${esc(c.waived.why)}</li>`
+                : `<li class="${c.checked ? 'checked' : ''}">${c.checked ? '\u2611' : '\u2610'} ${esc(c.text)}</li>`,
           )
           .join('')}</ul>`;
 

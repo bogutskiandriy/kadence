@@ -87,6 +87,27 @@ class Guide {
   private rail(line = ''): void {
     this.out(line.length > 0 ? `${this.p.gray(SYM.bar)}  ${line}` : this.p.gray(SYM.bar));
   }
+  /**
+   * A labelled line on the rail, wrapped at a word to the terminal's width.
+   * Left to the terminal, the outro's Undo line broke mid-word in the site's
+   * 107-column take ("hook e / ntries"); the continuation lines up under the
+   * text, not under the label.
+   */
+  private labelled(label: string, text: string, style: (s: string) => string): void {
+    const width = Math.max(40, this.d.io.output.columns ?? 100);
+    const indent = label.length + 3;
+    const room = width - 3 - indent;
+    const lines: string[] = [];
+    let current = '';
+    for (const word of text.split(' ')) {
+      if (current.length > 0 && current.length + 1 + word.length > room) {
+        lines.push(current);
+        current = word;
+      } else current = current.length === 0 ? word : `${current} ${word}`;
+    }
+    if (current.length > 0) lines.push(current);
+    lines.forEach((l, i) => this.rail(`${i === 0 ? `${this.p.dim(label)}   ` : ' '.repeat(indent)}${style(l)}`));
+  }
   private step(title: string): void {
     this.rail();
     this.out(`${this.p.green(SYM.done)}  ${this.p.bold(title)}`);
@@ -381,7 +402,7 @@ class Guide {
     this.rail(`  ${p.teal(`git commit -m "${message}"`)}`);
     this.rail();
     this.rail(`${p.dim('Next')}   ${p.teal('kadence prime')}  ${p.dim('what an agent sees at session start')}`);
-    this.rail(`${p.dim('Undo')}   ${p.dim('delete .kadence/, the kadence:begin…end section in AGENTS.md and CLAUDE.md, and the hook entries')}`);
+    this.labelled('Undo', 'delete .kadence/, the kadence:begin…end section in AGENTS.md and CLAUDE.md, and the hook entries', p.dim);
     this.rail();
     this.out(`${p.gray(SYM.end)}  ${p.petrol('Coda keeps what you decide, and why.')}`);
     this.out();

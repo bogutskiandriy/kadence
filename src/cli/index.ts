@@ -4,7 +4,7 @@ import { codaGreeting } from './coda.js';
 import { colorsEnabled } from './output.js';
 import { runReady } from './commands/ready.js';
 import { runSearch, SEARCH_KINDS } from './commands/search.js';
-import { runPromptHook, runSessionHook } from './commands/hook.js';
+import { runPromptHook, runSessionHook, runHookLog, logPrime } from './commands/hook.js';
 import { runPrime } from './commands/prime.js';
 import { runStats } from './commands/stats.js';
 import { runCompact } from './commands/compact.js';
@@ -40,6 +40,7 @@ import {
   runTaskClaim,
   runTaskCriterionAdd,
   runTaskCriterionCheck,
+  runTaskCriterionWaive,
   runTaskCriterionList,
   runTaskRelease,
 } from './commands/task.js';
@@ -661,7 +662,10 @@ cli
   .example('  kadence prime')
   .example('  kadence prime --json')
   .action((options: { json?: boolean }) => {
-    emit(runPrime(process.cwd(), process.env, { json: options.json === true }), options.json === true);
+    const r = runPrime(process.cwd(), process.env, { json: options.json === true });
+    // What a session started with, for `kadence hook log` (KAD-76).
+    if (r.ok) logPrime(process.cwd(), process.env, options.json === true ? JSON.stringify(r.data ?? {}) : r.message);
+    emit(r, options.json === true);
   });
 
 cli
@@ -716,13 +720,18 @@ cli
   });
 
 cli
-  .command('hook <event>', 'For agent hooks: prompt reads a UserPromptSubmit payload; cursor-session and copilot-session print prime as JSON')
+  .command('hook <event>', 'For agent hooks: prompt reads a UserPromptSubmit payload; cursor-session and copilot-session print prime as JSON; log shows what they added to the last session')
+  .option('--json', 'log: machine-readable output')
   .example('  echo \'{"prompt":"why are events append-only"}\' | kadence hook prompt')
   .example('  kadence hook cursor-session')
-  .action((event: string) => {
+  .example('  kadence hook log            what kadence put into your agent\'s context, and its size')
+  .action((event: string, options: { json?: boolean }) => {
+    if (event === 'log') {
+      emit(runHookLog(process.cwd(), process.env, { json: options.json === true }), options.json === true);
+    }
     // Always exit 0. Exit 2 from a UserPromptSubmit hook erases the user's
     // prompt, so this command has no failure a person would want to see here.
-    const known = ['prompt', 'cursor-session', 'copilot-session'];
+    const known = ['prompt', 'cursor-session', 'copilot-session', 'log'];
     if (!known.includes(event)) {
       writeAll(2, `Unknown hook "${event}". Known: ${known.join(', ')}\n`);
       process.exit(0);
@@ -923,6 +932,8 @@ cli
   .option('--due <date>', 'Due date, YYYY-MM-DD; empty string clears it')
   .option('--status <status>', `Filter by status: ${TASK_STATUSES.join(' | ')}`)
   .option('--search <text>', 'Words in title, description, criteria and comments, matched as kadence search matches them; most relevant first unless --sort')
+  .option('--milestone <ref>', 'list: only the tasks in this milestone — MS-N or its name')
+  .option('--why <text>', 'ac waive: why the criterion does not apply to this task')
   .option('--overdue', 'Only tasks past their due date')
   .option('--due-before <date>', 'Only tasks due before YYYY-MM-DD')
   .option('--sort <key>', `Sort by: ${SORT_KEYS.join(' | ')}`)
@@ -987,6 +998,8 @@ cli
         status?: string;
         search?: string;
         overdue?: boolean;
+        milestone?: string | number;
+        why?: string;
         dueBefore?: string;
         sort?: string;
         tree?: boolean;
@@ -1128,10 +1141,11 @@ cli
                   '  kadence task ac add KAD-1 "tests green"\n' +
                   '  kadence task ac check KAD-1 1\n' +
                   '  kadence task ac uncheck KAD-1 1\n' +
+                  '  kadence task ac waive KAD-1 2 --why "an interview has no tests"\n' +
                   '  kadence task ac list KAD-1',
                 {
                   ...(arg === undefined ? {} : { received: arg }),
-                  allowed: ['add', 'check', 'uncheck', 'list'],
+                  allowed: ['add', 'check', 'uncheck', 'waive', 'list'],
                 },
               ),
               json,
@@ -1160,10 +1174,14 @@ cli
             emit(runTaskCriterionCheck(cwd, process.env, value, extra, arg === 'uncheck'), json);
             break;
           }
+          if (arg === 'waive') {
+            emit(runTaskCriterionWaive(cwd, process.env, value, extra, options.why), json);
+            break;
+          }
           emit(
             usage(`Unknown criteria action "${arg}".`, {
               received: arg,
-              allowed: ['add', 'check', 'uncheck', 'list'],
+              allowed: ['add', 'check', 'uncheck', 'waive', 'list'],
             }),
             json,
           );
@@ -1303,6 +1321,7 @@ cli
               ...(options.label !== undefined
                 ? { label: Array.isArray(options.label) ? options.label.at(-1)! : options.label }
                 : {}),
+              ...(options.milestone !== undefined ? { milestone: rawFlagLast('milestone') ?? String(options.milestone) } : {}),
               ...(options.overdue === true ? { overdue: true } : {}),
               ...(options.dueBefore !== undefined ? { dueBefore: options.dueBefore } : {}),
               ...(options.sort !== undefined ? { sort: options.sort } : {}),
@@ -1351,10 +1370,8 @@ cli
         default:
           emit(
             usage(
-              `Unknown action "${action}".\n` +
-                'Available: add, list, show, edit, move, assign, comment, log,\n' +
-                '           parent, block, unblock, cancel, delete\n' +
-                '  kadence task --help',
+              // From the same list as \`allowed\`, so the two cannot disagree again.
+              `Unknown action "${action}".\nAvailable: ${TASK_ACTIONS.join(', ')}\n  kadence task --help`,
               { received: action, allowed: TASK_ACTIONS },
             ),
             json,
@@ -1731,14 +1748,50 @@ function parserFailure(err: Error): never {
   const command = cli.matchedCommandName;
   const unknown = /Unknown option `([^`]+)`/.exec(err.message)?.[1];
   const help = command === undefined ? 'kadence --help' : `kadence ${command} --help`;
+  // An unknown flag may be text the writer meant: say how to pass it as text,
+  // with the arguments they had already typed in front of it.
+  const before = process.argv.slice(2, Math.max(2, process.argv.indexOf(unknown ?? ''))).filter((t) => !t.startsWith('-'));
+  const asText = unknown === undefined ? '' : `\nIf it is text, put -- before it:\n  kadence ${before.join(' ')} -- "${unknown}"`;
   emit(
-    usage(`${err.message}.\nSee what it takes:\n  ${help}`, unknown === undefined ? {} : { received: unknown }),
+    usage(`${err.message}.\nSee what it takes:\n  ${help}${asText}`, unknown === undefined ? {} : { received: unknown }),
     wantsJson,
   );
 }
 
+/**
+ * Text that starts with dashes, kept away from the parser (2026-10-12 note).
+ *
+ * Writing about a CLI means writing about its flags, and a criterion such as
+ * "--history returns the full shape" was refused as an unknown option. A flag
+ * never holds a space before its `=`, so a token that does is text: it goes
+ * through as an argument. And `--` ends the options, as POSIX has it, for
+ * text with no space in it. cac keeps what follows `--` apart from the
+ * arguments a command receives, so it is handed back to them here.
+ */
+const TEXT = '\u0001kadence-text:';
+const shielded: string[] = [];
+const afterEnd: string[] = [];
+const parserArgv = process.argv.slice(0, 2);
+{
+  let ended = false;
+  for (const token of process.argv.slice(2)) {
+    if (ended) afterEnd.push(token);
+    else if (token === '--') ended = true;
+    else if (token.startsWith('-') && /\s/.test(token.split('=')[0]!)) {
+      parserArgv.push(`${TEXT}${shielded.length}`);
+      shielded.push(token);
+    } else parserArgv.push(token);
+  }
+}
+function unshield(value: unknown): unknown {
+  if (typeof value === 'string' && value.startsWith(TEXT)) return shielded[Number(value.slice(TEXT.length))];
+  return Array.isArray(value) ? value.map(unshield) : value;
+}
+
 try {
-  cli.parse(process.argv, { run: false });
+  cli.parse(parserArgv, { run: false });
+  (cli as unknown as { args: unknown[] }).args = [...cli.args.map(unshield), ...afterEnd];
+  for (const name of Object.keys(cli.options)) cli.options[name] = unshield(cli.options[name]);
   const asked = cli.options['help'] === true || cli.options['version'] === true;
   if (cli.matchedCommand === undefined && !asked) {
     const name = cli.args[0];

@@ -1,9 +1,9 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { search, rejectedMatches, PARTIAL_COVERAGE, type SearchHit, type RejectedMatch } from '../../core/search.js';
-import { resolveContext, isContext, loadState } from './task.js';
+import { resolveContext, isContext, loadState, type CommandResult } from './task.js';
 import { runPrime } from './prime.js';
 
 /**
@@ -110,6 +110,139 @@ function seenFile(root: string, session: string): string {
   return join(tmpdir(), 'kadence-hook', `${name}.json`);
 }
 
+/**
+ * What kadence put into an agent's context, session by session (KAD-76).
+ *
+ * In the system temp directory beside the seen-file, never in the repository:
+ * it is about this machine's sessions, not the team's work. One JSON line per
+ * prime and per prompt — the size of what was added and which records, and the
+ * first 80 characters of the prompt so a person can tell them apart. Kept to
+ * the last 500 lines.
+ */
+export function hookLogPath(root: string): string {
+  // The real path, so /var/… and /private/var/… — one directory on macOS —
+  // name one log.
+  let real = root;
+  try {
+    real = realpathSync(root);
+  } catch {
+    // A path that does not resolve is still a name.
+  }
+  const name = createHash('sha256').update(`${real}\0log`).digest('hex').slice(0, 24);
+  return join(tmpdir(), 'kadence-hook', `${name}.log.jsonl`);
+}
+
+interface HookLogEntry {
+  at: string;
+  kind: 'prime' | 'prompt';
+  session: string | null;
+  prompt?: string;
+  bytes: number;
+  records: string[];
+}
+
+const LOG_KEEP = 500;
+/** Labels a hook or prime output names, in order: KAD-1, DEC-2, DOC-3:12-30. */
+const LABELS = /\b(?:KAD|DEC|DOC|MS)-\d+(?::\d+-\d+)?\b/g;
+
+function logHook(root: string, entry: HookLogEntry): void {
+  try {
+    const path = hookLogPath(root);
+    mkdirSync(join(path, '..'), { recursive: true });
+    appendFileSync(path, `${JSON.stringify(entry)}\n`, 'utf8');
+    // Trimmed only now and then, so a prompt never pays to rewrite the file.
+    if (statSync(path).size > 256 * 1024) {
+      const lines = readFileSync(path, 'utf8').trim().split('\n');
+      writeFileSync(path, `${lines.slice(-LOG_KEEP).join('\n')}\n`, 'utf8');
+    }
+  } catch {
+    // The log is for a person's curiosity; a hook never fails over it.
+  }
+}
+
+/** Records what prime put in front of an agent. Called by the prime command and the session hooks. */
+export function logPrime(cwd: string, env: NodeJS.ProcessEnv, text: string): void {
+  const ctx = resolveContext(cwd, env);
+  if (!isContext(ctx) || text.length === 0) return;
+  logHook(ctx.root, {
+    at: new Date().toISOString(),
+    kind: 'prime',
+    session: null,
+    bytes: Buffer.byteLength(text, 'utf8'),
+    records: [...new Set(text.match(LABELS) ?? [])],
+  });
+}
+
+/**
+ * `kadence hook log`: the latest session — what prime added at its start and
+ * what each prompt got — with sizes. Tokens are an estimate at four bytes a
+ * token, and the output says so.
+ */
+export function runHookLog(cwd: string, env: NodeJS.ProcessEnv, _options: { json?: boolean }): CommandResult {
+  const ctx = resolveContext(cwd, env);
+  if (!isContext(ctx)) return ctx;
+  const path = hookLogPath(ctx.root);
+  let all: HookLogEntry[] = [];
+  try {
+    all = readFileSync(path, 'utf8')
+      .trim()
+      .split('\n')
+      .filter((l) => l.length > 0)
+      .map((l) => JSON.parse(l) as HookLogEntry);
+  } catch {
+    all = [];
+  }
+
+  // The latest session the prompt hook saw, and the prime just before it.
+  const lastPrompt = [...all].reverse().find((e) => e.kind === 'prompt');
+  const session = lastPrompt?.session ?? null;
+  const firstOfSession = lastPrompt === undefined ? -1 : all.findIndex((e) => e.kind === 'prompt' && e.session === session);
+  const primeBefore =
+    firstOfSession === -1
+      ? [...all].reverse().find((e) => e.kind === 'prime')
+      : all.slice(0, firstOfSession).reverse().find((e) => e.kind === 'prime');
+  const entries = [
+    ...(primeBefore !== undefined ? [primeBefore] : []),
+    ...(lastPrompt === undefined ? [] : all.filter((e) => e.kind === 'prompt' && e.session === session)),
+  ].map((e) => ({ ...e, tokens: Math.ceil(e.bytes / 4) }));
+
+  const total = { bytes: entries.reduce((n, e) => n + e.bytes, 0), tokens: entries.reduce((n, e) => n + e.tokens, 0) };
+  const data = { schema: 'kadence/v1', ok: true, session, entries, total, log: path };
+
+  if (entries.length === 0) {
+    return {
+      ok: true,
+      exitCode: 0,
+      message:
+        'Nothing logged yet. kadence records here what prime and the prompt hook add to an\n' +
+        "agent's context, once a session runs with the hooks (kadence init adds them).",
+      data,
+    };
+  }
+  const time = (iso: string) => iso.slice(11, 16);
+  const size = (e: { bytes: number; tokens: number }) =>
+    e.bytes === 0 ? 'nothing added' : `${e.bytes.toLocaleString('en-US')} bytes  \u2248 ${e.tokens.toLocaleString('en-US')} tokens`;
+  const lines = entries.map((e) => {
+    const what = e.kind === 'prime' ? 'prime, at session start' : `"${e.prompt ?? ''}"`;
+    const records = e.records.length > 0 ? `  ${e.records.join(', ')}` : '';
+    return `  ${time(e.at)}  ${what.padEnd(46)} ${size(e)}${records}`;
+  });
+  return {
+    ok: true,
+    exitCode: 0,
+    message: [
+      `What kadence put into the agent's context${session !== null ? ` — session ${session.slice(0, 8)}` : ''}, ${entries[0]!.at.slice(0, 10)}:`,
+      '',
+      ...lines,
+      '',
+      `Total \u2248 ${total.tokens.toLocaleString('en-US')} tokens over ${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}. ` +
+        'Tokens are estimated at 4 bytes each.',
+      `Kept on this machine, outside the repository: ${path}`,
+    ].join('\n'),
+    data,
+  };
+}
+
 function readSeen(path: string): Set<string> {
   try {
     const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
@@ -191,6 +324,7 @@ export function runSessionHook(cwd: string, env: NodeJS.ProcessEnv, flavor: Sess
   try {
     const primed = runPrime(cwd, env, {});
     if (!primed.ok || primed.message.length === 0) return '{}';
+    logPrime(cwd, env, primed.message);
     const key = flavor === 'cursor' ? 'additional_context' : 'additionalContext';
     return JSON.stringify({ [key]: primed.message });
   } catch {
@@ -222,7 +356,18 @@ export function runPromptHook(cwd: string, env: NodeJS.ProcessEnv, input: string
     const hits = found
       .filter((h) => !seen.has(keyOf(h)) && !turnedDown.some((m) => m.id === h.id))
       .slice(0, HITS - turnedDown.length);
-    if (hits.length === 0 && turnedDown.length === 0) return '';
+    const logged = (text: string): string => {
+      logHook(ctx.root, {
+        at: new Date().toISOString(),
+        kind: 'prompt',
+        session: payload.session,
+        prompt: question.replace(/\s+/g, ' ').slice(0, 80),
+        bytes: Buffer.byteLength(text, 'utf8'),
+        records: [...new Set(text.match(LABELS) ?? [])],
+      });
+      return text;
+    };
+    if (hits.length === 0 && turnedDown.length === 0) return logged('');
 
     const noteText = (id: string): string | null => state.notes.find((n) => n.id === id)?.text ?? null;
     const { text, shown } = render(turnedDown, hits, noteText);
@@ -230,7 +375,7 @@ export function runPromptHook(cwd: string, env: NodeJS.ProcessEnv, input: string
       for (const key of shown) seen.add(key);
       writeSeen(seenAt, seen);
     }
-    return text;
+    return logged(text);
   } catch {
     return '';
   }

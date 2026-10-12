@@ -2,6 +2,52 @@
 
 ## [Unreleased]
 
+**What the journal kept noticing about itself, fixed — and a way to see what
+kadence costs an agent.** Every item here was written down as a friction note
+while using kadence on kadence.
+
+### ⚠️ Changed — `task claim` starts the work
+
+| Was | Is | To get the old answer |
+|---|---|---|
+| a claimed task stayed in its column | a claim that holds moves a task before the started column into it (`backlog` → `in_progress`); the message says so and `--json` carries `moved` | move it back: `kadence task move KAD-1 backlog` — the claim stays |
+| a contested task left `ready` once started | a contested task stays in `ready` whatever its column: it needs a person | — |
+
+The board showed taken work as not started, and the release task that claimed
+KAD-81 moved backlog → done (DEC-58).
+
+### Added
+
+- **`task claim` shows what done means.** The open acceptance criteria, in the
+  message and as `criteria` in `--json` — the definition of done reached an
+  agent only at `done`, as a warning, unless it also ran `task show`.
+- **`task ac waive KAD-1 2 --why "…"`** — a criterion that does not apply to
+  this task, with the reason. It shows as `[-]`, counts as settled, and stops
+  the warning at `done`; checking or unchecking it takes the waiver back. A
+  board-wide definition of done put "npm test green" on interviews; 10 of 67
+  done tasks in kadence's journal closed with criteria that never applied
+  (DEC-59). A new event type, `task.criterion_waived`: an older kadence skips
+  it and says it came from a newer version. The cache rebuilds once.
+- **`kadence hook log`** — what prime and the prompt hook put into the agent's
+  context in the latest session, with the records named and the size in
+  estimated tokens. Kept in the system temp directory, never in git; prompts
+  to 80 characters (KAD-76, DEC-60).
+- **`task list --milestone MS-2`** (or the milestone's name).
+
+### Fixed
+
+- Text that starts with dashes — a criterion "--history returns the full
+  shape", a note "--fields is cheaper" — was refused as an unknown option. A
+  token with a space before any `=` is text, and `--` ends the options; a real
+  unknown flag now says how to pass it as text.
+- The message for an unknown `task` action named 13 actions while `allowed`
+  in the same response named 17; the text now comes from the same list.
+- The guided init's Undo line wrapped mid-word in a narrow terminal; it now
+  wraps at a word, under its text.
+- `perf.test.ts` measured cold `loadState` and `loadOrBuild` one after the
+  other, so load on a shared runner failed it with nothing changed; the two
+  are now taken in turns.
+
 ## [0.9.1] — 2026-10-12
 
 A patch: one fix to the guided `init`, nothing in the contract or the event

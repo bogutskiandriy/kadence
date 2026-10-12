@@ -29,6 +29,7 @@ export const EVENT_TYPES = [
   'task.criterion_added',
   'task.criterion_checked',
   'task.criterion_unchecked',
+  'task.criterion_waived',
   'template.saved',
   'template.deleted',
   'board.configured',

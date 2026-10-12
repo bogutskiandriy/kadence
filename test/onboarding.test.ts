@@ -47,9 +47,10 @@ function repo(withAdrs = false): void {
   adr('0003-fly.md', 'Deploy on Fly.io', ['Fly.io', 'Kubernetes on GKE'], 'Fly.io', 'regions close to users without a cluster');
 }
 
+let columns = 120;
 async function guided(...keys: string[]): Promise<{ code: number; screen: string }> {
   const input = Object.assign(new PassThrough(), { isTTY: true, setRawMode: () => undefined });
-  const output = Object.assign(new PassThrough(), { columns: 120 });
+  const output = Object.assign(new PassThrough(), { columns });
   let screen = '';
   output.on('data', (d) => (screen += String(d)));
   const run = runGuidedInit({ io: { input, output }, cwd: dir, env, version: 'test', color: false, pause: async () => {} });
@@ -65,7 +66,10 @@ async function guided(...keys: string[]): Promise<{ code: number; screen: string
 
 const decisions = () => loadState(dir).state.decisions;
 
-beforeEach(() => (dir = mkdtempSync(join(tmpdir(), 'kadence-onboarding-'))));
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), 'kadence-onboarding-'));
+  columns = 120;
+});
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe('A1 · a person, no ADRs', () => {
@@ -221,5 +225,19 @@ describe('A5 · init again, as a checkup', () => {
     expect(screen).toContain('none found');
     expect(screen).not.toContain('kadence is set up');
     expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('kadence');
+  });
+});
+
+describe('the width of the terminal', () => {
+  it('keeps every line of the setup inside an 80-column terminal', async () => {
+    // The outro's Undo line wrapped mid-word in a 107-column terminal
+    // ("hook e / ntries") — seen in the hero recording, not in the suite.
+    repo();
+    columns = 80;
+    const { code, screen } = await guided(ENTER, ENTER);
+    expect(code).toBe(0);
+    const lines = screen.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').split('\n');
+    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(80);
+    expect(screen).toContain('hook entries');
   });
 });

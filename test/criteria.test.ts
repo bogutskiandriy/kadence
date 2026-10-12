@@ -214,7 +214,7 @@ describe('criteria commands', () => {
     runTaskCriterionCheck(dir, env, 'KAD-1', '1', false);
     const after = runTaskShow(dir, env, 'KAD-1');
     expect((after.data!['task'] as { criteria: unknown[] }).criteria).toEqual([
-      { n: 1, text: 'Tests green', checked: true, checkedBy: 'tester@example.com' },
+      { n: 1, text: 'Tests green', checked: true, waived: null, checkedBy: 'tester@example.com' },
     ]);
   });
 

@@ -56,6 +56,18 @@ export interface Criterion {
   checked: boolean;
   /** Who checked it, or null. Cleared when it is unchecked. */
   checkedBy: string | null;
+  /**
+   * Set when the criterion does not apply to this task, with the reason and
+   * who said so. Not removed — the journal is append-only, and "waived on
+   * purpose" is worth telling apart from "forgotten". Checking or unchecking
+   * it afterwards clears this: the last word holds.
+   */
+  waived: { why: string; by: string } | null;
+}
+
+/** Neither checked nor waived: what still stands between the task and done. */
+export function isOpen(c: Criterion): boolean {
+  return !c.checked && c.waived === null;
 }
 
 export interface Comment {
@@ -999,12 +1011,13 @@ function apply(
       // A criterion with no text would render as an empty checkbox nobody can
       // act on; the event stays in history either way.
       if (text !== null) {
-        task.criteria.push({ id: e.id, n: 0, text, checked: false, checkedBy: null });
+        task.criteria.push({ id: e.id, n: 0, text, checked: false, checkedBy: null, waived: null });
       }
       break;
     }
     case 'task.criterion_checked':
     case 'task.criterion_unchecked':
+    case 'task.criterion_waived':
       // Resolved in a second pass over the task's history, for the same reason
       // claims are: a check can carry a lower ULID than the criterion it names
       // when two machines' clocks disagree, and applying it as it arrives
@@ -1073,17 +1086,28 @@ function foldCriteria(task: Task): void {
   for (const c of task.criteria) {
     c.checked = false;
     c.checkedBy = null;
+    c.waived = null;
   }
   for (const h of task.history) {
-    if (h.type !== 'task.criterion_checked' && h.type !== 'task.criterion_unchecked') continue;
+    if (h.type !== 'task.criterion_checked' && h.type !== 'task.criterion_unchecked' && h.type !== 'task.criterion_waived') {
+      continue;
+    }
     const ref = readText(h.data['criterion']);
     const found = ref === null ? undefined : byId.get(ref);
     // A check naming a criterion that does not exist in any branch merged so
     // far has nothing to act on; the event stays in history either way.
     if (found === undefined) continue;
+    if (h.type === 'task.criterion_waived') {
+      const why = readText(h.data['why']);
+      found.checked = false;
+      found.checkedBy = null;
+      found.waived = { why: why ?? '', by: h.actor };
+      continue;
+    }
     const on = h.type === 'task.criterion_checked';
     found.checked = on;
     found.checkedBy = on ? h.actor : null;
+    found.waived = null;
   }
 }
 

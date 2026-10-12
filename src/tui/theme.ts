@@ -1,4 +1,4 @@
-import type { Priority, Task } from '../core/projection.js';
+import { isOpen, type Priority, type Task } from '../core/projection.js';
 
 /**
  * Colours and glyphs for the interactive board.
@@ -82,7 +82,7 @@ export function renderCard(task: Task, width: number): string {
   // conflict that names people rather than values (ADR-011).
   if (task.contestedBy.length > 0) marks.push(tag('⚑', 'magenta'));
   else if (task.claimedBy !== null) marks.push(tag('✓', 'green'));
-  const openCriteria = task.criteria.filter((c) => !c.checked).length;
+  const openCriteria = task.criteria.filter(isOpen).length;
   if (openCriteria > 0) {
     marks.push(tag(`${task.criteria.length - openCriteria}/${task.criteria.length}`, 'yellow'));
   } else if (task.criteria.length > 0) {

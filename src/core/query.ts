@@ -30,6 +30,8 @@ export interface TaskFilters {
   assignee?: string;
   label?: string;
   sprint?: string;
+  /** ULID of a milestone: only its tasks. */
+  milestone?: string;
   overdue?: boolean;
   dueBefore?: string;
 }
@@ -70,6 +72,7 @@ export function filterTasks(
     }
 
     if (filters.sprint !== undefined && t.sprint !== filters.sprint) return false;
+    if (filters.milestone !== undefined && t.milestone !== filters.milestone) return false;
 
     // A task with no deadline can never be late — there is nothing to be late for.
     if (filters.overdue === true && (t.due === null || t.due >= todayIso)) return false;
@@ -151,6 +154,7 @@ export function describeEmptyResult(filters: TaskFilters): string {
   if (filters.priority !== undefined) active.push(`priority=${filters.priority}`);
   if (filters.assignee !== undefined) active.push(`assignee=${filters.assignee}`);
   if (filters.label !== undefined) active.push(`label=${filters.label}`);
+  if (filters.milestone !== undefined) active.push('the milestone');
   if (filters.overdue === true) active.push('overdue');
   if (filters.dueBefore !== undefined) active.push(`due before ${filters.dueBefore}`);
 
@@ -238,7 +242,11 @@ export function readyTasks(tasks: readonly Task[], options: ReadyOptions = {}): 
     // Ready means ready to *start*. Anything in the started column or past it
     // has begun — including the blocked column, which is exactly where work
     // that cannot continue is parked.
-    if (startable !== null && !startable.has(task.status)) return false;
+    //
+    // A contested task is the exception. It needs a person, and both claimants
+    // should see it — and since a claim starts the work (0.9.2), each branch's
+    // claim moved it to the started column before the merge made it a contest.
+    if (startable !== null && !startable.has(task.status) && task.contestedBy.length === 0) return false;
     // `blockedBy` only ever names live tasks — the fold prunes ids whose task
     // was deleted — so an id that is not finished is genuinely still blocking.
     if (task.blockedBy.some((id) => !finished.has(id))) return false;

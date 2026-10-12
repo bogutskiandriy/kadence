@@ -295,6 +295,10 @@ is not the saving the industry benchmarks suggest — it would be a second way t
 say the same thing, and it would not work for agents that have no MCP client at
 all.
 
+`kadence hook log` shows what kadence put into your agent's last session — what
+`prime` added at the start, what each prompt got, and the size in estimated
+tokens — from a log on your machine, never in git.
+
 Ask for only what you need — a board of a thousand tasks is 855 KB in full
 with `--history`, 275 KB by default, which leaves out the history and comments
 that grow with the work, and 104 KB with the three fields an agent actually

@@ -335,8 +335,17 @@ describe(`performance on ${EVENT_COUNT} events`, () => {
   }, 120_000);
 
   it('cold loadState reads the journal once, not twice', () => {
-    const build = measureCold(root, () => loadOrBuild(root));
-    const full = measureCold(root, () => loadState(root));
+    // Interleaved, best of five each. Measured one after the other, a burst of
+    // load on a shared runner landed on the second and failed this twice with
+    // nothing changed (Node 20 on CI, PR #14; a busy laptop, 2026-10-12) —
+    // the ratio was measuring the machine. Taken in turns, a burst lands on
+    // both, and the best of each is the read itself.
+    let build = Infinity;
+    let full = Infinity;
+    for (let i = 0; i < 5; i++) {
+      build = Math.min(build, measureCold(root, () => loadOrBuild(root), 1));
+      full = Math.min(full, measureCold(root, () => loadState(root), 1));
+    }
     // eslint-disable-next-line no-console
     console.log(`  cold loadOrBuild: ${build.toFixed(0)} ms · cold loadState: ${full.toFixed(0)} ms`);
     // A second pass over the journal would put this near double. The margin is

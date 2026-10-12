@@ -23,6 +23,7 @@ import {
   type TaskStatus,
   type TaskType,
   type Priority,
+  isOpen,
 } from '../../core/projection.js';
 import { loadOrBuild } from '../../core/snapshot.js';
 import { outran } from '../../core/staleness.js';
@@ -38,6 +39,7 @@ import {
   type TaskFilters,
   type SortKey,
 } from '../../core/query.js';
+import { findMilestone } from './milestone.js';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 
 /**
@@ -439,6 +441,24 @@ export function runTaskList(
     return unknownStatus(options.status, state.statuses);
   }
 
+  // A milestone is named as people know it — MS-N or its name — and filtered
+  // by its ULID, which is what a task carries.
+  if (options.milestone !== undefined) {
+    const m = findMilestone(state, options.milestone);
+    if (m === undefined) {
+      const known = state.milestones.map((x) => `${x.label} ${x.name}`);
+      return failure(
+        1,
+        'milestone_not_found',
+        known.length === 0
+          ? `No milestone "${options.milestone}".\nCreate one:\n  kadence milestone create "1.0"`
+          : `No milestone "${options.milestone}".\nAvailable: ${known.join(', ')}`,
+        { received: options.milestone, hint: 'kadence milestone list --json' },
+      );
+    }
+    options = { ...options, milestone: m.id };
+  }
+
   const { sort, tree, branch, base, json: _json, ...filters } = options;
   let matched = matchTasks(state, filters);
 
@@ -603,9 +623,9 @@ export function runTaskMove(
   const unfinished =
     to === TERMINAL_STATUS
       ? moved
-          .filter((t) => t.criteria.some((c) => !c.checked))
+          .filter((t) => t.criteria.some(isOpen))
           .map((t) => {
-            const open = t.criteria.filter((c) => !c.checked).length;
+            const open = t.criteria.filter(isOpen).length;
             return `${t.label} moved to ${to} with ${open} of ${t.criteria.length} acceptance criteria unchecked. See: kadence task ac list ${t.label}`;
           })
       : [];
@@ -736,8 +756,9 @@ function fullTask(t: Task, state: ProjectState | null = null): Record<string, un
       text: c.text,
       checked: c.checked,
       checkedBy: c.checkedBy,
+      waived: c.waived,
     })),
-    openCriteria: t.criteria.filter((c) => !c.checked).length,
+    openCriteria: t.criteria.filter(isOpen).length,
     history: t.history,
   };
 }
@@ -1422,8 +1443,37 @@ export function runTaskClaim(
   // state read before the append told eight racing agents they held a task
   // five of them had lost (stress audit B3). This is the journal as it stands
   // after the write — a claim still on another machine shows at the merge.
-  const after = loadState(ctx.root, ctx.actor).state.tasks.find((t) => t.id === task.id) ?? task;
+  let after: Task = loadState(ctx.root, ctx.actor).state.tasks.find((t) => t.id === task.id) ?? task;
   const holds = after.claimedBy === claimant;
+
+  // A claim starts the work. A claimed task left in `backlog` read as not
+  // started on the board, and the release that claimed it moved backlog →
+  // done (2026-10-12 note). Only a claim that holds moves anything — a
+  // contested one is not yours to start — and only forward, to the column
+  // where work counts as started, through the same move the CLI makes.
+  let moved: { from: string; to: string } | null = null;
+  const at = state.statuses.indexOf(after.status);
+  const start = state.statuses.indexOf(state.started);
+  if (holds && at !== -1 && start !== -1 && at < start) {
+    if (runTaskMove(cwd, env, after.id, state.started).ok) {
+      moved = { from: after.status, to: state.started };
+      // Only the status changes here. Who holds the task stays as read right
+      // after the claim was written: a second read could show a claim another
+      // agent wrote since, and this agent would be told "claimed" next to
+      // someone else's name (the B3 race test holds exactly that).
+      after = { ...after, status: state.started };
+    }
+  }
+
+  // What done means, at the moment the work is taken: the definition of done
+  // reached the agent only at `done`, as a warning, unless it also ran
+  // `task show`.
+  const open = after.criteria.filter(isOpen);
+  const doneWhen =
+    open.length === 0
+      ? ''
+      : `\nDone when (${open.length} of ${after.criteria.length} open):\n` +
+        open.map((c) => `  ${c.n}. [ ] ${c.text}`).join('\n');
 
   return {
     ok: true,
@@ -1436,19 +1486,24 @@ export function runTaskClaim(
             'Both claims stay in the journal \u2014 talk to them before starting.',
         ],
     message: holds
-      ? `${after.label} ${after.title} \u2014 claimed by ${claimant}.\n` +
-        'Another machine may have claimed it before your push; the merge will show that.'
+      ? `${after.label} ${after.title} \u2014 claimed by ${claimant}` +
+        (moved !== null ? `, ${moved.from} \u2192 ${moved.to}.` : '.') +
+        doneWhen +
+        '\nAnother machine may have claimed it before your push; the merge will show that.'
       : `${after.label} claim recorded, contested with ${after.claimedBy ?? 'nobody'}.`,
     data: {
       schema: 'kadence/v1',
       ok: true,
       claim: holds ? 'claimed' : 'contested',
+      moved,
       task: {
         id: after.id,
         label: after.label,
+        status: after.status,
         claimedBy: after.claimedBy,
         contestedBy: after.contestedBy,
       },
+      criteria: serializeCriteria(after),
     },
   };
 }
@@ -1605,7 +1660,9 @@ export function runTaskCriterionCheck(
   if (!('id' in found)) return found;
 
   const want = !uncheck;
-  if (found.checked === want) {
+  // A waived criterion is unchecked too, but unchecking it is not a no-op: it
+  // takes the waiver back and makes the criterion open again.
+  if (found.checked === want && found.waived === null) {
     // Nothing to write: an event that changes no state is a line every future
     // fold has to read.
     return {
@@ -1670,7 +1727,7 @@ export function runTaskCriterionList(
     ok: true,
     exitCode: 0,
     warnings,
-    message: task.criteria.map((c) => `  ${c.n}. [${c.checked ? 'x' : ' '}] ${c.text}`).join('\n'),
+    message: task.criteria.map(criterionLine).join('\n'),
     data: {
       schema: 'kadence/v1',
       ok: true,
@@ -1680,14 +1737,82 @@ export function runTaskCriterionList(
   };
 }
 
-/** Always an array, and always the same four keys — agents branch on them. */
+/** Always an array, and always the same keys — agents branch on them. */
 export function serializeCriteria(task: Task): Array<Record<string, unknown>> {
   return task.criteria.map((c) => ({
     n: c.n,
     text: c.text,
     checked: c.checked,
     checkedBy: c.checkedBy,
+    waived: c.waived,
   }));
+}
+
+/** One criterion as a person reads it: [x] checked, [-] does not apply, [ ] open. */
+export function criterionLine(c: Criterion): string {
+  if (c.waived !== null) return `  ${c.n}. [-] ${c.text} \u2014 does not apply: ${c.waived.why}`;
+  return `  ${c.n}. [${c.checked ? 'x' : ' '}] ${c.text}`;
+}
+
+/**
+ * A criterion that does not apply to this task, with the reason (2026-10-12).
+ *
+ * A board-wide definition of done is copied into every task, and on work that
+ * is not code it is noise: "npm test green" on an interview. Removing a
+ * criterion would rewrite what the task promised; waiving it keeps the line
+ * and says, in the journal, that it was set aside on purpose and why.
+ */
+export function runTaskCriterionWaive(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  ref: string,
+  number: string,
+  why: string | undefined,
+): CommandResult {
+  const ctx = resolveContext(cwd, env);
+  if (!isContext(ctx)) return ctx;
+
+  const reason = (why ?? '').trim();
+  if (reason.length === 0) {
+    return failure(
+      2,
+      'invalid_argument',
+      `Say why criterion ${number} does not apply:\n  kadence task ac waive ${ref} ${number} --why "an interview has no tests"`,
+      { hint: `kadence task ac waive ${ref} ${number} --why "…"` },
+    );
+  }
+
+  const { state, warnings } = loadState(ctx.root, ctx.actor);
+  const task = findTask(state, ref);
+  if (task === undefined) return taskNotFound(ref);
+  const found = findCriterion(task, number);
+  if (!('id' in found)) return found;
+
+  append(ctx.root, {
+    id: ulid(),
+    type: 'task.criterion_waived',
+    entity: task.id,
+    actor: ctx.actor,
+    ts: new Date().toISOString(),
+    source: ctx.source,
+    data: { criterion: found.id, why: reason },
+  });
+
+  const open = task.criteria.filter((c) => c.id !== found.id && isOpen(c)).length;
+  return {
+    ok: true,
+    exitCode: 0,
+    warnings,
+    message: `${task.label} criterion ${found.n} does not apply: ${reason}\n${open} of ${task.criteria.length} still open.`,
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      task: { id: task.id, label: task.label },
+      criterion: { n: found.n, text: found.text, checked: false, checkedBy: null, waived: { why: reason, by: ctx.actor } },
+      open,
+      total: task.criteria.length,
+    },
+  };
 }
 
 export function runTaskComment(
