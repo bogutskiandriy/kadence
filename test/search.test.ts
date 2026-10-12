@@ -523,4 +523,15 @@ describe('rejected before, on a journal one day old', () => {
     ]);
     expect(rejectedMatches(state, 'how do we migrate the orders table in Postgres?')).toEqual([]);
   });
+
+  it('does not count the topic the title shares towards naming the alternative', () => {
+    // DEC-60 on this journal: "a flag on hook prompt" lost to "…shown by
+    // kadence hook log". Asking to test the prompt hook names the topic and
+    // not the flag.
+    const state = project([
+      decision('Context is logged and shown by kadence hook log', 'every prompt, not one', 'A flag on hook prompt: shows one prompt'),
+    ]);
+    expect(rejectedMatches(state, 'write a test for the prompt hook session file')).toEqual([]);
+    expect(rejectedMatches(state, 'add a flag to hook prompt that prints its size')[0]?.label).toBe('DEC-1');
+  });
 });

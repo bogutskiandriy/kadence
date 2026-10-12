@@ -673,27 +673,33 @@ export function rejectedMatches(state: ProjectState, query: string): RejectedMat
   // one word with it: two of its words, or all of a one-word name ("MongoDB").
   // One common word in a long alternative raised the alarm on "fix the
   // failing test" through "…and call --summary the fix".
-  const named = (alternative: string): number => {
+  // A word the title has as well is the topic, so it does not count towards
+  // naming: "a flag on hook prompt" against "…shown by kadence hook log"
+  // differ by the flag, and "write a test for the prompt hook" names no flag
+  // (2026-10-12). It still weighs in the share once the alternative is named.
+  const named = (alternative: string, chosen: ReadonlySet<string>): number => {
     const own = new Set(termsOf(alternative));
+    const distinct = [...new Set(queryTerms(alternative))].filter((t) => !chosen.has(t));
     let hit = 0;
-    for (const t of terms) if (own.has(t)) hit++;
-    return hit >= Math.min(2, own.size) ? share(own) : 0;
+    for (const t of distinct) if (terms.has(t)) hit++;
+    return hit >= Math.min(2, distinct.length) && hit > 0 ? share(own) : 0;
   };
 
   return candidates
     .map((d) => {
       const negated = [...d.title.matchAll(NEGATED)].map((m) => m[1]!);
       const alternatives = [...alternativeHeads(d.rejected!).split('\n'), ...negated];
+      // The title says what was chosen; the reason often argues with the
+      // alternative in its own words ("async reads measured 42 ms slower"),
+      // which made the choice outweigh the very proposal it turned down.
+      const chosen = new Set(termsOf(d.title.replace(NEGATED, ' ')));
       return {
         id: d.id,
         label: d.label,
         title: d.title,
         rejected: d.rejected!,
-        inRejected: Math.max(0, ...alternatives.map(named)),
-        // The title says what was chosen; the reason often argues with the
-        // alternative in its own words ("async reads measured 42 ms slower"),
-        // which made the choice outweigh the very proposal it turned down.
-        inChosen: share(new Set(termsOf(d.title.replace(NEGATED, ' ')))),
+        inRejected: Math.max(0, ...alternatives.map((a) => named(a, chosen))),
+        inChosen: share(chosen),
       };
     })
     .filter((m) => m.inRejected >= REJECTED_SHARE && m.inRejected >= m.inChosen)
