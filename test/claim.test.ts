@@ -451,6 +451,10 @@ describe('claimant', () => {
   it('shows a person the work their agents hold, and hides it from a sibling agent', () => {
     runTaskAdd(dir, {} as NodeJS.ProcessEnv, 'First', {});
     runTaskClaim(dir, agent('a1'), 'KAD-1', {});
+    // Since a claim starts the work, a claimed task leaves `ready`. The rule
+    // under test is who sees a claimed task that has not started, so it goes
+    // back to the backlog — the claim survives the move.
+    runTaskMove(dir, agent('a1'), 'KAD-1', 'backlog');
     const person = runReady(dir, {} as NodeJS.ProcessEnv, {});
     const sibling = runReady(dir, agent('a2'), {});
     const labels = (r: typeof person) => (r.data!['tasks'] as Array<{ label: string }>).map((t) => t.label);

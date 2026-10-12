@@ -491,7 +491,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
             ? renderField(fields[row.index]!.label, fields[row.index]!.value(), i === cursor)
             : renderField(
                 `  ${row.n}.`,
-                `[${task.criteria.find((c) => c.n === row.n)?.checked === true ? 'x' : ' '}] ${
+                `[${task.criteria.find((c) => c.n === row.n)?.waived ? '-' : task.criteria.find((c) => c.n === row.n)?.checked === true ? 'x' : ' '}] ${
                   task.criteria.find((c) => c.n === row.n)?.text ?? ''
                 }`,
                 i === cursor,

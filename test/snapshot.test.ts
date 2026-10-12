@@ -208,7 +208,7 @@ describe('the cache must not serve a shape from an older version of the code', (
    * that every existing user has a stale cache.
    */
   const PROJECTED_SHAPE = {
-    version: 'kadence-snapshot/12',
+    version: 'kadence-snapshot/13',
     task: [
       'id', 'label', 'title', 'description', 'type', 'priority', 'status', 'labels',
       'assignee', 'reporter', 'sprint', 'milestone', 'parent', 'blockedBy', 'due', 'claimedBy',
@@ -228,6 +228,10 @@ describe('the cache must not serve a shape from an older version of the code', (
     // long before it reached these two, and nothing here failed when it did
     // not — so the lists now go one level down.
     comment: ['id', 'author', 'ts', 'text', 'source'],
+    // `waived` (0.9.2) is read as "not open" only when it is null: a cache
+    // folded before it existed would have served every unchecked criterion as
+    // settled. Pinned so the next field cannot slip past the version.
+    criterion: ['id', 'n', 'text', 'checked', 'checkedBy', 'waived'],
     historyEntry: ['id', 'type', 'actor', 'ts', 'source', 'data'],
     milestone: [
       'id', 'label', 'name', 'due', 'status', 'closedBy', 'taskIds',
@@ -268,6 +272,17 @@ describe('the cache must not serve a shape from an older version of the code', (
         source: 'agent', data: { text: 'C' } },
     ]);
     expect(Object.keys(state.tasks[0]!.comments[0]!).sort()).toEqual([...PROJECTED_SHAPE.comment].sort());
+  });
+
+  it('a projected criterion has exactly the recorded fields', () => {
+    const id = gen();
+    const state = project([
+      { id, type: 'task.created', entity: id, actor: 'a@b.c', ts: '2026-09-08T10:00:00.000Z',
+        source: 'human', data: { title: 'T' } },
+      { id: gen(), type: 'task.criterion_added', entity: id, actor: 'a@b.c', ts: '2026-09-08T10:01:00.000Z',
+        source: 'human', data: { text: 'tests green' } },
+    ]);
+    expect(Object.keys(state.tasks[0]!.criteria[0]!).sort()).toEqual([...PROJECTED_SHAPE.criterion].sort());
   });
 
   it('a projected history entry has exactly the recorded fields', () => {

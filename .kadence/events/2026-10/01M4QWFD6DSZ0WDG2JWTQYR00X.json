@@ -1,0 +1,1 @@
+{"id":"01M4QWFD6DSZ0WDG2JWTQYR00X","type":"task.criterion_waived","entity":"01M36RARXNNEJWY5BR20BY1P6Q","actor":"bogutski2005@gmail.com","ts":"2026-10-12T11:02:59.533Z","source":"agent","data":{"criterion":"01M36RASBPV5QCN018ZG85A89V","why":"a release writes no code of its own; the code it ships was tested in its own tasks"}}

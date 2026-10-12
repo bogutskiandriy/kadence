@@ -457,6 +457,7 @@ export function buildContract(version: string): Record<string, unknown> {
         notes: {
           n: 'A position in the folded list, assigned like KAD-N and never stored. It can change when a branch merges.',
           checkedBy: 'Who checked it, or null. Cleared when it is unchecked.',
+          waived: '{why, by} when the criterion does not apply to this task, else null. A waived criterion is settled: it is not counted as open. Checking or unchecking clears it.',
         },
       },
       branch: {
@@ -599,7 +600,7 @@ export function buildContract(version: string): Record<string, unknown> {
         name: 'task list',
         summary:
           'All tasks, filterable. `--branch` narrows to the work the current branch introduced, measured against `--base` (main by default).',
-        flags: ['--json', '--fields', '--branch', '--base'],
+        flags: ['--json', '--fields', '--branch', '--base', '--milestone'],
         json: true,
       },
       {
@@ -630,8 +631,9 @@ export function buildContract(version: string): Record<string, unknown> {
       {
         name: 'task ac',
         summary:
-          'Acceptance criteria: `add <ref> "text"`, `check <ref> <n>`, `uncheck <ref> <n>`, `list <ref>`. The number is a position in the folded list, never stored. Moving to done with unchecked criteria warns and proceeds.',
+          'Acceptance criteria: `add <ref> "text"`, `check <ref> <n>`, `uncheck <ref> <n>`, `waive <ref> <n> --why "…"`, `list <ref>`. The number is a position in the folded list, never stored. `waive` records that a criterion does not apply to this task, with the reason; checking or unchecking it afterwards clears that. Moving to done with criteria neither checked nor waived warns and proceeds.',
         args: ['action', 'ref', 'value'],
+        flags: ['--why', '--json'],
         json: true,
       },
       {
@@ -904,8 +906,10 @@ export function buildContract(version: string): Record<string, unknown> {
       {
         name: 'hook',
         summary:
-          'Run by agent hooks, not by hand. `hook prompt` reads a UserPromptSubmit payload on stdin (Claude Code, Codex), searches the journal for the prompt and prints up to three records to add to the context, or nothing. `hook cursor-session` and `hook copilot-session` print `prime` as the JSON those agents read at session start ({"additional_context"} and {"additionalContext"}), or {} on any failure. Always exits 0: exit 2 would erase the prompt. Installed by `init` unless `--no-hooks`; a record is shown once per session.',
+          'Run by agent hooks, not by hand. `hook prompt` reads a UserPromptSubmit payload on stdin (Claude Code, Codex), searches the journal for the prompt and prints up to three records to add to the context, or nothing. `hook cursor-session` and `hook copilot-session` print `prime` as the JSON those agents read at session start ({"additional_context"} and {"additionalContext"}), or {} on any failure. Always exits 0: exit 2 would erase the prompt. Installed by `init` unless `--no-hooks`; a record is shown once per session. `hook log` is for a person: what prime and the prompt hook added to the latest session and its size in estimated tokens, from a log in the system temp directory, never in git.',
         args: ['event'],
+        flags: ['--json'],
+        json: true,
       },
     ],
   };

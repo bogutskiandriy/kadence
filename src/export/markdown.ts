@@ -1,5 +1,6 @@
 import type { ProjectState, Task, Milestone } from '../core/projection.js';
 import { TERMINAL_STATUS, CANCELLED_STATUS } from '../core/projection.js';
+import { isOpen } from '../core/projection.js';
 import { sprintReport } from '../core/velocity.js';
 
 /**
@@ -41,7 +42,7 @@ function taskRow(task: Task, milestones: readonly Milestone[]): string {
   const criteria =
     task.criteria.length === 0
       ? ''
-      : `${task.criteria.filter((c) => c.checked).length}/${task.criteria.length}`;
+      : `${task.criteria.filter((c) => !isOpen(c)).length}/${task.criteria.length}`;
   const milestone =
     task.milestone === null
       ? ''
