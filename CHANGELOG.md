@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-10-12
+
 **What the journal kept noticing about itself, fixed — and a way to see what
 kadence costs an agent.** Every item here was written down as a friction note
 while using kadence on kadence.

@@ -372,7 +372,7 @@ true.
 
 **Verified.** The merge thesis, on real git branches. Performance and size, by
 tests that fail if they regress. That the conflict problem exists in the wild —
-measured, not assumed. 1,484 tests in the repository today, including an
+measured, not assumed. 1,514 tests in the repository today, including an
 end-to-end run through the installed binary.
 
 **Not verified.** That teams and their AI agents actually lose enough context to want
@@ -432,7 +432,7 @@ included: `kadence search "compatibility policy"` or `kadence doc show DOC-65`.
 
 ```bash
 npm install
-npm test            # 1,484 tests; builds dist/cli.js first
+npm test            # 1,514 tests; builds dist/cli.js first
 npm run typecheck
 npm run build       # dist/cli.js 149 KB, blessed kept external (82 KB at 0.4.1)
 ```
