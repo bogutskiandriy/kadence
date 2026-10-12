@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createUlid } from '../src/core/ulid.js';
 import { project } from '../src/core/projection.js';
 import type { FlowEvent } from '../src/core/event.js';
-import { search, SEARCH_KINDS, type SearchHit } from '../src/core/search.js';
+import { search, rejectedMatches, SEARCH_KINDS, type SearchHit } from '../src/core/search.js';
 
 /**
  * Retrieval over the journal.
@@ -482,5 +482,45 @@ describe('two thresholds: what ranks, and when to say nothing (KAD-69)', () => {
     // is not a task about them.
     const titles = search(corpus(), 'ledger reconcile tolerance snapshot', { every: true }).map((h) => h.title);
     expect(titles).toEqual(['Ledger']);
+  });
+});
+
+describe('rejected before, on a journal one day old', () => {
+  // The first thing onboarding shows is the prompt hook catching a reopened
+  // decision. On a fresh journal it caught nothing: with one or two records
+  // every word weighs the same, the topic ("orders") sits on both sides, and
+  // a title that names what it beat ("Postgres, not MongoDB") counted the
+  // alternative as chosen.
+
+  it('catches the alternative a title names with "not"', () => {
+    const state = project([
+      decision('Postgres, not MongoDB', 'orders and stock change in one transaction', 'MongoDB'),
+    ]);
+    expect(rejectedMatches(state, 'should we move orders to MongoDB?').map((m) => m.label)).toEqual(['DEC-1']);
+  });
+
+  it('catches it when the question carries the topic as well as the alternative', () => {
+    const state = project([
+      decision('Postgres for orders', 'orders and stock change in one transaction', 'MongoDB; MySQL'),
+      decision('REST, not GraphQL', 'there is one client', 'GraphQL'),
+    ]);
+    expect(rejectedMatches(state, 'should we move orders to MongoDB?')[0]?.label).toBe('DEC-1');
+  });
+
+  it('reads the alternative, not the reason it lost', () => {
+    // "Kubernetes on GKE: a cluster to run for three services" — a question
+    // about running three services proposes nothing that was turned down.
+    const state = project([
+      decision('Deploy on Fly.io', 'regions close to users', 'Kubernetes on GKE: a cluster to run for three services'),
+    ]);
+    expect(rejectedMatches(state, 'how do we run the three services locally?')).toEqual([]);
+    expect(rejectedMatches(state, "let's move to Kubernetes on GKE")[0]?.label).toBe('DEC-1');
+  });
+
+  it('does not call it rejected when the question is about what was chosen', () => {
+    const state = project([
+      decision('Postgres, not MongoDB', 'orders and stock change in one transaction', 'MongoDB'),
+    ]);
+    expect(rejectedMatches(state, 'how do we migrate the orders table in Postgres?')).toEqual([]);
   });
 });

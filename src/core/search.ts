@@ -585,9 +585,9 @@ export interface RejectedMatch {
   label: string;
   title: string;
   rejected: string;
-  /** Share of the question, weighted by rarity, found in the rejected alternative. */
+  /** Share of the question, weighted by rarity, in the alternative it names best. */
   inRejected: number;
-  /** The same share found in what was chosen: the title and the reason. */
+  /** The same share found in what was chosen, read from the title. */
   inChosen: number;
 }
 
@@ -597,21 +597,55 @@ export interface RejectedMatch {
  * Measured in KAD-61 on this repository's journal: ten prompts that propose
  * something a decision rejected, ten ordinary code prompts. At 0.25 one code
  * prompt raised a false alarm; 0.3 to 0.4 named 7-8 of 10 with none; 0.5
- * named 6. 0.35 is the middle of the clean stretch, not its edge. The misses
- * are vocabulary — "async" against "asynchronous", "erase" against "erases".
+ * named 6. 0.35 is the middle of the clean stretch, not its edge.
+ *
+ * The set is a test now (test/rejected-before.test.ts). On 2026-10-12, with a
+ * journal three times the size, the rule had drifted to 4 of 10 and 3 false
+ * alarms, unnoticed; reading only the alternative's name, putting a title's
+ * "not X" on X's side and weighing the choice by its title brought it to 9 of
+ * 10 and none, and to working on a journal one day old.
  */
 export const REJECTED_SHARE = 0.35;
 
 /**
- * Decisions whose rejected alternative carries more of the question than what
- * they chose did.
+ * What a title says it beat: "Postgres, not MongoDB", "a range, never an
+ * average", "files instead of a database". Those words name the alternative,
+ * so they count on its side, not as what was chosen.
+ */
+const NEGATED = /\b(?:not|never|instead of|rather than)\s+([^,.;:()]+)/gi;
+
+/**
+ * The alternative itself, without the reason it lost.
+ *
+ * `--rejected` reads "what: why it lost", and repeated ones are joined with
+ * "; ". The reason is written in the words of the problem — "conflicts on
+ * every merge", "a failing test" — which ordinary work uses too; matching on
+ * it raised the alarm on "fix the failing test" (measured 2026-10-12).
+ */
+function alternativeHeads(rejected: string): string {
+  return rejected
+    .split('; ')
+    .map((one) => one.split(/:\s|\s[—–-]\s/)[0]!)
+    .join('\n');
+}
+
+/**
+ * Decisions whose rejected alternative is what the question proposes.
  *
  * Search ranks a decision as a whole; it cannot tell "this is what we decided"
  * from "this is what we decided against". People and agents reopen settled
  * decisions (discovery 2026-09-30), and the second case is the one worth
- * saying first. The weight of each term is the same rarity the ranking uses
- * (DEC-30), counted only over terms the journal knows, so words it has never
- * seen cannot dilute the comparison between two parts of one record.
+ * saying first.
+ *
+ * Only the words that belong to one side count. A question that reopens a
+ * decision usually names its topic too — "move *orders* to MongoDB" — and the
+ * topic is on both sides, or on the chosen side alone, so comparing totals let
+ * the topic outvote the alternative; on a journal one day old, where every
+ * word weighs the same, it always did. What tells the two apart is the words
+ * only the alternative has, against the words only the choice has; a tie goes
+ * to the alternative, because the question mentioned it at all. The weight of
+ * each term is the same rarity the ranking uses (DEC-30), counted only over
+ * terms the journal knows.
  */
 export function rejectedMatches(state: ProjectState, query: string): RejectedMatch[] {
   const terms = new Set(queryTerms(query));
@@ -630,23 +664,39 @@ export function rejectedMatches(state: ProjectState, query: string): RejectedMat
   for (const w of idf.values()) asked += w;
   if (asked === 0) return [];
 
-  const share = (text: string): number => {
-    const present = new Set(termsOf(text));
+  const share = (present: ReadonlySet<string>): number => {
     let carried = 0;
     for (const [term, w] of idf) if (present.has(term)) carried += w;
-    return carried / asked;
+    return Math.round((carried / asked) * 100) / 100;
+  };
+  // An alternative counts only when the question names it, not when it shares
+  // one word with it: two of its words, or all of a one-word name ("MongoDB").
+  // One common word in a long alternative raised the alarm on "fix the
+  // failing test" through "…and call --summary the fix".
+  const named = (alternative: string): number => {
+    const own = new Set(termsOf(alternative));
+    let hit = 0;
+    for (const t of terms) if (own.has(t)) hit++;
+    return hit >= Math.min(2, own.size) ? share(own) : 0;
   };
 
   return candidates
-    .map((d) => ({
-      id: d.id,
-      label: d.label,
-      title: d.title,
-      rejected: d.rejected!,
-      inRejected: Math.round(share(d.rejected!) * 100) / 100,
-      inChosen: Math.round(share(`${d.title}\n${d.why}`) * 100) / 100,
-    }))
-    .filter((m) => m.inRejected >= REJECTED_SHARE && m.inRejected > m.inChosen)
+    .map((d) => {
+      const negated = [...d.title.matchAll(NEGATED)].map((m) => m[1]!);
+      const alternatives = [...alternativeHeads(d.rejected!).split('\n'), ...negated];
+      return {
+        id: d.id,
+        label: d.label,
+        title: d.title,
+        rejected: d.rejected!,
+        inRejected: Math.max(0, ...alternatives.map(named)),
+        // The title says what was chosen; the reason often argues with the
+        // alternative in its own words ("async reads measured 42 ms slower"),
+        // which made the choice outweigh the very proposal it turned down.
+        inChosen: share(new Set(termsOf(d.title.replace(NEGATED, ' ')))),
+      };
+    })
+    .filter((m) => m.inRejected >= REJECTED_SHARE && m.inRejected >= m.inChosen)
     .sort((a, b) => b.inRejected - a.inRejected || (a.id < b.id ? -1 : 1));
 }
 
