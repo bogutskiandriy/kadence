@@ -412,7 +412,7 @@ export function buildContract(version: string): Record<string, unknown> {
         required: ['schema', 'ok', 'columns', 'tasksTotal', 'tasksOffset'],
         notes: {
           columns:
-            'Each task carries only the state fields, never `history` or `comments` \u2014 the same set --summary selected. --history returns every task in full. Changed after 0.8.2 under the deprecation policy (DEC-55): up to 0.8.2, the response without a flag was every task in full.',
+            'Each task carries only the state fields, never `history` or `comments` \u2014 the same set --summary selected. --history returns every task in full. Changed in 0.9.0 under the deprecation policy (DEC-55): up to 0.8.2, the response without a flag was every task in full.',
         },
       },
       search: {

@@ -353,8 +353,8 @@ either moves both or changes nothing. A typo does not leave half a board.
 
 | | |
 |---|---|
-| Install | 125 KB packed — 376 KB of kadence, plus 1.8 MB of blessed |
-| Startup | 85 ms (`--version`, 0.8.2, one laptop) |
+| Install | 135 KB packed — 405 KB of kadence, plus 1.8 MB of blessed |
+| Startup | 78 ms (`--version`, 0.9.0, one laptop) |
 | 10,000 events | 21 ms cold with a compacted archive, 12 ms warm — 199 ms cold if every event is still a separate file |
 | Journal on disk | under 5 MB |
 | One task, as an agent reads it | 982 bytes, or 304 with `--summary` — the same however long the task has been worked on |
@@ -368,7 +368,7 @@ true.
 
 **Verified.** The merge thesis, on real git branches. Performance and size, by
 tests that fail if they regress. That the conflict problem exists in the wild —
-measured, not assumed. 1,364 tests in the repository today, including an
+measured, not assumed. 1,477 tests in the repository today, including an
 end-to-end run through the installed binary.
 
 **Not verified.** That teams and their AI agents actually lose enough context to want
@@ -428,7 +428,7 @@ included: `kadence search "compatibility policy"` or `kadence doc show DOC-65`.
 
 ```bash
 npm install
-npm test            # 1,364 tests; builds dist/cli.js first
+npm test            # 1,477 tests; builds dist/cli.js first
 npm run typecheck
 npm run build       # dist/cli.js 149 KB, blessed kept external (82 KB at 0.4.1)
 ```

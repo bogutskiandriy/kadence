@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-10-12
+
+A minor by DOC-64's rule: the default answer of `board --json` changed (see
+⚠️ Upgrading below). Everything since 0.8.2 is in it.
+
 **Coda sets kadence up with you — and the hook catches a reopened decision
 from the first day.**
 
