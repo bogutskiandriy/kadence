@@ -69,6 +69,21 @@ jobs:
           [ "$leaked" -eq 0 ] || exit 1
           echo "the fast path is clean"
 
+      - name: The guided init stays out of every other command
+        # Coda's setup is for a person at a terminal (KAD-89). Its text in any
+        # file but its own chunk means a static import pulled it into the path
+        # every command, and every agent, loads.
+        run: |
+          leaked=0
+          for file in $(find dist -name '*.js' ! -name 'onboarding-*'); do
+            if grep -q "Bring in a teammate" "$file"; then
+              echo "the guided init leaked into $file"
+              leaked=1
+            fi
+          done
+          [ "$leaked" -eq 0 ] || exit 1
+          echo "the guided init loads only when a person runs it"
+
       - name: The core must not reach the network
         # The product's first constraint, asserted on the artefact people run
         # rather than on the source. The network lives in @kadence/github and

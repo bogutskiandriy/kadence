@@ -130,6 +130,13 @@ kadence decision add "Keep sessions in Redis" \
   --why "Revocation must be instant" --rejected "JWT: cannot revoke before expiry"
 ```
 
+Run in a terminal, `kadence init` is a guided setup: Coda says what it found
+— the agents in use, an ADR folder — asks one question with a recommended
+answer, offers the ADRs as decisions, and shows what a teammate's agent will
+see when someone proposes what you ruled out. Nothing is written until you say
+so, and running it again is a checkup. An agent, a script or any flag gets no
+question at all, and the output tells an agent what to do next.
+
 On Codex, Cursor or Copilot, `kadence init --hooks-for codex,cursor,copilot`
 adds their hooks too; init writes them unasked only where the agent's own
 directory is already in the repository.

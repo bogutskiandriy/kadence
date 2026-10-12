@@ -368,6 +368,8 @@ export function buildContract(version: string): Record<string, unknown> {
       KADENCE_ACTOR:
         'Who holds a claim, when that is not your git email: one of several agents a person runs, e.g. "you@example.com#agent-2". Without it, an agent (KADENCE_SOURCE=agent) in a linked git worktree claims as "email#<worktree>". Events are still authored by the git email.',
       NO_COLOR: 'Any value disables colour.',
+      KADENCE_INTERACTIVE:
+        '"0" means `init` never asks a question; "1" lets it ask past an agent marker. It never asks in a pipe, with a flag, in CI, or where AI_AGENT, CLAUDECODE, CURSOR_AGENT, CODEX_SANDBOX or GEMINI_CLI is set.',
     },
     errors: ERROR_CODES.map((code) => ({ code, meaning: ERROR_MEANINGS[code] })),
     shapes: {
