@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-10-12
+
+A patch by the owner's rule for what follows 0.10.0: the instructions name
+`--rejected`, `task add` takes `--ac`, and option values that read as a
+number stay text. Nothing in the event format changes; `--json` gains only
+additively.
+
 ### Added
 
 - **`task add "…" --ac "…"`**, repeatable: acceptance criteria on the command
