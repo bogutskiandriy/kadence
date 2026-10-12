@@ -75,7 +75,7 @@ const TITLE_LIMIT = 60;
  */
 const JSON_TEXT_LIMIT = 2000;
 /** Shown only when no decision is in force. */
-const DECISION_HINT = 'record why: kadence decision add "…" --why "…"';
+const DECISION_HINT = 'record why: kadence decision add "…" --why "…" --rejected "…"';
 
 /**
  * The ways to go deeper, so nothing above has to be exhaustive.

@@ -15,7 +15,7 @@ Tasks, notes, decisions and documentation live in `.kadence/` as plain files, sh
     kadence task claim                  take the top of ready before starting
     kadence task move KAD-1 done        change state
     kadence note "…" --task KAD-1       something learned, for the next session
-    kadence decision add "…" --why "…"  a choice between approaches, and its reason
+    kadence decision add "…" --why "…" --rejected "X: why not"  a choice and its reason; what lost, so the hook warns when it returns
 
 `--json` responses carry `schema: "kadence/v1"`; stdout is JSON only. A failure
 carries `error.code` and, where knowable, `allowed`. As an agent, set `KADENCE_SOURCE=agent`.

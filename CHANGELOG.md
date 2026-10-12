@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The section `kadence init` writes into AGENTS.md and CLAUDE.md, prime's hint
+  on a journal with no decision, search's footer and init's own output name
+  `--rejected` beside `decision add`, with what it is for. In KAD-75 nine of
+  ten agents recorded a decision from that section alone and none used
+  `--rejected`; seven wrote the lost option into `--why`, where the prompt
+  hook's rejected-before cannot read it (DEC-61). Refresh an existing
+  repository's section with `kadence init`.
+
 ## [0.10.0] — 2026-10-12
 
 **What the journal kept noticing about itself, fixed — and a way to see what
