@@ -943,6 +943,7 @@ cli
   .option('--parent <task>', 'Parent task, e.g. KAD-1 (use "none" to detach)')
   .option('--template <name>', 'Pre-fill fields from a saved template')
   .option('--no-dod', 'Skip the board\'s definition of done for this task')
+  .option('--ac <text>', 'add: an acceptance criterion; repeat for more')
   .option('--fields <list>', 'JSON only: comma-separated task fields to return')
   .option('--limit <n>', 'list: at most this many; 0 for all of them')
   .option('--offset <n>', 'list: start the page here; use with --limit')
@@ -957,6 +958,7 @@ cli
   .example('  kadence task list --json --fields id,label,status')
   .example('  kadence task move KAD-1,KAD-2,KAD-3 done     bulk: all or nothing')
   .example('  kadence task add "Login form" --parent KAD-1   KAD-1 can be an epic')
+  .example('  kadence task add "Login form" --ac "rejects a bad password" --ac "remembers the email"')
   .example('  kadence task claim                            take the top of `kadence ready`')
   .example('  kadence task claim KAD-1')
   .example('  kadence task release KAD-1')
@@ -993,6 +995,7 @@ cli
         label?: string | string[];
         addLabel?: string | string[];
         removeLabel?: string | string[];
+        ac?: string | string[];
         estimate?: string;
         due?: string;
         status?: string;
@@ -1080,6 +1083,7 @@ cli
               ...(estimate !== undefined ? { estimate } : {}),
               // cac turns `--no-dod` into `dod: false`.
               ...(options.dod === false ? { noDod: true } : {}),
+              ...(options.ac !== undefined ? { ac: ([] as string[]).concat(options.ac) } : {}),
             }),
             json,
           );
@@ -1721,7 +1725,7 @@ if (negativeEstimate !== -1) {
  * for good: `--title a --title b` stored `{"title":["a","b"]}` and reported
  * success, and `--json --json` read as "not JSON".
  */
-const REPEATABLE = new Set(['label', 'addLabel', 'removeLabel', 'rejected', 'doc', 'also']);
+const REPEATABLE = new Set(['label', 'addLabel', 'removeLabel', 'rejected', 'doc', 'also', 'ac']);
 
 function collapseRepeats(options: Record<string, unknown>): void {
   for (const [name, value] of Object.entries(options)) {
@@ -1769,6 +1773,17 @@ function parserFailure(err: Error): never {
  * arguments a command receives, so it is handed back to them here.
  */
 const TEXT = '\u0001kadence-text:';
+
+/**
+ * What the parser would turn into a number: "2026", "1e3", "0x10" — and "",
+ * which it reads as 0. `task edit --title 2026` stored {"title":2026} and
+ * reported success; `decision add --why ""` crashed on `.trim`. Every value
+ * that is a number to kadence (--limit, --estimate) is read with Number()
+ * anyway, so the text is passed through and each handler decides.
+ */
+function readsAsNumber(token: string): boolean {
+  return !token.startsWith('-') && Number.isFinite(Number(token));
+}
 const shielded: string[] = [];
 const afterEnd: string[] = [];
 const parserArgv = process.argv.slice(0, 2);
@@ -1777,9 +1792,12 @@ const parserArgv = process.argv.slice(0, 2);
   for (const token of process.argv.slice(2)) {
     if (ended) afterEnd.push(token);
     else if (token === '--') ended = true;
-    else if (token.startsWith('-') && /\s/.test(token.split('=')[0]!)) {
+    else if ((token.startsWith('-') && /\s/.test(token.split('=')[0]!)) || readsAsNumber(token)) {
       parserArgv.push(`${TEXT}${shielded.length}`);
       shielded.push(token);
+    } else if (token.startsWith('--') && token.includes('=') && readsAsNumber(token.slice(token.indexOf('=') + 1))) {
+      parserArgv.push(`${token.slice(0, token.indexOf('=') + 1)}${TEXT}${shielded.length}`);
+      shielded.push(token.slice(token.indexOf('=') + 1));
     } else parserArgv.push(token);
   }
 }

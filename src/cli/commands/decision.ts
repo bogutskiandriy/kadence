@@ -61,6 +61,14 @@ export function runDecisionAdd(
     });
   }
 
+  // Repeats arrive joined with "; ". An empty one is a slip, not an option
+  // that lost, and the prompt hook would read it as one.
+  if (fields.rejected !== undefined && fields.rejected.split('; ').some((one) => one.trim().length === 0)) {
+    return failure(2, 'invalid_argument', 'A rejected option needs text.\n  --rejected "what lost: why"', {
+      hint: 'kadence decision add "Postgres" --why "…" --rejected "MongoDB: no transactions"',
+    });
+  }
+
   const { state, warnings } = loadState(ctx.root, ctx.actor);
 
   // Both references are resolved before anything is written: a decision that

@@ -206,6 +206,8 @@ export interface TaskFields {
   estimate?: number;
   /** Skip the board's definition of done — a spike is not a delivery. */
   noDod?: boolean;
+  /** The task's own acceptance criteria, after the definition of done. */
+  ac?: string[];
 }
 
 export function runTaskAdd(
@@ -221,6 +223,15 @@ export function runTaskAdd(
   if (trimmed.length === 0) {
     return failure(2, 'invalid_argument', 'A task needs a title.', {
       hint: 'kadence task list --json',
+    });
+  }
+
+  // Checked before anything is written: a task created with half its
+  // criteria is a task that looks finished being defined when it is not.
+  const own = (options.ac ?? []).map((text) => text.trim());
+  if (own.some((text) => text.length === 0)) {
+    return failure(2, 'invalid_argument', 'A criterion needs text.', {
+      hint: 'kadence task add "…" --ac "what done looks like"',
     });
   }
 
@@ -293,7 +304,8 @@ export function runTaskAdd(
       ? loadState(ctx.root, ctx.actor).state
       : null);
   const dod = options.noDod === true || folded === null ? [] : folded.dod;
-  for (const text of dod) {
+  const all = [...dod, ...own];
+  for (const text of all) {
     append(ctx.root, {
       id: ulid(),
       type: 'task.criterion_added',
@@ -314,16 +326,19 @@ export function runTaskAdd(
       ? ''
       : `\nWithout an estimate this task adds no points to sprint "${active.name}". Add --estimate.`;
   const standard = dod.length === 0 ? '' : `\n${dod.length} acceptance criteria from the board's definition of done.`;
+  // Numbered as `ac check` will want them: after the definition of done,
+  // which is easy to forget is ahead of them.
+  const listed = own.map((text, i) => `\n  ${dod.length + i + 1}. ${text}`).join('');
 
   return {
     ok: true,
     exitCode: 0,
-    message: `Created: ${trimmed}${standard}${warning}`,
+    message: `Created: ${trimmed}${standard}${listed}${warning}`,
     data: {
       schema: 'kadence/v1',
       ok: true,
       task: { id, title: trimmed },
-      criteria: dod.map((text, i) => ({ n: i + 1, text, checked: false, checkedBy: null })),
+      criteria: all.map((text, i) => ({ n: i + 1, text, checked: false, checkedBy: null })),
     },
   };
 }
@@ -983,6 +998,14 @@ export function runTaskEdit(
       `A label cannot be added and removed in one edit: ${both.join(', ')}.`,
       { received: both.join(','), hint: 'kadence task edit KAD-1 --add-label impact-high' },
     );
+  }
+
+  // The same rule as `task add`: a task without a title has nothing to say
+  // what it is. `--title ""` used to reach the journal as 0.
+  if (edits.title !== undefined && edits.title.trim().length === 0) {
+    return failure(2, 'invalid_argument', 'A task needs a title.', {
+      hint: 'kadence task edit KAD-1 --title "What it is now"',
+    });
   }
 
   const { state, warnings } = loadState(ctx.root, ctx.actor);

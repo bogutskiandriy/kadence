@@ -1,0 +1,1 @@
+{"id":"01M4R2ATTZ7FYGYE4Z6QMNZXXJ","type":"task.criterion_waived","entity":"01M4R2ABRETRDW7EKKE0VNBW4Y","actor":"bogutski2005@gmail.com","ts":"2026-10-12T12:45:21.119Z","source":"agent","data":{"criterion":"01M4R2AC04E7CC5F0DT48BGGQ1","why":"src/core untouched; task list --json still 100-110 ms warm"}}
