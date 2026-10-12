@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-10-12
+
+A patch: one fix to the guided `init`, nothing in the contract or the event
+format.
+
 ### Fixed
 
 - The guided `kadence init` recommends Claude Code's hooks whether or not
