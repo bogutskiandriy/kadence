@@ -10,6 +10,10 @@ import {
   decorateCard,
   renderField,
   KEY_HINTS,
+  HINTS,
+  fitHints,
+  columnWidths,
+  CARD_MARKS,
 } from '../src/tui/theme.js';
 import { createUlid } from '../src/core/ulid.js';
 import { project } from '../src/core/projection.js';
@@ -72,7 +76,9 @@ describe('card rendering', () => {
   });
 
   it('falls back to a readable colour for a custom status', () => {
-    expect(statusColor('shipped_to_prod')).toBe('white');
+    // The terminal's own foreground, not white: white text vanishes on a
+    // light terminal theme.
+    expect(statusColor('shipped_to_prod')).toBe('default');
   });
 
   it('lists the keys people need to know', () => {
@@ -314,6 +320,115 @@ describe('selection highlight', () => {
   it('keeps unselected rows aligned with the selected one', () => {
     const card = renderCard(task({ title: 'T' }), 30);
     expect(stripTags(decorateCard(card, false)).length).toBe(stripTags(card).length + 1);
+  });
+});
+
+describe('hallmark review: cards read on any terminal', () => {
+  it('uses no emoji: they render two cells wide and break the column budget', () => {
+    const t = task({ title: 'T', due: '2020-01-01' });
+    t.comments.push({ id: 'c', author: 'a', text: 'x', ts: '2026-09-03T10:00:00.000Z' } as never);
+    const card = stripTags(renderCard(t, 40));
+    // \uD83D\uDCAC \uD83D\uDCC5 \u23F0 were the marks; each takes two cells while the width budget
+    // counted one, so the comment mark came out as "?" at the column edge.
+    expect(card).not.toMatch(/[\u{1F300}-\u{1FAFF}\u23F0]/u);
+    expect(card).toContain('\u00B6');
+    expect(card).toContain('\u25F7');
+  });
+
+  it('never prints white text, which disappears on a light terminal', () => {
+    for (const priority of ['low', 'normal', 'high', 'urgent']) {
+      expect(renderCard(task({ priority, estimate: 2 }), 40)).not.toContain('white');
+    }
+  });
+
+  it('shortens a long assignee so the title keeps its room', () => {
+    const card = stripTags(renderCard(task({ title: 'Submit the package', assignee: 'bogutski2005@gmail.com' }), 30));
+    expect(card).toContain('@bogutsk…');
+    expect(card).toContain('Submit');
+  });
+
+  it('marks a plain task with nothing, not a middle dot', () => {
+    expect(stripTags(renderCard(task({ title: 'Plain' }), 40))).not.toContain('·');
+  });
+
+  it('dims finished work so open work is what the eye finds', () => {
+    const done = { ...task({ title: 'Shipped', priority: 'urgent' }), status: 'done' };
+    const card = renderCard(done, 40);
+    expect(card.startsWith('{gray-fg}')).toBe(true);
+    expect(card.match(/\{/g)?.length).toBe(2);
+  });
+
+  it('keeps the selected card in the same columns as the others', () => {
+    // The selected row used to drop the gutter and shift one cell left.
+    const card = renderCard(task({ title: 'T' }), 30);
+    const on = stripTags(decorateCard(card, true));
+    const off = stripTags(decorateCard(card, false));
+    expect(on.indexOf('T')).toBe(off.indexOf('T'));
+    expect(on.startsWith('▸')).toBe(true);
+  });
+
+  it('fills the column with the selection bar when given a width', () => {
+    const card = renderCard(task({ title: 'T' }), 30);
+    expect(stripTags(decorateCard(card, true, 31))).toHaveLength(31);
+  });
+
+  it('explains every card mark in the help legend', () => {
+    for (const glyph of ['‼', '↑', '↓', '✖', '◆', '⬢', '⊘', '⚑', '✓', '☑', '¶', '◷']) {
+      expect(CARD_MARKS.some(([g]) => g.includes(glyph)), glyph).toBe(true);
+    }
+  });
+});
+
+describe('footer hints fit the terminal', () => {
+  it('always keeps help and quit, however narrow', () => {
+    for (const width of [40, 80, 120, 140, 200]) {
+      const line = stripTags(fitHints(HINTS, width));
+      expect(line.length, `width ${width}`).toBeLessThanOrEqual(width);
+      expect(line).toContain('? help');
+      expect(line).toContain('q quit');
+    }
+  });
+
+  it('shows every hint when there is room', () => {
+    const line = stripTags(fitHints(HINTS, 400));
+    for (const [key] of HINTS) expect(line).toContain(key);
+  });
+
+  it('drops whole hints, never half of one', () => {
+    const line = stripTags(fitHints(HINTS, 60));
+    for (const [key, text] of HINTS) {
+      if (line.includes(` ${text}`)) expect(line).toContain(`${key} ${text}`);
+    }
+  });
+});
+
+describe('column layout', () => {
+  const cols = (...counts: number[]) => counts.map((n, i) => ({ label: ` status${i} ${n} `, empty: n === 0 }));
+
+  it('uses the whole width, with no gap left at the right', () => {
+    for (const total of [80, 101, 140, 233]) {
+      const widths = columnWidths(total, cols(4, 1, 0, 0, 0, 87));
+      expect(widths.reduce((a, b) => a + b, 0)).toBe(total);
+    }
+  });
+
+  it('gives the room of empty columns to the ones holding work', () => {
+    const widths = columnWidths(140, cols(4, 1, 0, 0, 0, 87));
+    expect(widths[0]!).toBeGreaterThan(widths[2]!);
+    expect(widths[2]!).toBeGreaterThanOrEqual(' status2 0 '.length + 2);
+  });
+
+  it('splits evenly when every column is empty, or every column has work', () => {
+    const empty = columnWidths(120, cols(0, 0, 0));
+    expect(new Set(empty).size).toBe(1);
+    const full = columnWidths(120, cols(1, 2, 3));
+    expect(new Set(full).size).toBe(1);
+  });
+
+  it('never makes an empty column narrower than its label', () => {
+    const layout = cols(3, 0, 0, 0, 0, 5);
+    const widths = columnWidths(140, layout);
+    widths.forEach((w, i) => expect(w).toBeGreaterThanOrEqual(layout[i]!.label.length + 4));
   });
 });
 
