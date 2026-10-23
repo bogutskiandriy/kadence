@@ -1,6 +1,16 @@
 import blessed from 'blessed';
 import type { Task, ProjectState } from '../core/projection.js';
-import { THEME, statusColor, renderCard, decorateCard, renderField, KEY_HINTS } from './theme.js';
+import {
+  THEME,
+  statusColor,
+  renderCard,
+  decorateCard,
+  renderField,
+  HINTS,
+  fitHints,
+  columnWidths,
+  CARD_MARKS,
+} from './theme.js';
 import { readyTasks } from '../core/query.js';
 import {
   createKeyRouter,
@@ -101,7 +111,9 @@ export function boardHeader(f: HeaderFacts): string {
     `${f.decisions} ${f.decisions === 1 ? 'decision' : 'decisions'} in force`,
     ...(f.points === null ? [] : [`${f.points} points`]),
   ];
-  return `kadence  ${f.sprint === null ? '' : `${f.sprint}  `}${parts.join(' · ')}${f.filterNote}`;
+  // Wide gaps rather than `A · B · C`: on a terminal line the space reads as
+  // columns of facts, and the dotted string reads as a template.
+  return `kadence   ${f.sprint === null ? '' : `${f.sprint}   `}${parts.join('   ')}${f.filterNote}`;
 }
 
 export function runBoardUi(callbacks: BoardCallbacks): void {
@@ -174,13 +186,14 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
     router.dispatch(event);
   });
 
+  // No coloured bar: the wordmark in bold and the facts in the text colour.
+  // The accent is kept for where the cursor is, not spent on chrome.
   const header = blessed.box({
     parent: screen,
     top: 0,
     height: 1,
     width: '100%',
     tags: true,
-    style: { fg: THEME.headerFg, bg: THEME.headerBg },
   });
 
   const footer = blessed.box({
@@ -189,8 +202,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
     height: 1,
     width: '100%',
     tags: true,
-    content: ` ${KEY_HINTS}`,
-    style: { fg: THEME.hint },
+    content: fitHints(HINTS, screen.width as number),
   });
 
   const status = blessed.box({
@@ -258,19 +270,18 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
     for (const c of columns) c.box.destroy();
     columns = [];
 
-    const statuses = visibleStatuses();
-    const width = Math.max(Math.floor(100 / Math.max(statuses.length, 1)), 12);
-
-    statuses.forEach((st, i) => {
+    // Positions are placeholders: layout() sets real ones on every refresh,
+    // because how wide a column is depends on whether it holds anything.
+    visibleStatuses().forEach((st) => {
       const box = blessed.box({
         parent: screen,
         top: 1,
-        left: `${i * width}%`,
-        width: `${width}%`,
+        left: 0,
+        width: 12,
         bottom: 2,
         label: ` ${st} `,
         border: { type: 'line' },
-        style: { border: { fg: THEME.border }, label: { fg: statusColor(st) } },
+        style: { border: { fg: THEME.border }, label: { fg: statusColor(st), bold: false } },
       });
 
       const list = blessed.list({
@@ -286,9 +297,10 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
         interactive: false,
         tags: true,
         scrollable: true,
+        // No item colour: the terminal's own foreground reads on a light
+        // theme as well as a dark one, where white vanished.
         style: {
           selected: { fg: THEME.selectedFg, bg: THEME.selectedBg },
-          item: { fg: 'white' },
         },
       });
 
@@ -308,7 +320,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
     let points = 0;
     let estimated = false;
 
-    columns.forEach((col, i) => {
+    columns.forEach((col) => {
       col.tasks = tasksFor(col.status);
       // Points beside "open" are open points; finished work has a column label.
       if (col.status !== DONE) {
@@ -316,24 +328,21 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
         points += col.tasks.reduce((n, t) => n + (t.estimate ?? 0), 0);
       }
       if (col.tasks.some((t) => t.estimate !== null)) estimated = true;
-
-      const innerWidth = (col.box.width as number) - 4;
       col.cursor = Math.min(col.cursor, Math.max(0, col.tasks.length - 1));
-      col.list.setItems(
-        col.tasks.map((t, row) => decorateCard(renderCard(t, innerWidth), i === focused && row === col.cursor)),
-      );
-
-      const sum = col.tasks.reduce((n, t) => n + (t.estimate ?? 0), 0);
-      col.box.setLabel(` ${col.status} (${col.tasks.length}${sum > 0 ? `, ${sum}` : ''}) `);
-      col.box.style.border.fg = i === focused ? THEME.borderFocus : THEME.border;
     });
 
+    layout();
+    paintColumns();
+
     const active = state.sprints.find((s) => s.status === 'active');
-    const filterNote =
+    const narrowed =
       (filter === '' ? '' : `  filter: "${filter}"`) +
       (readyOnly ? '  ready only' : '') +
       (branchOnly && !('reason' in branch) ? `  branch: ${branch.name}` : '') +
       (milestoneOnly === '' ? '' : `  milestone: ${milestoneOnly}`);
+    // A narrowed board hides work, so the reason it is narrowed takes the
+    // accent: the one thing on the header line that changes what you see.
+    const filterNote = narrowed === '' ? '' : `{${THEME.accent}-fg}${narrowed}{/${THEME.accent}-fg}`;
     // The same function `kadence ready` calls, over the whole board: a filter
     // narrows the columns, not what can be started.
     const ready = readyTasks(state.tasks, {
@@ -349,11 +358,12 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
         decisions: state.decisions.filter((d) => d.supersededBy === null).length,
         points: estimated ? points : null,
         filterNote,
-      })}`,
+      }).replace(/^kadence/, '{bold}kadence{/bold}')}`,
     );
 
     if (state.cycles.length > 0) {
-      say(`${state.cycles.length} dependency cycle(s) — see kadence task list`, THEME.danger);
+      const n = state.cycles.length;
+      say(`${n} dependency ${n === 1 ? 'cycle' : 'cycles'}. kadence task list shows where.`, THEME.danger);
     }
     screen.render();
   }
@@ -363,15 +373,67 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
     return col?.tasks[col.cursor];
   }
 
+  /** True when something narrows the board, so an empty column means "no match". */
+  function isNarrowed(): boolean {
+    return filter !== '' || readyOnly || branchOnly || milestoneOnly !== '';
+  }
+
+  function columnLabel(col: Column): string {
+    const sum = col.tasks.reduce((n, t) => n + (t.estimate ?? 0), 0);
+    return ` ${col.status} ${col.tasks.length}${sum > 0 ? `, ${sum} pt` : ''} `;
+  }
+
+  /** Sizes the columns to the screen: empty ones narrow, the rest sharing what is left. */
+  function layout(): void {
+    const labels = columns.map(columnLabel);
+    const widths = columnWidths(
+      screen.width as number,
+      columns.map((col, i) => ({ label: labels[i]!, empty: col.tasks.length === 0 })),
+    );
+    let left = 0;
+    columns.forEach((col, i) => {
+      col.box.left = left;
+      col.box.width = widths[i]!;
+      col.box.setLabel(labels[i]!);
+      left += widths[i]!;
+    });
+  }
+
+  /**
+   * Draws every column's cards and the focus.
+   *
+   * Shared by refresh and by cursor moves, so the two can never disagree
+   * about what the selected card looks like.
+   */
+  function paintColumns(): void {
+    columns.forEach((col, i) => {
+      const width = col.box.width as number;
+      const innerWidth = width - 4;
+      const hasFocus = i === focused;
+
+      if (col.tasks.length === 0) {
+        // An honest empty state: blank space reads as "still loading".
+        col.list.setItems([` {gray-fg}${isNarrowed() ? 'no match' : 'empty'}{/gray-fg}`]);
+      } else {
+        col.list.setItems(
+          col.tasks.map((t, row) =>
+            decorateCard(renderCard(t, innerWidth), hasFocus && row === col.cursor, width - 3),
+          ),
+        );
+      }
+      // A list that is not interactive never scrolls itself. Without this the
+      // cursor could sit on card 87 of a 35-row column, selected and unseen.
+      if (hasFocus) col.list.scrollTo(col.cursor);
+
+      col.box.style.border.fg = hasFocus ? THEME.borderFocus : THEME.border;
+      col.box.style.label.fg = hasFocus ? THEME.accent : statusColor(col.status);
+      col.box.style.label.bold = hasFocus;
+    });
+  }
+
   /** Repaints selection without reloading state. */
   function paintSelection(): void {
-    columns.forEach((col, i) => {
-      const innerWidth = (col.box.width as number) - 4;
-      col.list.setItems(
-        col.tasks.map((t, row) => decorateCard(renderCard(t, innerWidth), i === focused && row === col.cursor)),
-      );
-      col.box.style.border.fg = i === focused ? THEME.borderFocus : THEME.border;
-    });
+    paintColumns();
     screen.render();
   }
 
@@ -389,7 +451,9 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
       top: 'center',
       left: 'center',
       width: '60%',
-      height: 7,
+      // blessed puts Okay and Cancel on row 5 of the inside; at 7 rows tall
+      // that row is the bottom border and the buttons were drawn over it.
+      height: 8,
       border: { type: 'line' },
       style: { border: { fg: THEME.borderFocus } },
       keys: true,
@@ -478,9 +542,20 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
       top: fields.length + task.criteria.length + 1,
       left: 1,
       right: 1,
-      bottom: 0,
+      bottom: 2,
       tags: true,
       scrollable: true,
+    });
+
+    // The keys stay on the last line whatever the dialog holds; at the end of
+    // the text they scrolled away as soon as a task had a few comments.
+    const keyLine = blessed.box({
+      parent: box,
+      bottom: 0,
+      left: 1,
+      right: 1,
+      height: 1,
+      tags: true,
     });
 
     function paintFields(): void {
@@ -507,15 +582,24 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
         task.description !== null && task.description.includes('\n')
           ? `{gray-fg}${task.description.split('\n').slice(1).join('\n')}{/}`
           : '',
-        task.comments.length > 0 ? `{cyan-fg}comments (${task.comments.length}){/}` : '',
+        task.comments.length > 0 ? `{bold}comments (${task.comments.length}){/bold}` : '',
         ...task.comments.map((c) => `  {gray-fg}${c.author}:{/} ${c.text}`),
-        '',
-        task.criteria.length > 0 ? '{gray-fg}space toggles the criterion under the cursor{/}' : '',
-        '{gray-fg}↑↓ field   enter edit   e description in $EDITOR   esc close{/}',
-        '{gray-fg}description opens the editor, so it can hold paragraphs{/}',
       ].filter((l) => l !== '');
 
       info.setContent(extra.join('\n'));
+      keyLine.setContent(
+        fitHints(
+          // Closing first: on a narrow terminal the last hints are the ones dropped.
+          [
+            ['esc', 'close'],
+            ['↑↓', 'field'],
+            ['enter', 'edit'],
+            ...(task.criteria.length > 0 ? [['space', 'check criterion'] as const] : []),
+            ['e', 'description in $EDITOR'],
+          ],
+          (box.width as number) - 4,
+        ),
+      );
       screen.render();
     }
 
@@ -599,47 +683,75 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
     screen.render();
   }
 
-  /** A proper help dialog — the footer already carries the short version. */
+  /**
+   * A proper help dialog; the footer carries the short version.
+   *
+   * Keys on the left, what a card's marks mean on the right. It used to be 60
+   * columns wide and capped at 30 rows, so two lines wrapped mid-sentence and
+   * the closing hint fell off the bottom. Side by side it fits a 40-row
+   * terminal without scrolling; under about 116 columns it stacks.
+   */
   function showHelp(): void {
-    const rows = [
-      '{cyan-fg}Navigation{/}',
-      '  ← →  h l      move between columns',
-      '  ↑ ↓  k j      move between tasks',
-      '  enter         task details',
-      '  /             filter    escape clears it',
-      '  r             reload from the journal',
-      '  R             show only what can be started now (ready)',
-      '  b             show only what this branch introduced',
-      '  M             show only one milestone (empty clears it)',
-      '  C             claim the selected task, or release it if it is yours',
+    const head = (text: string): string => `{bold}${text}{/bold}`;
+    const row = (key: string, text: string, width = 11): string => `  ${key.padEnd(width)}{gray-fg}${text}{/gray-fg}`;
+
+    const keys = [
+      head('Moving around'),
+      row('← → h l', 'move between columns'),
+      row('↑ ↓ k j', 'move between tasks'),
+      row('enter', 'task details'),
+      row('/', 'filter; esc clears it'),
+      row('r', 'reload from the journal'),
+      row('R', 'only what can be started now'),
+      row('b', 'only what this branch introduced'),
+      row('M', 'only one milestone; empty clears it'),
       '',
-      '{cyan-fg}Task actions{/}',
-      '  [ ]           move one column left or right',
-      '  m             move to a named status',
-      '  a             assign        c  comment',
-      '  e             edit description in $EDITOR',
-      '  p             priority      t  log time',
-      '  n             new task      d  delete',
+      head('The selected task'),
+      row('C', 'claim it, or release it if it is yours'),
+      row('[ ]', 'move one column left or right'),
+      row('m', 'move to a named status'),
+      row('a', 'assign'),
+      row('c', 'comment'),
+      row('e', 'edit the description in $EDITOR'),
+      row('p', 'priority'),
+      row('t', 'log time'),
+      row('d', 'delete'),
       '',
-      '{cyan-fg}Sprint{/}',
-      '  s             sprint menu: status, start, close, burndown',
-      '  S             add the selected task to the active sprint',
-      '',
-      '{cyan-fg}Mouse{/}',
-      '  click         select a card',
-      '  drag          move a card to another column',
-      '',
-      '{gray-fg}press any key to close{/}',
+      head('Board'),
+      row('n', 'new task'),
+      row('s', 'sprint: status, start, close, burndown'),
+      row('S', 'add the selected task to the active sprint'),
+      row('q', 'quit; Ctrl-C always works'),
     ];
+    const marks = [
+      head('Marks on a card'),
+      ...CARD_MARKS.map(([glyph, text]) => row(glyph, text, 8)),
+      '',
+      head('Mouse'),
+      row('click', 'select a card', 8),
+      row('drag', 'move a card to another column', 8),
+    ];
+
+    const visible = (text: string): number => [...text.replace(/\{[^}]*\}/g, '')].length;
+    const leftWidth = Math.max(...keys.map(visible)) + 4;
+    // Frame, padding, and one spare cell: blessed wraps a line that exactly
+    // fills the box.
+    const chrome = 7;
+    const sideBySide = (screen.width as number) >= leftWidth + Math.max(...marks.map(visible)) + chrome + 2;
+    const body = sideBySide
+      ? keys.map((line, i) => `${line}${' '.repeat(leftWidth - visible(line))}${marks[i] ?? ''}`)
+      : [...keys, '', ...marks];
+    const rows = [...body, '', '{gray-fg}  esc closes{/gray-fg}'];
 
     const box = blessed.box({
       parent: screen,
       top: 'center',
       left: 'center',
-      width: 60,
-      height: Math.min(rows.length + 2, 30),
+      width: Math.min((screen.width as number) - 2, Math.max(...rows.map(visible)) + chrome),
+      height: Math.min(rows.length + 4, (screen.height as number) - 2),
       border: { type: 'line' },
       label: ' Keys ',
+      padding: { top: 1, left: 1, right: 1 },
       style: { border: { fg: THEME.borderFocus } },
       tags: true,
       scrollable: true,
@@ -806,7 +918,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
       if (task === undefined) return;
       return prompt(`Delete ${task.label}? type "yes":`, '', (value) => {
         if (value.toLowerCase() === 'yes') act(callbacks.remove(task.id));
-        else say('Not deleted.');
+        else say('Not deleted.', THEME.info);
       });
     }
     if (ch === 'e') {
@@ -832,23 +944,27 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
       return prompt('Filter (title, assignee or label):', filter, (value) => {
         filter = value === '*' ? '' : value;
         refresh();
+        // Six columns saying "no match" need one line saying how to get back.
+        if (filter !== '' && columns.every((c) => c.tasks.length === 0)) {
+          say(`Nothing matches "${filter}". esc clears the filter.`, THEME.info);
+        }
       });
     }
     if (name === 'escape' && filter !== '') {
       filter = '';
-      say('Filter cleared.');
+      say('Filter cleared.', THEME.info);
       return refresh();
     }
 
     if (ch === 'r') {
-      say('Reloaded.');
+      say('Reloaded.', THEME.info);
       return refresh(true);
     }
     // `r` has meant reload since the board shipped, so the ready filter takes
     // the shifted key rather than retraining a reflex people already have.
     if (ch === 'R') {
       readyOnly = !readyOnly;
-      say(readyOnly ? 'Showing only what can be started now.' : 'Showing every task.');
+      say(readyOnly ? 'Showing only what can be started now.' : 'Showing every task.', THEME.info);
       return refresh();
     }
     // `C`, not `k`: `k` is vim's cursor-up and is bound above, so a claim
@@ -868,6 +984,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
         branchOnly
           ? `Showing only what ${branch.name} introduced since ${branch.base}.`
           : 'Showing every task.',
+        THEME.info,
       );
       return refresh();
     }
@@ -880,7 +997,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
         const wanted = value.trim();
         if (wanted === '') {
           milestoneOnly = '';
-          say('Showing every task.');
+          say('Showing every task.', THEME.info);
           return refresh();
         }
         const found = state.milestones.find(
@@ -890,7 +1007,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
         );
         if (found === undefined) return say(`No milestone "${wanted}".`, THEME.warn);
         milestoneOnly = found.label;
-        say(`Showing ${found.label} ${found.name}.`);
+        say(`Showing ${found.label} ${found.name}.`, THEME.info);
         refresh();
       });
     }
@@ -953,6 +1070,12 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
       refresh();
     }
     dragging = null;
+  });
+
+  // Widths are cells now, not percentages, so a resize has to lay out again.
+  screen.on('resize', () => {
+    footer.setContent(fitHints(HINTS, screen.width as number));
+    refresh();
   });
 
   build();
