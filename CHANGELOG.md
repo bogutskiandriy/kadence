@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-10-23
+
+The board, redrawn. `kadence ui` went through a design review and came out
+easier to read at any terminal size. Presentation only: key bindings, what
+each action does, the event format and `--json` are unchanged.
+
+### Changed
+
+- **Columns fit their cards.** Widths are whole cells that add up to the
+  screen, and an empty column shrinks to its label and says "empty". At 140
+  columns a card title went from three or four characters to eleven or more.
+- **The cursor stays on screen.** The focused column scrolls to it, so
+  wrapping to the last card of a long `done` column no longer hides the
+  selection.
+- **One accent.** Cyan marks only focus, selection, dialog frames and an
+  active filter. Text uses the terminal's own colour instead of white, which
+  disappeared on light themes; done and cancelled cards are dimmed whole.
+- **One-cell marks.** The comment and due-date emoji were two cells wide and
+  shifted rows; they are `¶` and `◷` now. A plain task carries no type mark.
+- **The footer keeps `? help` and `q quit`** at every width, dropping other
+  hints from the end first. Help is two columns, sized to the screen, with a
+  legend for the card marks; the detail dialog keeps its key line in view.
+
+### Fixed
+
+- The prompt dialog drew its buttons over its own bottom border.
+- A filter that matches nothing now says how to clear it.
+
 ## [0.10.1] — 2026-10-12
 
 A patch by the owner's rule for what follows 0.10.0: the instructions name
