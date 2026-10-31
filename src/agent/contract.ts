@@ -196,9 +196,9 @@ Tasks, notes, decisions and documentation live in \`.kadence/\` as plain files, 
     kadence task move KAD-1 done        change state
     kadence note "…" --task KAD-1       something learned, for the next session
     kadence decision add "…" --why "…" --rejected "X: why not"  a choice and its reason; what lost, so the hook warns when it returns
+    kadence decision add "…" --why "…" --supersedes DEC-1  a decision that was wrong: correct it; the old one stays, marked replaced
 
-\`--json\` responses carry \`schema: "kadence/v1"\`; stdout is JSON only. A failure
-carries \`error.code\` and, where knowable, \`allowed\`. As an agent, set \`KADENCE_SOURCE=agent\`.
+\`--json\` responses carry \`schema: "kadence/v1"\`; stdout is JSON only. A failure carries \`error.code\` and, where knowable, \`allowed\`. As an agent, set \`KADENCE_SOURCE=agent\`.
 If \`kadence\` is not on PATH, ask the human to run \`npm install -g kadence\` (\`npx kadence prime\` needs network — their call).
 
 Details: \`.kadence/README.md\`

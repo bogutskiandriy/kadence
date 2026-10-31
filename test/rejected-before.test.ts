@@ -41,15 +41,11 @@ const PROPOSALS: Array<[string, string]> = [
   ['Commit the journal automatically after every write', 'kadence never commits'],
   ['Give the board its own implementation of move and claim', 'Every board action calls'],
   ['Fetch the release artifact at build time for the site reference', 'The site takes the command reference'],
-];
-
-/**
- * Known misses, kept so the day they start passing is noticed. "Embeddings"
- * is a common word in this journal — search was argued about at length — so it
- * weighs little against "synonyms" and "understands" (KAD-78).
- */
-const KNOWN_MISSES: Array<[string, string]> = [
+  // KAD-78: the two prompts the site's hero was captured with, in the words
+  // people use rather than the words the decision was written in.
   ["Let's add embeddings to the search core so it understands synonyms", 'Search is lexical BM25'],
+  ["Let's add embeddings to kadence search so it understands synonyms", 'Search is lexical BM25'],
+  ['Can we switch the core to async file reads?', 'The core is synchronous'],
 ];
 
 /** Ordinary work on this repository: none of these reopens anything. */
@@ -68,10 +64,6 @@ const ORDINARY = [
 
 describe('rejected before, on this repository’s journal', () => {
   it.each(PROPOSALS)('names the decision for: %s', (prompt, title) => {
-    expect(rejectedMatches(state, prompt)[0]?.label).toBe(labelOf(title));
-  });
-
-  it.fails.each(KNOWN_MISSES)('still misses: %s', (prompt, title) => {
     expect(rejectedMatches(state, prompt)[0]?.label).toBe(labelOf(title));
   });
 
