@@ -134,8 +134,16 @@ export interface Task {
   parent: string | null;
   /** ULIDs of tasks that must finish before this one can start. */
   blockedBy: string[];
+  /** Planned start, an ISO date: what the timeline plans from (DEC-71). */
+  start: string | null;
   /** ISO date, no time: a deadline is a day, not a moment. */
   due: string | null;
+  /**
+   * Place in the Product Backlog: a fractional key (core/rank.ts), or null for
+   * a task nobody has ordered. The last `task.ranked` by ULID holds, so two
+   * branches that each moved it agree after the merge (I1).
+   */
+  rank: string | null;
   /**
    * Who is working on this right now, or null. The earliest live claim by
    * ULID holds, so two machines that both claimed before pushing agree on the
@@ -180,8 +188,23 @@ export interface Sprint {
   startDate: string | null;
   endDate: string | null;
   status: 'planned' | 'active' | 'closed' | 'cancelled';
+  /**
+   * The Sprint Goal (Scrum Guide 2020): the commitment the Sprint Backlog is
+   * held to. Optional — kadence serves teams that do not run Scrum — and
+   * editable, because a refusal would only move the change out of the journal.
+   */
+  goal: string | null;
   /** The event that closed the sprint. Lowest ULID — first-write-wins. */
   closedBy: string | null;
+  /**
+   * Tasks the close moved on to another sprint (`sprint close --carry-to`).
+   *
+   * Recorded in the closing event because membership is a single field on
+   * the task: once a carried task points at the next sprint, only this list
+   * still says it was taken into this one and not finished here — and a
+   * closed sprint's record must not change after the fact (I5).
+   */
+  carried: string[];
   taskIds: string[];
 }
 
@@ -273,9 +296,36 @@ export interface Note {
   text: string;
   /** ULID of the task it came out of, when it came out of one. */
   task: string | null;
+  /** ULID of the sprint whose retrospective recorded it (`sprint retro`). */
+  sprint: string | null;
   at: string;
   by: string;
   source: 'human' | 'agent';
+}
+
+/**
+ * The Product Goal (Scrum Guide 2020): the commitment the Product Backlog is
+ * held to, one at a time.
+ *
+ * Its own entity rather than a board setting, because how a goal ended —
+ * achieved or abandoned — is the part a review needs, and a setting keeps only
+ * its last value.
+ */
+export interface ProductGoal {
+  /** ULID. Identity; PG-N is derived during the fold (I7). */
+  id: string;
+  label: string;
+  text: string;
+  /**
+   * `replaced` is never written: it is what the fold calls a goal that was
+   * still open when a later one was set. The CLI refuses that, but two
+   * machines can each set one before either pushes (I1).
+   */
+  status: 'open' | 'achieved' | 'abandoned' | 'replaced';
+  setAt: string;
+  by: string;
+  /** The event that closed it. Lowest ULID — first write wins, like a sprint. */
+  closedBy: string | null;
 }
 
 /** A revision that lost to a concurrent one, kept so nothing written is lost. */
@@ -326,6 +376,8 @@ export interface ProjectState {
   milestones: Milestone[];
   notes: Note[];
   sprints: Sprint[];
+  /** Every Product Goal, in ULID order. At most one is `open`. */
+  goals: ProductGoal[];
   templates: Template[];
   /** Configured columns, or the defaults when a team never changed them. */
   statuses: string[];
@@ -371,6 +423,36 @@ export interface ProjectState {
 }
 
 
+
+/**
+ * Product Goals from their events, independent of the order they arrived in.
+ *
+ * A goal's status depends only on facts that do not move after a merge: the
+ * first close by ULID, else whether a later goal exists. Nothing here asks
+ * what was open "at the time", which is the question two clocks disagree on.
+ */
+function foldGoals(sets: readonly FlowEvent[], closes: readonly FlowEvent[]): ProductGoal[] {
+  const seen = new Set<string>();
+  const goals: ProductGoal[] = [];
+  for (const e of sets) {
+    const text = readText(e.data?.['text']);
+    if (text === null || seen.has(e.entity)) continue;
+    seen.add(e.entity);
+    goals.push({ id: e.entity, label: '', text, status: 'open', setAt: e.ts, by: e.actor, closedBy: null });
+  }
+  goals.sort((a, b) => (a.id < b.id ? -1 : 1));
+  goals.forEach((g, i) => {
+    g.label = `PG-${i + 1}`;
+    const close = closes.find((c) => c.entity === g.id);
+    if (close !== undefined) {
+      g.closedBy = close.id;
+      g.status = close.data?.['outcome'] === 'abandoned' ? 'abandoned' : 'achieved';
+    } else if (i < goals.length - 1) {
+      g.status = 'replaced';
+    }
+  });
+  return goals;
+}
 
 /** A revision the fold can use, or null for one a schema change left malformed. */
 function readRevision(e: FlowEvent): { title: string; body: string; parents: string[] } | null {
@@ -469,6 +551,10 @@ export function project(input: readonly FlowEvent[]): ProjectState {
   const templates = new Map<string, Template>();
   const decisions = new Map<string, Decision>();
   const notes: Note[] = [];
+  // Goals fold after the loop: whether one was replaced depends on every
+  // later goal, and a close can merge before the goal it closes.
+  const goalSets: FlowEvent[] = [];
+  const goalCloses: FlowEvent[] = [];
   // Documents fold after the loop: a head is only a head once every revision
   // of that document has been seen.
   const docRevisions = new Map<string, FlowEvent[]>();
@@ -542,11 +628,21 @@ export function project(input: readonly FlowEvent[]): ProjectState {
           id: e.id,
           text,
           task: readText(e.data?.['task']),
+          sprint: readText(e.data?.['sprint']),
           at: e.ts,
           by: e.actor,
           source: e.source,
         });
       }
+      continue;
+    }
+
+    if (e.type === 'goal.set') {
+      goalSets.push(e);
+      continue;
+    }
+    if (e.type === 'goal.closed') {
+      goalCloses.push(e);
       continue;
     }
 
@@ -699,6 +795,7 @@ export function project(input: readonly FlowEvent[]): ProjectState {
   }
 
   const documents = foldDocuments(docRevisions, docLinks, live);
+  const goals = foldGoals(goalSets, goalCloses);
 
   return {
     tasks: ordered,
@@ -708,6 +805,7 @@ export function project(input: readonly FlowEvent[]): ProjectState {
     // Already in ULID order: notes are appended as the sorted loop reads them.
     notes,
     sprints: [...sprints.values()].sort((a, b) => (a.id < b.id ? -1 : 1)),
+    goals,
     statuses: statuses ?? [...DEFAULT_STATUSES],
     dod,
     started: config.started,
@@ -750,7 +848,9 @@ function seedTask(tasks: Map<string, Task>, e: FlowEvent): void {
     milestone: null,
     parent: readText(data['parent']),
     blockedBy: [],
+    start: readText(data['start']),
     due: readText(data['due']),
+    rank: null,
     claimedBy: null,
     claimedAt: null,
     claimedEventId: null,
@@ -775,8 +875,10 @@ function seedSprint(sprints: Map<string, Sprint>, e: FlowEvent): void {
     description: readText(data['description']),
     startDate: readText(data['startDate']),
     endDate: readText(data['endDate']),
+    goal: readText(data['goal']),
     status: 'planned',
     closedBy: null,
+    carried: [],
     taskIds: [],
   });
 }
@@ -888,6 +990,7 @@ function apply(
       if (data['description'] !== undefined) sprint.description = readText(data['description']);
       if (data['startDate'] !== undefined) sprint.startDate = readText(data['startDate']);
       if (data['endDate'] !== undefined) sprint.endDate = readText(data['endDate']);
+      if (data['goal'] !== undefined) sprint.goal = readText(data['goal']);
       return true;
     }
 
@@ -897,6 +1000,10 @@ function apply(
       if (sprint.closedBy === null) {
         sprint.status = 'closed';
         sprint.closedBy = e.id;
+        const carried = data['carried'];
+        if (Array.isArray(carried)) {
+          sprint.carried = carried.filter((x): x is string => typeof x === 'string');
+        }
       } else {
         rejected.push(e);
       }
@@ -979,8 +1086,12 @@ function apply(
     // `state.json` has to fold an old journal to exactly what it folded before
     // (I6).
     if (data['labels'] !== undefined) task.labels = readLabels(data['labels']);
+      if (data['start'] !== undefined) task.start = readText(data['start']);
       if (data['due'] !== undefined) task.due = readText(data['due']);
       if (typeof data['estimate'] === 'number') task.estimate = data['estimate'];
+      break;
+    case 'task.ranked':
+      task.rank = readText(data['rank']);
       break;
     case 'task.parent_set':
       // null detaches — a deliberate action, same rule as unassigning.

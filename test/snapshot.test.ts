@@ -208,10 +208,10 @@ describe('the cache must not serve a shape from an older version of the code', (
    * that every existing user has a stale cache.
    */
   const PROJECTED_SHAPE = {
-    version: 'kadence-snapshot/13',
+    version: 'kadence-snapshot/15',
     task: [
       'id', 'label', 'title', 'description', 'type', 'priority', 'status', 'labels',
-      'assignee', 'reporter', 'sprint', 'milestone', 'parent', 'blockedBy', 'due', 'claimedBy',
+      'assignee', 'reporter', 'sprint', 'milestone', 'parent', 'blockedBy', 'start', 'due', 'rank', 'claimedBy',
       'claimedAt', 'claimedEventId', 'contestedBy', 'criteria', 'comments', 'docs',
       'estimate', 'loggedHours', 'history', 'createdAt', 'updatedAt',
     ],
@@ -219,7 +219,12 @@ describe('the cache must not serve a shape from an older version of the code', (
       'id', 'label', 'title', 'why', 'rejected', 'task', 'docs', 'supersedes',
       'supersededBy', 'at', 'by', 'source',
     ],
-    note: ['id', 'text', 'task', 'at', 'by', 'source'],
+    note: ['id', 'text', 'task', 'sprint', 'at', 'by', 'source'],
+    // Pinned with 14, when the Scrum work gave a sprint its goal and the
+    // record of what its close carried on, and the state its Product Goals.
+    // Neither had a list before, so neither would have failed when it changed.
+    sprint: ['id', 'name', 'description', 'startDate', 'endDate', 'goal', 'status', 'closedBy', 'carried', 'taskIds'],
+    goal: ['id', 'label', 'text', 'status', 'setAt', 'by', 'closedBy'],
     document: [
       'id', 'label', 'title', 'body', 'tasks', 'revision', 'revisions', 'conflicts',
       'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'source',
@@ -241,7 +246,7 @@ describe('the cache must not serve a shape from an older version of the code', (
     // as much a shape change as a new field, and the 0.3.1 bug was a shape
     // change nobody bumped the version for.
     state: [
-      'tasks', 'decisions', 'documents', 'milestones', 'notes', 'sprints', 'templates', 'statuses', 'dod', 'started', 'startedChanges',
+      'tasks', 'decisions', 'documents', 'milestones', 'notes', 'sprints', 'goals', 'templates', 'statuses', 'dod', 'started', 'startedChanges',
       'orphanStatuses', 'cycles', 'pending', 'rejected',
     ],
   };
@@ -310,6 +315,24 @@ describe('the cache must not serve a shape from an older version of the code', (
         source: 'human', data: { text: 'Learned something' } },
     ]);
     expect(Object.keys(state.notes[0]!).sort()).toEqual([...PROJECTED_SHAPE.note].sort());
+  });
+
+  it('a projected sprint has exactly the recorded fields', () => {
+    const id = gen();
+    const state = project([
+      { id, type: 'sprint.created', entity: id, actor: 'a@b.c', ts: '2026-09-08T10:00:00.000Z',
+        source: 'human', data: { name: 'S' } },
+    ]);
+    expect(Object.keys(state.sprints[0]!).sort()).toEqual([...PROJECTED_SHAPE.sprint].sort());
+  });
+
+  it('a projected Product Goal has exactly the recorded fields', () => {
+    const id = gen();
+    const state = project([
+      { id, type: 'goal.set', entity: id, actor: 'a@b.c', ts: '2026-09-08T10:00:00.000Z',
+        source: 'human', data: { text: 'G' } },
+    ]);
+    expect(Object.keys(state.goals[0]!).sort()).toEqual([...PROJECTED_SHAPE.goal].sort());
   });
 
   it('a projected decision has exactly the recorded fields', () => {

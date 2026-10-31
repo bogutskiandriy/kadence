@@ -17,6 +17,9 @@ import { flowHtml, cfdHtml } from '../src/export/report-html.js';
 import { attentionReport } from '../src/core/attention.js';
 import { flowReport, cfdReport } from '../src/core/flow.js';
 import { readyTasks } from '../src/core/query.js';
+import { timeline } from '../src/core/timeline.js';
+import { calendar } from '../src/core/calendar.js';
+import { timelineHtml, calendarHtml } from '../src/export/report-html.js';
 
 /**
  * Guardrail from ADR-005. The test fails on regression by design: 200 ms is
@@ -447,4 +450,59 @@ describe('what an agent pays', () => {
     // Building 210 tasks through the real command path is slow on purpose: a
     // faster fixture would not prove the folding stays out of the answer.
   }, 60_000);
+});
+
+describe('the timeline at size', () => {
+  /**
+   * The timeline walks the parent tree, which no other report does: a plan
+   * comes up from the leaves and a bar is stretched by everything under it.
+   * Walked naively, each task re-walks its subtree and a deep chain turns
+   * quadratic — so the fixture has both a wide tree and a deep one, and about
+   * 10,000 events, like the journal above.
+   */
+  it('timeline and calendar over 100 epics, 5,000 tasks and a chain 1,000 deep cost a fraction of the budget', () => {
+    const gen = createUlid();
+    const events: FlowEvent[] = [];
+    let n = 0;
+    const at = (): string => new Date(1_756_800_000_000 + n++ * 1000).toISOString();
+    const add = (data: Record<string, unknown>): string => {
+      const id = gen();
+      events.push({ id, type: 'task.created', entity: id, actor: 'p@x', ts: at(), source: 'human', data });
+      return id;
+    };
+    const move = (entity: string, to: string): void => {
+      events.push({ id: gen(), type: 'task.moved', entity, actor: 'p@x', ts: at(), source: 'human', data: { to } });
+    };
+    for (let e = 0; e < 100; e++) {
+      const epic = add({ title: `Epic ${e}`, type: 'epic', ...(e % 2 === 0 ? { start: '2026-11-01', due: '2026-12-20' } : {}) });
+      for (let c = 0; c < 10; c++) {
+        const child = add({ title: `Story ${e}.${c}`, type: 'story', parent: epic });
+        for (let g = 0; g < 4; g++) {
+          const leaf = add({ title: `Task ${e}.${c}.${g}`, parent: child, due: `2026-12-${String((g * 7 + c) % 28 + 1).padStart(2, '0')}` });
+          move(leaf, 'in_progress');
+          if (g % 2 === 0) move(leaf, 'done');
+        }
+      }
+    }
+    let parent = add({ title: 'Deep', type: 'epic' });
+    for (let d = 0; d < 1000; d++) parent = add({ title: `Level ${d}`, parent, due: '2026-12-15' });
+    const state = project(events);
+    const today = new Date('2026-12-10T00:00:00.000Z');
+
+    const msTimeline = measure(() => timeline(state, today));
+    const t = timeline(state, today);
+    const msCalendar = measure(() => calendar(state, t, '2026-12'));
+    const msPages = measure(() => {
+      timelineHtml(t, today);
+      calendarHtml(calendar(state, t, '2026-12'), today);
+    });
+    // eslint-disable-next-line no-console
+    console.log(
+      `  timeline: ${msTimeline.toFixed(1)} ms, calendar: ${msCalendar.toFixed(1)} ms, both pages: ${msPages.toFixed(1)} ms (${events.length} events)`,
+    );
+    expect(t.groups.length).toBe(101);
+    expect(msTimeline).toBeLessThan(50);
+    expect(msCalendar).toBeLessThan(50);
+    expect(msPages).toBeLessThan(50);
+  }, 120_000);
 });

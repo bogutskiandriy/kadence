@@ -34,12 +34,14 @@ import {
   describeEmptyResult,
   describeNothingReady,
   isSortKey,
+  isFinished,
   readyTasks,
   SORT_KEYS,
   type TaskFilters,
   type SortKey,
 } from '../../core/query.js';
 import { findMilestone } from './milestone.js';
+import { rankBetween, compareRank } from '../../core/rank.js';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 
 /**
@@ -201,6 +203,8 @@ export interface TaskFields {
   priority?: string;
   assignee?: string;
   labels?: string[];
+  /** Planned start, YYYY-MM-DD — what the timeline plans an epic from (DEC-71). */
+  start?: string;
   due?: string;
   /** Estimate comes last: the substance of the task first, its cost after. */
   estimate?: number;
@@ -242,6 +246,9 @@ export function runTaskAdd(
     return unknownValue('unknown_priority', 'priority', options.priority as string, PRIORITIES);
   }
 
+  const dates = checkDates(options.start, options.due);
+  if (dates !== null) return dates;
+
   // A parent may be given as KAD-1, but the event must store the stable ULID.
   let resolvedParent: string | undefined;
   let existing: ProjectState | null = null;
@@ -279,6 +286,7 @@ export function runTaskAdd(
       ...(options.labels !== undefined && options.labels.length > 0
         ? { labels: options.labels }
         : {}),
+      ...(options.start !== undefined && options.start !== '' ? { start: options.start } : {}),
       ...(options.due !== undefined ? { due: options.due } : {}),
       ...(resolvedParent !== undefined ? { parent: resolvedParent } : {}),
       ...(options.estimate !== undefined ? { estimate: options.estimate } : {}),
@@ -757,7 +765,10 @@ function fullTask(t: Task, state: ProjectState | null = null): Record<string, un
     loggedHours: t.loggedHours,
     parent: t.parent,
     blockedBy: t.blockedBy,
+    start: t.start,
     due: t.due,
+    // The place in the Product Backlog: a key that sorts, not a number to show.
+    rank: t.rank,
     claimedBy: t.claimedBy,
     contestedBy: t.contestedBy,
     comments: t.comments,
@@ -915,6 +926,8 @@ export interface TaskEdits {
   description?: string;
   type?: string;
   priority?: string;
+  /** Planned start; an empty string clears it. */
+  start?: string;
   due?: string;
   estimate?: number;
   /** The set becomes exactly this. Written as the difference, never as the set (ADR-013). */
@@ -977,6 +990,8 @@ export function runTaskEdit(
       ),
     };
   }
+  const startFormat = checkDates(edits.start, undefined);
+  if (startFormat !== null) return startFormat;
 
   // `--label` replaces the set and `--add-label` changes one; together they say
   // two different things about the same field, and picking one silently is the
@@ -1020,6 +1035,15 @@ export function runTaskEdit(
     };
   }
 
+  // Against what each task will hold after the edit, and for every task before
+  // any is written: a bulk edit is all or nothing.
+  if (edits.start !== undefined || edits.due !== undefined) {
+    for (const task of tasks) {
+      const backwards = checkDates(edits.start ?? task.start ?? undefined, edits.due ?? task.due ?? undefined, task.label);
+      if (backwards !== null) return backwards;
+    }
+  }
+
   const touched: Task[] = [];
   const allChanged = new Set<string>();
 
@@ -1044,6 +1068,10 @@ export function runTaskEdit(
   if (edits.priority !== undefined && edits.priority !== task.priority) {
     data['priority'] = edits.priority;
     changed.push('priority');
+  }
+  if (edits.start !== undefined && edits.start !== (task.start ?? '')) {
+    data['start'] = edits.start;
+    changed.push('start');
   }
   if (edits.due !== undefined && edits.due !== (task.due ?? '')) {
     data['due'] = edits.due;
@@ -1106,6 +1134,29 @@ export function runTaskEdit(
       changed: [...allChanged],
     },
   };
+}
+
+/**
+ * A planned start that is a date, and not after the due date. Empty means
+ * "clear it" on edit and is never an error. `label` names the task in a bulk
+ * edit, where "the due date" alone would not say whose.
+ */
+function checkDates(start: string | undefined, due: string | undefined, label?: string): CommandResult | null {
+  if (start === undefined || start === '') return null;
+  if (!isIsoDate(start)) {
+    return failure(2, 'invalid_argument', `Start must be YYYY-MM-DD, got "${start}".\n  kadence task edit KAD-1 --start 2026-12-01`, {
+      received: start,
+    });
+  }
+  if (due !== undefined && due !== '' && isIsoDate(due) && start > due) {
+    return failure(
+      2,
+      'invalid_argument',
+      `${label === undefined ? 'The' : `${label}:`} start (${start}) is after the due date (${due}).`,
+      { received: start },
+    );
+  }
+  return null;
 }
 
 /** Calendar date only — a deadline is a day, not a moment. */
@@ -2136,4 +2187,121 @@ export function runTaskLog(
     message: `${task.label}: ${total.toFixed(1)}h logged in total.${estimate}`,
     data: { schema: 'kadence/v1', ok: true, task: { id: task.id, label: task.label, loggedHours: total } },
   };
+}
+
+/**
+ * `task rank` — a place in the Product Backlog.
+ *
+ * Scrum Guide 2020 calls the Product Backlog ordered, and ordering it is the
+ * Product Owner's instrument. One event per move, about the moved task only;
+ * the key it carries sorts between its new neighbours (core/rank.ts).
+ */
+
+export interface RankOptions {
+  top?: boolean;
+  bottom?: boolean;
+  before?: string;
+  after?: string;
+}
+
+const USAGE =
+  'Where should it go? Exactly one of:\n' +
+  '  kadence task rank KAD-1 --top\n' +
+  '  kadence task rank KAD-1 --bottom\n' +
+  '  kadence task rank KAD-1 --before KAD-2\n' +
+  '  kadence task rank KAD-1 --after KAD-2';
+
+export function runTaskRank(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  ref: string,
+  options: RankOptions,
+): CommandResult {
+  const ctx = resolveContext(cwd, env);
+  if (!isContext(ctx)) return ctx;
+
+  const given = [options.top === true, options.bottom === true, options.before !== undefined, options.after !== undefined];
+  if (given.filter(Boolean).length !== 1) {
+    return failure(2, 'invalid_argument', USAGE, { hint: 'kadence task rank --help' });
+  }
+
+  const { state, warnings } = loadState(ctx.root, ctx.actor);
+  const task = findTask(state, ref);
+  if (task === undefined) return taskNotFound(ref);
+
+  // The order among the work still open. Finished tasks keep their keys, but
+  // a place relative to them would mean nothing on the board.
+  const ranked = state.tasks
+    .filter((t) => t.rank !== null && t.id !== task.id && !isFinished(t))
+    .sort(compareRank);
+
+  let rank: string;
+  let where: string;
+  if (options.top === true) {
+    rank = rankBetween(null, ranked[0]?.rank ?? null);
+    where = 'top of the backlog';
+  } else if (options.bottom === true) {
+    rank = rankBetween(ranked[ranked.length - 1]?.rank ?? null, null);
+    where = ranked.length === 0 ? 'top of the backlog' : 'bottom of the ordered backlog';
+  } else {
+    const otherRef = (options.before ?? options.after)!;
+    const other = findTask(state, otherRef);
+    if (other === undefined) return taskNotFound(otherRef);
+    if (other.id === task.id) {
+      return failure(2, 'invalid_argument', `${task.label} cannot be placed relative to itself.`, {
+        received: otherRef,
+      });
+    }
+    const placed = place(ranked, other, options.before !== undefined);
+    if (placed === null) {
+      // Before an unranked task is anywhere in the ranked part, which already
+      // comes first. After one has no answer until it has a place itself.
+      return failure(
+        1,
+        'conflicting_state',
+        `${other.label} has no place in the order yet.\nGive it one first:\n  kadence task rank ${other.label} --bottom`,
+        { received: otherRef },
+      );
+    }
+    rank = placed;
+    where = `${options.before !== undefined ? 'before' : 'after'} ${other.label}`;
+  }
+
+  append(ctx.root, {
+    id: ulid(),
+    type: 'task.ranked',
+    entity: task.id,
+    actor: ctx.actor,
+    ts: new Date().toISOString(),
+    source: ctx.source,
+    data: { rank },
+  });
+
+  return {
+    ok: true,
+    exitCode: 0,
+    warnings,
+    message: `${task.label} → ${where}.\n  kadence task list --sort rank`,
+    data: { schema: 'kadence/v1', ok: true, task: { id: task.id, label: task.label, rank } },
+  };
+}
+
+/** A key next to `other`, or null when `other` has no place to be next to. */
+function place(ranked: readonly Task[], other: Task, before: boolean): string | null {
+  const i = ranked.findIndex((t) => t.id === other.id);
+  if (i === -1) {
+    if (!before || isFinished(other)) return null;
+    // Every ranked task already sorts before an unranked one: the bottom of
+    // the ordered part is "before" it.
+    return rankBetween(ranked[ranked.length - 1]?.rank ?? null, null);
+  }
+  // The nearest *different* key, not the next task: two branches can leave
+  // neighbours sharing a key, the sort breaks that tie by ULID, and there is
+  // no room between equal keys.
+  const key = other.rank!;
+  if (before) {
+    const lower = ranked.filter((t) => t.rank! < key);
+    return rankBetween(lower[lower.length - 1]?.rank ?? null, key);
+  }
+  return rankBetween(key, ranked.find((t) => t.rank! > key)?.rank ?? null);
 }

@@ -13,6 +13,8 @@ export interface SprintReport {
   id: string;
   name: string;
   status: string;
+  /** The Sprint Goal, or null when the sprint has none. */
+  goal: string | null;
   /** Sum of estimates for tasks taken into the sprint (cancelled excluded). */
   committed: number;
   /** Sum of estimates of completed tasks — what is usually called velocity. */
@@ -37,11 +39,14 @@ export function sprintReport(state: ProjectState, sprintId: string): SprintRepor
   const sprint = state.sprints.find((s) => s.id === sprintId);
   if (sprint === undefined) return null;
 
-  const tasks = state.tasks.filter((t) => t.sprint === sprintId);
-  const cancelled = tasks.filter((t) => t.status === 'cancelled');
-  const active = tasks.filter((t) => t.status !== 'cancelled');
-  const done = active.filter((t) => t.status === 'done');
-  const carriedOver = active.filter((t) => t.status !== 'done');
+  // A task the close carried into a later sprint points there now, but it was
+  // taken into this one and not finished here, whatever happened to it next.
+  const carried = new Set(sprint.carried);
+  const tasks = state.tasks.filter((t) => t.sprint === sprintId || carried.has(t.id));
+  const cancelled = tasks.filter((t) => t.status === 'cancelled' && !carried.has(t.id));
+  const active = tasks.filter((t) => carried.has(t.id) || t.status !== 'cancelled');
+  const done = active.filter((t) => t.status === 'done' && !carried.has(t.id));
+  const carriedOver = active.filter((t) => t.status !== 'done' || carried.has(t.id));
 
   const committed = sum(active.map((t) => t.estimate ?? 0));
   const velocity = sum(done.map((t) => t.estimate ?? 0));
@@ -61,6 +66,7 @@ export function sprintReport(state: ProjectState, sprintId: string): SprintRepor
     id: sprint.id,
     name: sprint.name,
     status: sprint.status,
+    goal: sprint.goal,
     committed,
     velocity,
     actualHours,

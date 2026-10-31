@@ -6,6 +6,9 @@ import type { Burndown } from '../core/burndown.js';
 import type { Burnup } from '../core/burnup.js';
 import type { VelocitySeries } from '../core/velocity.js';
 import type { WorkloadReport } from '../core/workload.js';
+import type { SprintReview, DailyScrum } from '../core/scrum.js';
+import type { Timeline, TimelineBar, Span, Scale } from '../core/timeline.js';
+import type { Calendar } from '../core/calendar.js';
 
 /**
  * A report as a page.
@@ -669,4 +672,371 @@ export function workloadHtml(w: WorkloadReport, generatedAt: Date = new Date()):
   body.push(notesOf(w.notes));
   body.push(footer(`${totalPoints} open points.`));
   return page('kadence workload', BASE_STYLE + VIZ_STYLE, body);
+}
+
+/** The Sprint Review as a page: what a stakeholder reads instead of attending. */
+export function reviewHtml(r: SprintReview, generatedAt: Date = new Date()): string {
+  const body: string[] = [];
+  body.push(`<h1>Sprint Review — ${esc(r.sprint)}</h1>`);
+  body.push(
+    stamp(
+      [
+        r.goal === null ? 'No Sprint Goal was set.' : `Sprint Goal: ${r.goal}.`,
+        ...(r.productGoal === null ? [] : [`Product Goal: ${r.productGoal.text}.`]),
+        `Generated ${utcStamp(generatedAt)}.`,
+      ],
+      'kadence report review --html',
+    ),
+  );
+  body.push(
+    '<div class="tiles">',
+    tile('Finished', `${r.velocity} / ${r.committed}`, 'points done of points taken in'),
+    tile('Not done', String(r.notDone.length), 'task(s) carried or left', r.notDone.length > r.done.length),
+    ...(r.scopeAdded === null ? [] : [tile('Scope change', String(r.scopeAdded), 'points after the start')]),
+    '</div>',
+  );
+  const rows = (tasks: readonly { label: string; title: string; estimate: number | null; status?: string }[]): string[] =>
+    tasks.map(
+      (t) =>
+        `<tr><td>${esc(t.label)}</td><td>${esc(t.title)}</td><td>${esc(t.status ?? 'done')}</td>` +
+        `<td class="num">${t.estimate ?? ''}</td></tr>`,
+    );
+  const cols = [{ head: 'Task' }, { head: 'Title' }, { head: 'Status' }, { head: 'Points', num: true }];
+  body.push('<h2>Done</h2>', r.done.length === 0 ? '<p class="empty">Nothing finished.</p>' : table(cols, rows(r.done)));
+  if (r.notDone.length > 0) body.push('<h2>Not done</h2>', table(cols, rows(r.notDone)));
+  if (r.decisions.length > 0) {
+    body.push(
+      '<h2>Decided during the sprint</h2>',
+      table([{ head: 'Decision' }, { head: 'Title' }], r.decisions.map((d) => `<tr><td>${esc(d.label)}</td><td>${esc(d.title)}</td></tr>`)),
+    );
+  }
+  if (r.retro.length > 0) {
+    body.push(
+      '<h2>Retrospective</h2>',
+      table([{ head: 'Task' }, { head: 'Recorded' }], r.retro.map((n) => `<tr><td>${esc(n.task ?? '')}</td><td>${esc(n.text)}</td></tr>`)),
+    );
+  }
+  body.push(footer(`${r.done.length} done, ${r.notDone.length} not done.`));
+  return page('kadence review', BASE_STYLE + VIZ_STYLE, body);
+}
+
+/** The Daily Scrum as a page: the goal, then what moved and what is stuck. */
+export function dailyHtml(r: DailyScrum, generatedAt: Date = new Date()): string {
+  const body: string[] = [];
+  body.push(`<h1>Daily — ${esc(r.sprint)}</h1>`);
+  body.push(
+    stamp(
+      [
+        r.goal === null ? 'No Sprint Goal.' : `Sprint Goal: ${r.goal}.`,
+        `Changes in the last ${r.window.days} day(s).`,
+        `Generated ${utcStamp(generatedAt)}.`,
+      ],
+      'kadence report daily --html',
+    ),
+  );
+  body.push(
+    '<div class="tiles">',
+    tile('Done', `${r.done} / ${r.committed}`, 'points'),
+    tile('Days left', r.daysLeft === null ? '—' : String(r.daysLeft), 'to the end date'),
+    tile('Blocked', String(r.blocked.length), 'task(s)', r.blocked.length > 0),
+    '</div>',
+  );
+  body.push(
+    '<h2>Moved</h2>',
+    r.moved.length === 0
+      ? '<p class="empty">Nothing moved.</p>'
+      : table(
+          [{ head: 'Task' }, { head: 'From' }, { head: 'To' }, { head: 'By' }],
+          r.moved.map(
+            (m) =>
+              `<tr><td>${esc(m.label)} ${esc(m.title)}</td><td>${esc(m.from ?? '')}</td><td>${esc(m.to)}</td><td>${esc(m.by)}</td></tr>`,
+          ),
+        ),
+  );
+  if (r.blocked.length > 0) {
+    body.push(
+      '<h2>Blocked</h2>',
+      table([{ head: 'Task' }, { head: 'Title' }], r.blocked.map((t) => `<tr class="critical"><td>${esc(t.label)}</td><td>${esc(t.title)}</td></tr>`)),
+    );
+  }
+  body.push(footer(`${r.moved.length} move(s).`));
+  return page('kadence daily', BASE_STYLE + VIZ_STYLE, body);
+}
+
+/** Day number since the epoch for an ISO date: the x axis of a timeline. */
+function dayIndex(date: string): number {
+  return Math.round(Date.parse(`${date}T00:00:00Z`) / 86_400_000);
+}
+
+function isoOf(index: number): string {
+  return new Date(index * 86_400_000).toISOString().slice(0, 10);
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Where the axis gets a label: every day, every Monday, or every first of the month. */
+function ticks(from: number, to: number, scale: Scale): Array<{ at: number; text: string }> {
+  const out: Array<{ at: number; text: string }> = [];
+  const every = scale === 'day' && to - from > 21 ? 2 : 1;
+  for (let i = from; i <= to; i++) {
+    const d = new Date(i * 86_400_000);
+    const dom = d.getUTCDate();
+    const month = MONTHS[d.getUTCMonth()]!;
+    if (scale === 'day' && (i - from) % every === 0) out.push({ at: i, text: dom === 1 || i === from ? `${month} ${dom}` : String(dom) });
+    else if (scale === 'week' && d.getUTCDay() === 1) out.push({ at: i, text: `${month} ${dom}` });
+    else if (scale === 'month' && dom === 1) out.push({ at: i, text: d.getUTCMonth() === 0 || out.length === 0 ? `${month} ${d.getUTCFullYear()}` : month });
+  }
+  return out;
+}
+
+/**
+ * The timeline as a Gantt chart: one row per epic and per direct child, the
+ * plan as a bar and what happened as a thinner bar under it. Sprints are
+ * bands behind the rows, milestones a dashed line, today a red one. A row
+ * whose work runs outside its planned dates is outlined in the critical
+ * colour and the table under the chart says by how much — colour is never the
+ * only channel.
+ */
+export function timelineHtml(t: Timeline, generatedAt: Date = new Date()): string {
+  const body: string[] = [];
+  body.push('<h1>Timeline</h1>');
+  body.push(
+    stamp(
+      [
+        'What should be done when, by epic: the plan someone set, or the dates of the work under it, and what the journal says happened.',
+        'Nothing here is forecast.',
+        `As of ${t.asOf}. Generated ${utcStamp(generatedAt)}.`,
+      ],
+      'kadence report timeline --html',
+    ),
+  );
+
+  const undated =
+    t.undated === 0
+      ? ''
+      : `<p class="empty">${t.undated} task(s) have no dates and are not drawn. ` +
+        '<code>kadence task edit KAD-1 --start … --due …</code> or a sprint with dates puts one on the timeline.</p>';
+
+  if (t.window === null) {
+    body.push('<p class="empty">Nothing on the timeline yet: no task has a date, and none has started.</p>', undated);
+    body.push(footer('Nothing dated.'));
+    return page('kadence timeline', BASE_STYLE + VIZ_STYLE, body);
+  }
+
+  const rows: Array<{ bar: TimelineBar | null; depth: number }> = [];
+  for (const g of t.groups) {
+    rows.push({ bar: g.epic, depth: 0 });
+    for (const c of g.children) rows.push({ bar: c, depth: 1 });
+  }
+
+  // A day of margin either side, and today inside the window when it is close.
+  const from = dayIndex(t.window.from) - 1;
+  const to = Math.max(dayIndex(t.window.to) + 1, from + 7);
+  const LABEL = 300;
+  const CHART = 760;
+  const ROW = 28;
+  const TOP = 34;
+  const width = LABEL + CHART;
+  const height = TOP + rows.length * ROW + 8;
+  const x = (date: string, end = false): number =>
+    LABEL + ((dayIndex(date) + (end ? 1 : 0) - from) / (to - from + 1)) * CHART;
+
+  const svg: string[] = [];
+  svg.push(`<svg class="viz" viewBox="0 0 ${width} ${height}" role="img" aria-label="Timeline by epic">`);
+  for (const s of t.markers.sprints) {
+    svg.push(
+      `<rect x="${x(s.from).toFixed(1)}" y="${TOP - 4}" width="${(x(s.to, true) - x(s.from)).toFixed(1)}" height="${height - TOP}" fill="var(--grid)" opacity=".55"/>`,
+      `<text class="tick" x="${(x(s.from) + 3).toFixed(1)}" y="${TOP - 8}">${esc(s.name)}</text>`,
+    );
+  }
+  for (const tk of ticks(from, to, t.scale)) {
+    const at = x(isoOf(tk.at));
+    svg.push(
+      `<line class="grid" x1="${at.toFixed(1)}" x2="${at.toFixed(1)}" y1="${TOP - 4}" y2="${height}"/>`,
+      `<text class="tick" x="${(at + 2).toFixed(1)}" y="12">${esc(tk.text)}</text>`,
+    );
+  }
+  rows.forEach((r, i) => {
+    const y = TOP + i * ROW;
+    const label = r.bar === null ? 'No epic' : `${r.bar.label} ${r.bar.title}`;
+    const short = label.length > 40 ? `${label.slice(0, 39)}…` : label;
+    svg.push(
+      `<text x="${r.depth === 0 ? 4 : 22}" y="${y + 15}" font-size="12" fill="var(--fg)"${r.depth === 0 ? ' font-weight="600"' : ''}>${esc(short)}</text>`,
+    );
+    if (r.bar === null) return;
+    const color = r.depth === 0 ? 'var(--s7)' : 'var(--s1)';
+    if (r.bar.plan !== null) {
+      const outline = r.bar.mismatch === null ? '' : ' stroke="var(--critical)" stroke-width="2"';
+      svg.push(
+        `<rect x="${x(r.bar.plan.from).toFixed(1)}" y="${y + 4}" width="${Math.max(3, x(r.bar.plan.to, true) - x(r.bar.plan.from)).toFixed(1)}" height="12" rx="3" fill="${color}"${outline}><title>${esc(`${r.bar.label} plan ${r.bar.plan.from} → ${r.bar.plan.to}`)}</title></rect>`,
+      );
+    }
+    if (r.bar.actual !== null) {
+      svg.push(
+        `<rect x="${x(r.bar.actual.from).toFixed(1)}" y="${y + 18}" width="${Math.max(3, x(r.bar.actual.to, true) - x(r.bar.actual.from)).toFixed(1)}" height="5" rx="2" fill="var(--s3)"${r.bar.actual.open ? ' opacity=".65"' : ''}><title>${esc(`${r.bar.label} actual ${r.bar.actual.from} → ${r.bar.actual.open ? 'now' : r.bar.actual.to}`)}</title></rect>`,
+      );
+    }
+  });
+  for (const m of t.markers.milestones) {
+    const at = x(m.date, true);
+    svg.push(
+      `<line x1="${at.toFixed(1)}" x2="${at.toFixed(1)}" y1="${TOP - 4}" y2="${height}" stroke="var(--s4)" stroke-width="2" stroke-dasharray="4 3"><title>${esc(`${m.label} ${m.name} ${m.date}`)}</title></line>`,
+    );
+  }
+  if (dayIndex(t.asOf) >= from && dayIndex(t.asOf) <= to) {
+    const at = x(t.asOf);
+    svg.push(`<line class="reference" x1="${at.toFixed(1)}" x2="${at.toFixed(1)}" y1="${TOP - 4}" y2="${height}" stroke-dasharray="2 2"/>`);
+  }
+  svg.push('</svg>');
+
+  body.push(
+    legend([
+      { name: 'Epic plan', color: '--s7' },
+      { name: 'Plan', color: '--s1' },
+      { name: 'Actual', color: '--s3' },
+      { name: 'Milestone', color: '--s4' },
+      { name: 'Today', color: '--critical' },
+    ]),
+  );
+  body.push(
+    figure(
+      svg.join(''),
+      'A bar outlined in red has work under it that runs outside the dates set on it. The table below says where.',
+    ),
+  );
+
+  const spanCell = (s: Span | null): string => (s === null ? '' : s.from === s.to ? s.from : `${s.from} → ${s.to}`);
+  body.push(
+    table(
+      [{ head: 'Task' }, { head: 'Title' }, { head: 'Plan' }, { head: 'From' }, { head: 'Actual' }, { head: 'Note' }],
+      rows.map((r) =>
+        r.bar === null
+          ? '<tr><td colspan="6"><strong>No epic</strong></td></tr>'
+          : `<tr class="${r.bar.mismatch === null ? '' : 'critical'}"><td>${esc(r.bar.label)}</td>` +
+            `<td>${r.depth === 0 ? '<strong>' : ''}${esc(r.bar.title)}${r.depth === 0 ? '</strong>' : ''}</td>` +
+            `<td>${esc(spanCell(r.bar.plan))}</td><td>${esc(r.bar.planSource ?? '')}</td>` +
+            `<td>${esc(r.bar.actual === null ? '' : `${r.bar.actual.from} → ${r.bar.actual.open ? 'now' : r.bar.actual.to}`)}</td>` +
+            `<td>${esc(r.bar.mismatch ?? '')}</td></tr>`,
+      ),
+    ),
+  );
+  if (t.hiddenFinished > 0) {
+    body.push(
+      `<p class="empty">${t.hiddenFinished} finished task(s) with no plan and no epic are not shown. <code>kadence report timeline --all --html</code> includes them.</p>`,
+    );
+  }
+  body.push(undated);
+  body.push(footer(`${rows.length} row(s).`));
+  return page('kadence timeline', BASE_STYLE + VIZ_STYLE, body);
+}
+
+const CALENDAR_STYLE = `
+table.calendar { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: .8rem; }
+table.calendar th { color: var(--muted); font-weight: 500; text-align: left; padding: .25rem .35rem; }
+table.calendar td { vertical-align: top; padding: 0 .3rem; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+table.calendar tr.days td { border-top: 1px solid var(--line); padding-top: .25rem; height: 1.6rem; }
+table.calendar tr.items td { border-bottom: 1px solid var(--line); padding-bottom: .35rem; height: 1.4rem; }
+table.calendar td.out { background: var(--card); color: var(--muted); }
+table.calendar .num { font-weight: 600; }
+table.calendar td.today .num { color: var(--critical); }
+table.calendar .marker { display: block; color: var(--muted); font-size: .72rem; }
+table.calendar .marker.milestone { color: var(--s4); }
+table.calendar .item { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.calendar .item.done { color: var(--muted); text-decoration: line-through; }
+table.calendar td.bar { padding: 1px 0; }
+table.calendar .bar span { display: block; background: var(--s7); color: #fff; border-radius: 3px; padding: 0 .35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .75rem; line-height: 1.35rem; }
+table.calendar .bar span.actual { background: var(--s3); }
+table.calendar .bar span.cont-before { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+table.calendar .bar span.cont-after { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+`;
+
+/**
+ * One month as a grid, Monday first: per week a row of day numbers with the
+ * sprint and milestone markers, a row per lane of epic bars spanning their
+ * days, and a row of the work due. A table and colspans, not a script: the
+ * page opens from disk and does nothing after it has loaded.
+ */
+export function calendarHtml(c: Calendar, generatedAt: Date = new Date(), undated = 0): string {
+  const body: string[] = [];
+  body.push(`<h1>Calendar — ${esc(c.month)}</h1>`);
+  body.push(
+    stamp(
+      [
+        'Epics across the days of their plan (or of the work done, where there is no plan), every task due in the month, sprint and milestone dates.',
+        `Generated ${utcStamp(generatedAt)}.`,
+      ],
+      `kadence report calendar --month ${c.month} --html`,
+    ),
+  );
+  body.push(legend([{ name: 'Epic, planned', color: '--s7' }, { name: 'Epic, from what happened', color: '--s3' }, { name: 'Milestone', color: '--s4' }]));
+
+  const first = dayIndex(c.from);
+  const last = dayIndex(c.to);
+  // Monday on or before the first; Sunday on or after the last.
+  const weekday = (i: number): number => (new Date(i * 86_400_000).getUTCDay() + 6) % 7;
+  const gridStart = first - weekday(first);
+  const gridEnd = last + (6 - weekday(last));
+  const today = generatedAt.toISOString().slice(0, 10);
+
+  const rows: string[] = ['<tr>', ...['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => `<th>${d}</th>`), '</tr>'];
+  for (let week = gridStart; week <= gridEnd; week += 7) {
+    const dayCells: string[] = [];
+    const itemCells: string[] = [];
+    for (let i = week; i < week + 7; i++) {
+      const date = isoOf(i);
+      const out = i < first || i > last;
+      const cls = [out ? 'out' : '', date === today ? 'today' : ''].filter(Boolean).join(' ');
+      const markers = out
+        ? ''
+        : c.markers
+            .filter((m) => m.date === date)
+            .map((m) => `<span class="marker${m.kind === 'milestone' ? ' milestone' : ''}">${m.kind === 'milestone' ? '◆ ' : ''}${esc(m.name)}${m.kind === 'sprint_start' ? ' starts' : m.kind === 'sprint_end' ? ' ends' : ''}</span>`)
+            .join('');
+      dayCells.push(`<td class="${cls}"><span class="num">${new Date(i * 86_400_000).getUTCDate()}</span>${markers}</td>`);
+      const due = out
+        ? ''
+        : c.items
+            .filter((x) => x.date === date)
+            .map((x) => `<span class="item${x.status === 'done' ? ' done' : ''}" title="${esc(`${x.label} ${x.title}`)}">${esc(x.label)} ${esc(x.title)}</span>`)
+            .join('');
+      itemCells.push(`<td class="${out ? 'out' : ''}">${due}</td>`);
+    }
+    rows.push(`<tr class="days">${dayCells.join('')}</tr>`);
+
+    for (let lane = 0; lane < c.lanes; lane++) {
+      const segments = c.bars
+        .filter((b) => b.lane === lane && dayIndex(b.to) >= week && dayIndex(b.from) <= week + 6)
+        .sort((a, b) => (a.from < b.from ? -1 : 1));
+      if (segments.length === 0) continue;
+      const cells: string[] = [];
+      let cursor = week;
+      for (const b of segments) {
+        const start = Math.max(dayIndex(b.from), week);
+        const end = Math.min(dayIndex(b.to), week + 6);
+        if (start > cursor) cells.push(`<td colspan="${start - cursor}"></td>`);
+        const before = b.continuesBefore || start > dayIndex(b.from);
+        const after = b.continuesAfter || end < dayIndex(b.to);
+        const cls = [b.source === 'actual' ? 'actual' : '', before ? 'cont-before' : '', after ? 'cont-after' : ''].filter(Boolean).join(' ');
+        cells.push(
+          `<td class="bar" colspan="${end - start + 1}"><span class="${cls}" title="${esc(`${b.label} ${b.title} ${b.from} → ${b.to}`)}">${before ? '… ' : ''}${esc(b.label)} ${esc(b.title)}</span></td>`,
+        );
+        cursor = end + 1;
+      }
+      if (cursor <= week + 6) cells.push(`<td colspan="${week + 7 - cursor}"></td>`);
+      rows.push(`<tr class="lane">${cells.join('')}</tr>`);
+    }
+    rows.push(`<tr class="items">${itemCells.join('')}</tr>`);
+  }
+  body.push(`<div class="rows"><table class="calendar">${rows.join('')}</table></div>`);
+
+  if (c.bars.length === 0 && c.items.length === 0 && c.markers.length === 0) {
+    body.push(`<p class="empty">Nothing dated in ${esc(c.month)}.</p>`);
+  }
+  if (undated > 0) {
+    body.push(
+      `<p class="empty">${undated} task(s) have no dates and appear in no month. <code>kadence task edit KAD-1 --start … --due …</code> puts one here.</p>`,
+    );
+  }
+  body.push(footer(`${c.bars.length} epic(s), ${c.items.length} due.`));
+  return page(`kadence calendar ${c.month}`, BASE_STYLE + VIZ_STYLE + CALENDAR_STYLE, body);
 }

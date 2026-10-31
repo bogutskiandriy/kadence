@@ -1,5 +1,9 @@
 import { resolveContext, isContext, loadState, failure, type CommandResult } from './task.js';
-import { burndownFor, reportSprint } from './sprint.js';
+import { burndownFor, reportSprint, activeSprint, findSprintByName } from './sprint.js';
+import { sprintReview, dailyScrum, type SprintReview, type DailyScrum } from '../../core/scrum.js';
+import { timeline, SCALES, type Scale, type Timeline, type TimelineBar } from '../../core/timeline.js';
+import { calendar, isMonth, type Calendar } from '../../core/calendar.js';
+import type { ProjectState, Sprint } from '../../core/projection.js';
 import { burnup, renderBurnup } from '../../core/burnup.js';
 import { readAll } from '../../core/store.js';
 import { renderBurndown } from '../../core/burndown.js';
@@ -7,7 +11,7 @@ import { velocitySeries, type VelocitySeries } from '../../core/velocity.js';
 import { workloadReport, type WorkloadReport } from '../../core/workload.js';
 import { flowReport, timeInStatus, renderTimeInStatus, cfdReport, type FlowReport, type CfdReport, type Percentiles } from '../../core/flow.js';
 import { attentionReport, describeSignal, type AttentionReport } from '../../core/attention.js';
-import { flowHtml, cfdHtml, attentionHtml, burndownHtml, burnupHtml, timeInStatusHtml, velocityHtml, workloadHtml } from '../../export/report-html.js';
+import { flowHtml, cfdHtml, attentionHtml, burndownHtml, burnupHtml, timeInStatusHtml, velocityHtml, workloadHtml, reviewHtml, dailyHtml, timelineHtml, calendarHtml } from '../../export/report-html.js';
 import { writeExport } from '../write-export.js';
 
 /**
@@ -19,7 +23,7 @@ import { writeExport } from '../write-export.js';
  * started boundary it used, so a number is never quoted without its terms.
  */
 
-export const REPORTS = ['flow', 'cfd', 'attention', 'burndown', 'velocity', 'workload', 'burnup'] as const;
+export const REPORTS = ['flow', 'cfd', 'attention', 'burndown', 'velocity', 'workload', 'burnup', 'review', 'daily', 'timeline', 'calendar'] as const;
 export type ReportName = (typeof REPORTS)[number];
 
 /**
@@ -38,6 +42,10 @@ export const CATALOGUE: ReadonlyArray<{ name: ReportName; answers: string }> = [
   { name: 'velocity', answers: 'Committed against completed, sprint by sprint, as a range.' },
   { name: 'workload', answers: 'Who is carrying what right now, unassigned work included.' },
   { name: 'burnup', answers: 'Whether a sprint missed its goal or its goal grew: scope and done, day by day.' },
+  { name: 'review', answers: 'Sprint Review: the sprint against its goal — done, not done, scope, decisions, retro.' },
+  { name: 'daily', answers: 'Daily Scrum: progress toward the Sprint Goal, what moved since yesterday, what is blocked.' },
+  { name: 'timeline', answers: 'What should be done when, by epic: the plan, what happened, and where the two disagree.' },
+  { name: 'calendar', answers: 'One month by day: epics across the days they span, due dates, sprint and milestone dates.' },
 ];
 
 /**
@@ -47,8 +55,8 @@ export const CATALOGUE: ReadonlyArray<{ name: ReportName; answers: string }> = [
  * them. The `--json` catalogue keeps `REPORTS` order — agents depend on it.
  */
 const LIST_ORDER: { team: ReportName[]; sprint: ReportName[] } = {
-  team: ['attention', 'flow', 'cfd'],
-  sprint: ['burndown', 'burnup', 'velocity', 'workload'],
+  team: ['attention', 'flow', 'cfd', 'timeline', 'calendar'],
+  sprint: ['daily', 'review', 'burndown', 'burnup', 'velocity', 'workload'],
 };
 
 function listLine(name: ReportName): string {
@@ -56,8 +64,11 @@ function listLine(name: ReportName): string {
   return `  ${entry.name.padEnd(10)} ${entry.answers}`;
 }
 
-/** The three the window means something for. */
-const WINDOWED: ReadonlyArray<string> = ['flow', 'cfd', 'attention'];
+/** The ones the window means something for. */
+const WINDOWED: ReadonlyArray<string> = ['flow', 'cfd', 'attention', 'daily'];
+
+/** The Daily Scrum looks back one day; `--since 3` covers a weekend. */
+const DEFAULT_DAILY_DAYS = 1;
 
 export interface ReportOptions {
   /** `30d`, `14`, `90d` — calendar days ending today. */
@@ -73,6 +84,12 @@ export interface ReportOptions {
   html?: boolean;
   /** Where to write it; `kadence-<report>.html` next to the repository root by default. */
   file?: string;
+  /** `timeline`: day, week or month; picked from the span when absent. */
+  scale?: string;
+  /** `calendar`: YYYY-MM; the current month when absent. */
+  month?: string;
+  /** `timeline`: keep finished work with no plan and no epic. */
+  all?: boolean;
 }
 
 const DEFAULT_WINDOW_DAYS = 30;
@@ -242,6 +259,154 @@ export function renderWorkload(w: WorkloadReport): string {
   return lines.join('\n');
 }
 
+/**
+ * The sprint a review is about: the one named, else the active one, else the
+ * one that closed last — a review is held at the end of the sprint, and as
+ * often read just after the close as just before it.
+ */
+function reviewSprint(state: ProjectState, name: string | undefined): Sprint | CommandResult {
+  if (name !== undefined) {
+    return findSprintByName(state, name) ?? reportSprint(state, name);
+  }
+  const closed = state.sprints
+    .filter((s) => s.status === 'closed')
+    .sort((a, b) => ((a.closedBy ?? '') < (b.closedBy ?? '') ? -1 : 1));
+  return activeSprint(state) ?? closed[closed.length - 1] ?? reportSprint(state, undefined);
+}
+
+function taskLine(t: { label: string; title: string; estimate: number | null }): string {
+  return `    ${t.label}  ${t.title}${t.estimate === null ? '' : `  (${t.estimate})`}`;
+}
+
+export function renderReview(r: SprintReview): string {
+  const lines = [`Sprint Review — "${r.sprint}" (${r.status})`];
+  lines.push(r.goal === null ? '  No Sprint Goal was set.' : `  Goal: ${r.goal}`);
+  if (r.productGoal !== null) lines.push(`  Product Goal: ${r.productGoal.label} ${r.productGoal.text}`);
+  lines.push('', `  Finished ${r.velocity} of ${r.committed} points.`);
+  if (r.scopeAdded !== null && r.scopeAdded !== 0) {
+    lines.push(`  Scope ${r.scopeAdded > 0 ? 'grew' : 'shrank'} by ${Math.abs(r.scopeAdded)} point(s) after the start.`);
+  }
+  lines.push('', `  Done (${r.done.length}):`, ...r.done.map(taskLine));
+  if (r.notDone.length > 0) {
+    lines.push('', `  Not done (${r.notDone.length}):`, ...r.notDone.map((t) => `${taskLine(t)} [${t.status}]`));
+  }
+  if (r.cancelled.length > 0) lines.push('', `  Cancelled (${r.cancelled.length}):`, ...r.cancelled.map(taskLine));
+  if (r.decisions.length > 0) {
+    lines.push('', '  Decided during the sprint:', ...r.decisions.map((d) => `    ${d.label}  ${d.title}`));
+  }
+  if (r.retro.length > 0) {
+    lines.push('', '  Retrospective:', ...r.retro.map((n) => `    · ${n.task === null ? '' : `${n.task} `}${n.text}`));
+  }
+  return lines.join('\n');
+}
+
+export function renderDaily(r: DailyScrum): string {
+  const lines = [
+    `Daily — "${r.sprint}"${r.daysLeft === null ? '' : `, ${r.daysLeft} day(s) left`}`,
+    r.goal === null ? '  No Sprint Goal: progress toward what?' : `  Goal: ${r.goal}`,
+    `  ${r.done} of ${r.committed} points done.`,
+    '',
+    `  Moved in the last ${r.window.days} day(s) (${r.moved.length}):`,
+    ...(r.moved.length === 0
+      ? ['    nothing']
+      : r.moved.map((m) => `    ${m.label}  ${m.from ?? '?'} → ${m.to}  ${m.title}  (${m.by})`)),
+    '',
+    `  In progress (${r.inProgress.length}):`,
+    ...r.inProgress.map((t) => `    ${t.label}  ${t.title}${t.claimedBy === null ? '  — nobody holds it' : `  (${t.claimedBy})`}`),
+  ];
+  if (r.blocked.length > 0) lines.push('', `  Blocked (${r.blocked.length}):`, ...r.blocked.map((t) => `    ${t.label}  ${t.title}`));
+  return lines.join('\n');
+}
+
+function spanText(s: { from: string; to: string } | null): string {
+  if (s === null) return '—';
+  return s.from === s.to ? s.from : `${s.from} → ${s.to}`;
+}
+
+/** The hint every view of undated work ends with: how a date gets there. */
+export const UNDATED_HINT =
+  '  kadence task edit KAD-1 --start 2026-12-01 --due 2026-12-20\n  kadence sprint add KAD-1   (a sprint with --start and --end)';
+
+export function renderTimeline(t: Timeline): string {
+  const row = (b: TimelineBar, indent: string): string[] => {
+    const fact = b.actual === null ? '—' : `${b.actual.from} → ${b.actual.open ? 'now' : b.actual.to}`;
+    // Cut to the column, so a long title cannot push the dates out of line.
+    const width = 44 - indent.length;
+    const full = `${b.label} ${b.title}`;
+    const head = indent + ([...full].length > width ? `${[...full].slice(0, width - 1).join('')}…` : full);
+    return [
+      `${head.padEnd(44)} plan ${spanText(b.plan).padEnd(25)} actual ${fact}`,
+      ...(b.mismatch === null ? [] : [`${indent}  ! ${b.mismatch}`]),
+    ];
+  };
+
+  const lines: string[] = [];
+  if (t.window === null) {
+    lines.push('Nothing on the timeline yet: no task has a date, and none has started.');
+  } else {
+    lines.push(`Timeline, ${spanText(t.window)} (scale: ${t.scale}). As of ${t.asOf}.`, '');
+    for (const g of t.groups) {
+      if (g.epic === null) lines.push('No epic');
+      else lines.push(...row(g.epic, ''));
+      for (const c of g.children) lines.push(...row(c, '    '));
+    }
+    if (t.markers.sprints.length > 0) {
+      lines.push('', `Sprints:     ${t.markers.sprints.map((s) => `${s.name} ${spanText(s)}`).join(' · ')}`);
+    }
+    if (t.markers.milestones.length > 0) {
+      lines.push(`Milestones:  ${t.markers.milestones.map((m) => `${m.label} ${m.name} ${m.date}`).join(' · ')}`);
+    }
+  }
+  if (t.hiddenFinished > 0) {
+    lines.push('', `${t.hiddenFinished} finished task(s) with no plan and no epic are not shown; --all shows them.`);
+  }
+  if (t.undated > 0) {
+    lines.push('', `${t.undated} task(s) have no dates and are not drawn. A date puts one on it:`, UNDATED_HINT);
+  }
+  return lines.join('\n');
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+export function renderCalendar(c: Calendar): string {
+  const days = new Map<string, string[]>();
+  const at = (date: string, text: string): void => {
+    const list = days.get(date) ?? [];
+    list.push(text);
+    days.set(date, list);
+  };
+  for (const b of c.bars) {
+    if (b.from === b.to && !b.continuesBefore && !b.continuesAfter) {
+      at(b.from, `■ ${b.label} ${b.title} (one day)`);
+      continue;
+    }
+    if (!b.continuesBefore) at(b.from, `▶ ${b.label} ${b.title} starts`);
+    if (!b.continuesAfter) at(b.to, `■ ${b.label} ${b.title} ends`);
+  }
+  for (const i of c.items) at(i.date, `${i.label} ${i.title} due${i.status === 'done' ? ' (done)' : ''}`);
+  for (const m of c.markers) {
+    at(m.date, m.kind === 'milestone' ? `◆ ${m.name}` : `${m.name} ${m.kind === 'sprint_start' ? 'starts' : 'ends'}`);
+  }
+
+  if (c.bars.length === 0 && days.size === 0) {
+    return `Nothing dated in ${c.month}.\n  kadence report timeline   every month at once`;
+  }
+  const lines = [`Calendar, ${c.month}.`];
+  const running = c.bars.filter((b) => b.continuesBefore || b.continuesAfter);
+  if (running.length > 0) {
+    lines.push('', 'Running across the month edge:');
+    for (const b of running) {
+      lines.push(`  ${b.label} ${b.title}  ${b.continuesBefore ? '…' : ''}${b.from} → ${b.to}${b.continuesAfter ? '…' : ''}`);
+    }
+  }
+  lines.push('');
+  for (const date of [...days.keys()].sort()) {
+    const weekday = WEEKDAYS[new Date(`${date}T00:00:00Z`).getUTCDay()]!;
+    lines.push(`  ${weekday} ${date}   ${days.get(date)!.join(' · ')}`);
+  }
+  return lines.join('\n');
+}
+
 export function runReport(
   cwd: string,
   env: NodeJS.ProcessEnv,
@@ -294,14 +459,49 @@ export function runReport(
       hint: 'kadence report flow --by-status',
     });
   }
-  if (options.sprint !== undefined && name !== 'burndown' && name !== 'burnup') {
-    return failure(2, 'invalid_argument', `--sprint applies to burndown and burnup, not to ${name}.`, {
+  if (options.sprint !== undefined && name !== 'burndown' && name !== 'burnup' && name !== 'review') {
+    return failure(2, 'invalid_argument', `--sprint applies to burndown, burnup and review, not to ${name}.`, {
       received: options.sprint,
       hint: 'kadence report burndown --sprint "Sprint 3"',
     });
   }
 
-  const since = parseSince(options.since, name === 'attention' ? DEFAULT_IDLE_DAYS : DEFAULT_WINDOW_DAYS);
+  if (options.scale !== undefined && name !== 'timeline') {
+    return failure(2, 'invalid_argument', `--scale applies to timeline, not to ${name}.`, {
+      received: options.scale,
+      hint: 'kadence report timeline --scale week',
+    });
+  }
+  if (options.scale !== undefined && !(SCALES as readonly string[]).includes(options.scale)) {
+    return failure(2, 'invalid_argument', `--scale is one of ${SCALES.join(', ')}, got "${options.scale}".`, {
+      received: options.scale,
+      allowed: SCALES,
+      hint: 'kadence report timeline --scale week',
+    });
+  }
+
+  if (options.all === true && name !== 'timeline') {
+    return failure(2, 'invalid_argument', `--all applies to timeline, not to ${name}.`, {
+      hint: 'kadence report timeline --all',
+    });
+  }
+  if (options.month !== undefined && name !== 'calendar') {
+    return failure(2, 'invalid_argument', `--month applies to calendar, not to ${name}.`, {
+      received: options.month,
+      hint: 'kadence report calendar --month 2026-12',
+    });
+  }
+  if (options.month !== undefined && !isMonth(options.month)) {
+    return failure(2, 'invalid_argument', `--month is YYYY-MM, got "${options.month}".`, {
+      received: options.month,
+      hint: 'kadence report calendar --month 2026-12',
+    });
+  }
+
+  const since = parseSince(
+    options.since,
+    name === 'attention' ? DEFAULT_IDLE_DAYS : name === 'daily' ? DEFAULT_DAILY_DAYS : DEFAULT_WINDOW_DAYS,
+  );
   if (typeof since !== 'number') return since;
 
   const ctx = resolveContext(cwd, env);
@@ -358,6 +558,27 @@ export function runReport(
       };
     }
     rendered = { data: { burnup: chart }, message: renderBurnup(chart), html: () => burnupHtml(chart, today) };
+  } else if (name === 'review') {
+    const sprint = reviewSprint(state, options.sprint);
+    if ('exitCode' in sprint) return sprint;
+    const r = sprintReview(state, readAll(ctx.root).events, sprint);
+    rendered = { data: { review: r }, message: renderReview(r), html: () => reviewHtml(r, today) };
+  } else if (name === 'daily') {
+    const sprint = reportSprint(state, undefined);
+    if ('exitCode' in sprint) return sprint;
+    const r = dailyScrum(state, sprint, today, since);
+    rendered = { data: { daily: r }, message: renderDaily(r), html: () => dailyHtml(r, today) };
+  } else if (name === 'timeline') {
+    const r = timeline(state, today, {
+      ...(options.scale === undefined ? {} : { scale: options.scale as Scale }),
+      ...(options.all === true ? { all: true } : {}),
+    });
+    rendered = { data: { timeline: r }, message: renderTimeline(r), html: () => timelineHtml(r, today) };
+  } else if (name === 'calendar') {
+    const month = options.month ?? today.toISOString().slice(0, 7);
+    const t = timeline(state, today);
+    const r = calendar(state, t, month);
+    rendered = { data: { calendar: r }, message: renderCalendar(r), html: () => calendarHtml(r, today, t.undated) };
   } else if (name === 'velocity') {
     const r = velocitySeries(state);
     rendered = { data: r, message: renderVelocity(r), html: () => velocityHtml(r, today) };

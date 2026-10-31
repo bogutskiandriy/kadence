@@ -4,6 +4,7 @@ import { attentionReport, describeSignal } from '../../core/attention.js';
 import { staleDocuments } from '../../core/staleness.js';
 import type { ProjectState, Task } from '../../core/projection.js';
 import { looseEventCount } from '../../core/store.js';
+import { currentGoal } from './goal.js';
 
 /** A note's task as the label a reader sees everywhere else, never a ULID. */
 function labelOf(state: ProjectState, id: string | null): string | null {
@@ -250,11 +251,19 @@ export function runPrime(
   const documentation = allDocumentation.slice(0, DOC_LIMIT);
 
   const lines: string[] = [];
+  // Above the sprint: the sprint exists for the goal. Absent when there is
+  // none, for the same reason the sprint line is (T110).
+  const productGoal = currentGoal(state);
+  if (productGoal !== undefined) lines.push(`Product Goal: ${short(productGoal.text)}`);
   // Only when there is one. Sprints are optional, and "No active sprint." at the
   // top of every session tells a team that never uses them that it is doing
   // something wrong (T110).
   if (sprint !== undefined) {
-    lines.push(`Sprint: ${sprint.name}${left === null ? '' : `, ${left} day(s) left`}`, '');
+    lines.push(`Sprint: ${sprint.name}${left === null ? '' : `, ${left} day(s) left`}`);
+    if (sprint.goal !== null) lines.push(`  Goal: ${short(sprint.goal)}`);
+    lines.push('');
+  } else if (productGoal !== undefined) {
+    lines.push('');
   }
 
   // The count is the real one, not the shown one: "Yours (5)" while seven are
@@ -334,7 +343,9 @@ export function runPrime(
       sprint:
         sprint === undefined
           ? null
-          : { name: capped(sprint.name), endDate: sprint.endDate, daysLeft: left },
+          : { name: capped(sprint.name), endDate: sprint.endDate, daysLeft: left, goal: sprint.goal === null ? null : capped(sprint.goal) },
+      productGoal:
+        productGoal === undefined ? null : { label: productGoal.label, text: capped(productGoal.text) },
       // Full text in the payload: truncation is a display concern, and an agent
       // that gets an ellipsis has no way to ask for the rest.
       // `claimedBy` and `contestedBy` so an agent can tell a task it holds from

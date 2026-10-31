@@ -54,7 +54,7 @@ describe('kadence --help', () => {
     // registration order put `milestone` first, which nobody reaches for first.
     const ORDER = [
       'init', 'prime', 'ready', 'task', 'decision', 'note', 'doc', 'board', 'ui', 'schema',
-      'sprint', 'milestone', 'template',
+      'goal', 'sprint', 'milestone', 'template',
       'report', 'stats',
       'compact', 'completion',
     ];

@@ -59,6 +59,9 @@ import {
   runSprintEdit,
   runSprintBurndown,
 } from './commands/sprint.js';
+import { runSprintRetro } from './commands/sprint.js';
+import { runGoalSet, runGoalShow, runGoalClose } from './commands/goal.js';
+import { runTaskRank } from './commands/task.js';
 import {
   runTemplateSave,
   runTemplateList,
@@ -218,11 +221,12 @@ function rawFlag(name: string, argv: readonly string[] = process.argv): string |
  */
 const TASK_ACTIONS = [
   'add', 'list', 'show', 'edit', 'move', 'assign', 'comment', 'log',
-  'parent', 'block', 'unblock', 'claim', 'release', 'ac', 'doc', 'cancel', 'delete',
+  'parent', 'block', 'unblock', 'claim', 'release', 'ac', 'doc', 'cancel', 'delete', 'rank',
 ] as const;
 const SPRINT_ACTIONS = [
-  'create', 'add', 'edit', 'start', 'close', 'status', 'list', 'burndown',
+  'create', 'add', 'edit', 'start', 'close', 'status', 'list', 'burndown', 'retro',
 ] as const;
+const GOAL_ACTIONS = ['set', 'show', 'done', 'abandon'] as const;
 const TEMPLATE_ACTIONS = ['save', 'list', 'delete'] as const;
 const MILESTONE_ACTIONS = ['create', 'add', 'list', 'close'] as const;
 const DECISION_ACTIONS = ['add', 'list', 'show'] as const;
@@ -765,9 +769,12 @@ cli
 cli
   .command('report [name]', `Reports folded from the journal: ${REPORTS.join(' | ')}`)
   .option('--list', 'Name every report and what each one answers')
-  .option('--since <days>', 'flow, cfd, attention: window ending today, in calendar days (default 30d)')
-  .option('--sprint <name>', 'burndown, burnup: a sprint by name, rather than the active one')
+  .option('--since <days>', 'flow, cfd, attention, daily: window ending today, in calendar days (default 30d; daily 1d)')
+  .option('--sprint <name>', 'burndown, burnup, review: a sprint by name, rather than the active one')
   .option('--by-status', 'flow: time in each status and flow efficiency, instead of the usual report')
+  .option('--scale <unit>', 'timeline: day | week | month (picked from the span by default)')
+  .option('--month <yyyy-mm>', 'calendar: which month (the current one by default)')
+  .option('--all', 'timeline: also finished work with no plan and no epic, hidden by default')
   .option('--html', 'Write one self-contained page instead of printing; charts included, no network')
   .option('--file <path>', 'html: where to write it (default kadence-<report>.html)')
   .option('--json', 'Machine-readable output for agents')
@@ -779,6 +786,10 @@ cli
   .example('  kadence report burndown             the active sprint against an even burn')
   .example('  kadence report velocity             committed against finished, sprint by sprint')
   .example('  kadence report workload             who is carrying what right now')
+  .example('  kadence report daily                Daily Scrum: toward the Sprint Goal since yesterday')
+  .example('  kadence report review               Sprint Review: the sprint against its goal')
+  .example('  kadence report timeline --html      epics as bars: the plan, what happened')
+  .example('  kadence report calendar --month 2026-12 --html')
   .example('  kadence report flow --html          the same numbers as a page, with charts')
   .example('  kadence report cfd --html --file docs/cfd.html')
   .example('  kadence report flow --by-status     where the time went, column by column')
@@ -793,6 +804,9 @@ cli
         list?: boolean;
         sprint?: string;
         byStatus?: boolean;
+        scale?: string;
+        month?: string | number;
+        all?: boolean;
       },
     ) => {
       emit(
@@ -803,6 +817,9 @@ cli
           ...(options.list === true ? { list: true } : {}),
           ...(options.sprint === undefined ? {} : { sprint: String(options.sprint) }),
           ...(options.byStatus === true ? { byStatus: true } : {}),
+          ...(options.scale === undefined ? {} : { scale: String(options.scale) }),
+          ...(options.all === true ? { all: true } : {}),
+          ...(options.month === undefined ? {} : { month: rawFlag('month') ?? String(options.month) }),
           ...(options.html === true ? { html: true } : {}),
           ...(options.file === undefined ? {} : { file: String(options.file) }),
           json: options.json === true,
@@ -929,6 +946,7 @@ cli
   .option('--add-label <name>', 'Add one label, leaving the rest; repeat for several')
   .option('--remove-label <name>', 'Remove one label, leaving the rest; repeat for several')
   .option('--estimate <points>', 'Estimate in points, a positive number')
+  .option('--start <date>', 'Planned start, YYYY-MM-DD; empty string clears it. The timeline plans from it')
   .option('--due <date>', 'Due date, YYYY-MM-DD; empty string clears it')
   .option('--status <status>', `Filter by status: ${TASK_STATUSES.join(' | ')}`)
   .option('--search <text>', 'Words in title, description, criteria and comments, matched as kadence search matches them; most relevant first unless --sort')
@@ -944,6 +962,10 @@ cli
   .option('--template <name>', 'Pre-fill fields from a saved template')
   .option('--no-dod', 'Skip the board\'s definition of done for this task')
   .option('--ac <text>', 'add: an acceptance criterion; repeat for more')
+  .option('--top', 'rank: first in the Product Backlog')
+  .option('--bottom', 'rank: last of the ordered tasks, still before any unordered one')
+  .option('--before <task>', 'rank: just before this task')
+  .option('--after <task>', 'rank: just after this task')
   .option('--fields <list>', 'JSON only: comma-separated task fields to return')
   .option('--limit <n>', 'list: at most this many; 0 for all of them')
   .option('--offset <n>', 'list: start the page here; use with --limit')
@@ -967,6 +989,8 @@ cli
   .example('  kadence task ac list KAD-1')
   .example('  kadence task doc add KAD-1 docs/design.md   create it and link it')
   .example('  kadence task parent KAD-2 KAD-1')
+  .example('  kadence task rank KAD-7 --top              order the backlog; ready follows it')
+  .example('  kadence task rank KAD-7 --before KAD-3')
   .example('  kadence task block KAD-2 KAD-1               KAD-2 waits for KAD-1')
   .example('  kadence task unblock KAD-2 KAD-1')
   .example('  kadence task log KAD-1 2h                     also 90m, or -30m to correct')
@@ -974,6 +998,7 @@ cli
   .example('  kadence task show KAD-1')
   .example('  kadence task move KAD-1 done')
   .example('  kadence task edit KAD-1 --priority urgent --due 2026-09-30')
+  .example('  kadence task edit KAD-1 --start 2026-12-01 --due 2026-12-20   plan an epic on the timeline')
   .example('  kadence task edit KAD-1                      opens $EDITOR for the description')
   .example('  kadence task comment KAD-1 "Needs review"')
   .example('  kadence task assign KAD-1 dev@example.com     (use "none" to unassign)')
@@ -996,7 +1021,12 @@ cli
         addLabel?: string | string[];
         removeLabel?: string | string[];
         ac?: string | string[];
+        top?: boolean;
+        bottom?: boolean;
+        before?: string;
+        after?: string;
         estimate?: string;
+        start?: string;
         due?: string;
         status?: string;
         search?: string;
@@ -1078,6 +1108,7 @@ cli
               ...(options.priority !== undefined ? { priority: options.priority } : {}),
               ...(options.assignee !== undefined ? { assignee: options.assignee } : {}),
               ...(labels !== undefined ? { labels } : {}),
+              ...(options.start !== undefined ? { start: rawFlag('start') ?? String(options.start) } : {}),
               ...(options.due !== undefined ? { due: options.due } : {}),
               ...(options.parent !== undefined ? { parent: options.parent } : {}),
               ...(estimate !== undefined ? { estimate } : {}),
@@ -1120,6 +1151,20 @@ cli
             );
           }
           emit(runTaskLog(cwd, process.env, arg, value), json);
+          break;
+        case 'rank':
+          if (arg === undefined) {
+            emit(usage('Which task?\n  kadence task rank KAD-1 --top'), json);
+          }
+          emit(
+            runTaskRank(cwd, process.env, arg, {
+              ...(options.top === true ? { top: true } : {}),
+              ...(options.bottom === true ? { bottom: true } : {}),
+              ...(options.before === undefined ? {} : { before: String(options.before) }),
+              ...(options.after === undefined ? {} : { after: String(options.after) }),
+            }),
+            json,
+          );
           break;
         case 'parent':
           if (arg === undefined || value === undefined) {
@@ -1245,6 +1290,7 @@ cli
             options.description !== undefined ||
             options.type !== undefined ||
             options.priority !== undefined ||
+            options.start !== undefined ||
             options.due !== undefined ||
             estimate !== undefined ||
             labels !== undefined ||
@@ -1278,6 +1324,7 @@ cli
               ...(description !== undefined ? { description } : {}),
               ...(options.type !== undefined ? { type: options.type } : {}),
               ...(options.priority !== undefined ? { priority: options.priority } : {}),
+              ...(options.start !== undefined ? { start: rawFlag('start') ?? String(options.start) } : {}),
               ...(options.due !== undefined ? { due: options.due } : {}),
               ...(estimate !== undefined ? { estimate } : {}),
               ...(labels !== undefined ? { labels } : {}),
@@ -1465,13 +1512,17 @@ cli
   });
 
 cli
-  .command('sprint [action] [name]', 'Sprints: create | add | edit | start | close | status | list | burndown')
-  .option('--sprint <name>', 'Which sprint to add to; defaults to the active one')
+  .command('sprint [action] [name]', 'Sprints: create | add | edit | start | close | status | list | burndown | retro')
+  .option('--sprint <name>', 'Which sprint to add to, or whose retro; defaults to the active one')
+  .option('--goal <text>', 'The Sprint Goal (for create and edit)')
+  .option('--carry-to <name>', 'close: move unfinished work into this sprint; "next" for the oldest planned')
+  .option('--action', 'retro: make it a task, labelled retro, in the next planned sprint')
   .option('--name <name>', 'New name (for edit)')
   .option('-d, --description <text>', 'Sprint description (for edit)')
   .option('--start <date>', 'Start date, YYYY-MM-DD')
   .option('--end <date>', 'End date, YYYY-MM-DD')
   .option('--json', 'Machine-readable output for agents')
+  .example('  kadence sprint create "Sprint 1" --goal "Sign-in works end to end"')
   .example('  kadence sprint create "Sprint 1"    first one starts right away')
   .example('  kadence sprint create "Sprint 2"    later ones are planned')
   .example('  kadence sprint add KAD-1 --sprint "Sprint 2"')
@@ -1480,6 +1531,10 @@ cli
   .example('  kadence sprint edit "Sprint 2" --name "Sprint 2: auth"')
   .example('  kadence sprint burndown            chart from the journal, any day')
   .example('  kadence sprint close                closes the active one, reports velocity')
+  .example('  kadence sprint close --carry-to next   unfinished work moves on')
+  .example('  kadence sprint retro "Reviews waited two days"')
+  .example('  kadence sprint retro "Pair on reviews" --action   a task in the next sprint')
+  .example('  kadence sprint retro                 what the retrospective recorded')
   .action(
     (
       action: string | undefined,
@@ -1490,6 +1545,9 @@ cli
         description?: string;
         start?: string;
         end?: string;
+        goal?: string;
+        carryTo?: string;
+        action?: boolean;
         json?: boolean;
       },
     ) => {
@@ -1506,18 +1564,21 @@ cli
               '  kadence sprint start\n' +
               '  kadence sprint close\n' +
               '  kadence sprint status\n' +
-              '  kadence sprint list',
+              '  kadence sprint list\n' +
+              '  kadence sprint retro',
           ),
           json,
         );
       }
+      // cac coerces a value that looks like a number; a goal is words.
+      const goal = options.goal === undefined ? undefined : (rawFlag('goal') ?? String(options.goal));
 
       switch (action) {
         case 'create':
           if (name === undefined) {
             emit(usage('A sprint name is required:\n  kadence sprint create "Sprint 1"'), json);
           }
-          emit(runSprintCreate(cwd, process.env, name), json);
+          emit(runSprintCreate(cwd, process.env, name, goal === undefined ? {} : { goal }), json);
           break;
         case 'add':
           if (name === undefined) {
@@ -1547,6 +1608,7 @@ cli
               ...(options.description !== undefined ? { description: options.description } : {}),
               ...(options.start !== undefined ? { startDate: options.start } : {}),
               ...(options.end !== undefined ? { endDate: options.end } : {}),
+              ...(goal !== undefined ? { goal } : {}),
             }),
             json,
           );
@@ -1555,7 +1617,23 @@ cli
           emit(runSprintStart(cwd, process.env, name), json);
           break;
         case 'close':
-          emit(runSprintClose(cwd, process.env), json);
+          emit(
+            runSprintClose(
+              cwd,
+              process.env,
+              options.carryTo === undefined ? {} : { carryTo: rawFlag('carry-to') ?? String(options.carryTo) },
+            ),
+            json,
+          );
+          break;
+        case 'retro':
+          emit(
+            runSprintRetro(cwd, process.env, name, {
+              ...(options.sprint === undefined ? {} : { sprint: String(options.sprint) }),
+              ...(options.action === true ? { action: true } : {}),
+            }),
+            json,
+          );
           break;
         case 'status':
           emit(runSprintStatus(cwd, process.env), json);
@@ -1570,7 +1648,7 @@ cli
           emit(
             usage(
               `Unknown action "${action}".\n` +
-                'Available: create, add, edit, start, close, status, list, burndown\n' +
+                'Available: create, add, edit, start, close, status, list, burndown, retro\n' +
                 '  kadence sprint --help',
               { received: action, allowed: SPRINT_ACTIONS },
             ),
@@ -1579,6 +1657,44 @@ cli
       }
     },
   );
+
+cli
+  .command('goal [action] [text]', 'The Product Goal: set | show | done | abandon — one at a time')
+  .option('--all', 'show: every goal, closed and replaced ones too')
+  .option('--json', 'Machine-readable output for agents')
+  .example('  kadence goal set "Teams run their sprints from the repository"')
+  .example('  kadence goal                         the one in force')
+  .example('  kadence goal done                    achieved; the next can be set')
+  .example('  kadence goal abandon                 dropped; the next can be set')
+  .example('  kadence goal show --all')
+  .action((action: string | undefined, text: string | undefined, options: { all?: boolean; json?: boolean }) => {
+    const json = options.json === true;
+    const cwd = process.cwd();
+    switch (action) {
+      case 'set':
+        if (text === undefined) emit(usage('What is the goal?\n  kadence goal set "…"'), json);
+        emit(runGoalSet(cwd, process.env, String(text)), json);
+        break;
+      case 'show':
+      case undefined:
+        emit(runGoalShow(cwd, process.env, options.all === true ? { all: true } : {}), json);
+        break;
+      case 'done':
+        emit(runGoalClose(cwd, process.env, 'achieved'), json);
+        break;
+      case 'abandon':
+        emit(runGoalClose(cwd, process.env, 'abandoned'), json);
+        break;
+      default:
+        emit(
+          usage(`Unknown goal action "${action}".\n  kadence goal set "…"`, {
+            received: action,
+            allowed: GOAL_ACTIONS,
+          }),
+          json,
+        );
+    }
+  });
 
 cli
   .command('template [action] [name]', 'Task templates: save | list | delete')
@@ -1676,7 +1792,7 @@ cli
  */
 const HELP_ORDER = [
   'init', 'prime', 'ready', 'task', 'decision', 'note', 'doc', 'board', 'ui', 'schema',
-  'sprint', 'milestone', 'template',
+  'goal', 'sprint', 'milestone', 'template',
   'report', 'stats',
   'compact', 'completion',
 ];
