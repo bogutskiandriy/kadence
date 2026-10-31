@@ -196,9 +196,9 @@ Tasks, notes, decisions and documentation live in \`.kadence/\` as plain files, 
     kadence task move KAD-1 done        change state
     kadence note "…" --task KAD-1       something learned, for the next session
     kadence decision add "…" --why "…" --rejected "X: why not"  a choice and its reason; what lost, so the hook warns when it returns
+    kadence decision add "…" --why "…" --supersedes DEC-1  a decision that was wrong: correct it; the old one stays, marked replaced
 
-\`--json\` responses carry \`schema: "kadence/v1"\`; stdout is JSON only. A failure
-carries \`error.code\` and, where knowable, \`allowed\`. As an agent, set \`KADENCE_SOURCE=agent\`.
+\`--json\` responses carry \`schema: "kadence/v1"\`; stdout is JSON only. A failure carries \`error.code\` and, where knowable, \`allowed\`. As an agent, set \`KADENCE_SOURCE=agent\`.
 If \`kadence\` is not on PATH, ask the human to run \`npm install -g kadence\` (\`npx kadence prime\` needs network — their call).
 
 Details: \`.kadence/README.md\`
@@ -253,7 +253,9 @@ export const TASK_FIELDS = [
   'loggedHours',
   'parent',
   'blockedBy',
+  'start',
   'due',
+  'rank',
   'claimedBy',
   'contestedBy',
   'criteria',
@@ -467,9 +469,10 @@ export function buildContract(version: string): Record<string, unknown> {
         },
       },
       note: {
-        required: ['id', 'text', 'task', 'at', 'by', 'source'],
+        required: ['id', 'text', 'task', 'sprint', 'at', 'by', 'source'],
         notes: {
           task: 'The KAD-N label, or null. A note is not a decision: there is no `why` and no number.',
+          sprint: 'The name of the sprint whose retrospective recorded it (`sprint retro`), or null.',
         },
       },
       flow: {
@@ -498,7 +501,7 @@ export function buildContract(version: string): Record<string, unknown> {
         },
       },
       prime: {
-        required: ['sprint', 'mine', 'mineTotal', 'documentation', 'documentationTotal', 'staleDocumentation', 'staleDocumentationTotal', 'ready', 'attention', 'attentionTotal', 'decisions', 'notes', 'commands'],
+        required: ['sprint', 'productGoal', 'mine', 'mineTotal', 'documentation', 'documentationTotal', 'staleDocumentation', 'staleDocumentationTotal', 'ready', 'attention', 'attentionTotal', 'decisions', 'notes', 'commands'],
         notes: {
           mine: 'Capped; `mineTotal` is the real count. Each item: {label, title, status, claimedBy, contestedBy}. A task whose `contestedBy` is non-empty comes first; if `claimedBy` is not you, you lost the claim — talk to the holder before starting. Every free-text field in this payload carries at most 2000 characters and ends with “…” when it was longer; nothing a person writes comes near that.',
           documentation:
@@ -510,6 +513,8 @@ export function buildContract(version: string): Record<string, unknown> {
           notes:
             'The last five, newest first: {text, bytes, by, task}. `bytes` is the note’s full length; `text` is capped and ends with “…” when it was longer, so a note too large for a preamble is still known about — `kadence note list --json` returns it whole.',
           ready: 'A count, not a list. `kadence ready --json` returns the list.',
+          sprint: 'null without an active sprint, else {name, endDate, daysLeft, goal}; `goal` is the Sprint Goal or null.',
+          productGoal: 'The Product Goal in force, {label, text}, or null. One at a time; `kadence goal --json` has its history.',
           attention: 'Work in flight that nobody is moving, at most three, `attentionTotal` is the real count. Empty when there is nothing \u2014 and then the human output says nothing at all. `kadence report attention --json` returns the rest.',
         },
       },
@@ -613,7 +618,7 @@ export function buildContract(version: string): Record<string, unknown> {
         name: 'task add',
         summary: 'Create a task. `--ac` adds an acceptance criterion and repeats; they follow the board definition of done.',
         args: ['title'],
-        flags: ['--ac', '--no-dod', '--json'],
+        flags: ['--ac', '--no-dod', '--start', '--json'],
         json: true,
       },
       {
@@ -629,7 +634,7 @@ export function buildContract(version: string): Record<string, unknown> {
         summary:
           'Change fields. Labels move as deltas: --add-label and --remove-label change one and leave the rest, --label makes the set exactly what you pass. Prefer the first two \u2014 a whole set passed from two branches is two people’s intent, and only the difference is recorded (ADR-013).',
         args: ['refs'],
-        flags: ['--title', '--description', '--type', '--priority', '--due', '--estimate', '--label', '--add-label', '--remove-label', '--json'],
+        flags: ['--title', '--description', '--type', '--priority', '--due', '--estimate', '--label', '--add-label', '--remove-label', '--start', '--json'],
         json: true,
       },
       { name: 'task log', summary: 'Log hours.', args: ['refs', 'hours'], json: true },
@@ -762,6 +767,34 @@ export function buildContract(version: string): Record<string, unknown> {
         json: true,
       },
       {
+        name: 'report review',
+        summary:
+          'Sprint Review: `review: {sprint, status, goal, productGoal, committed, velocity, done, notDone, cancelled, scopeAdded, decisions, retro}`. The active sprint, else the one closed last; `--sprint` names another. `decisions` are those recorded between the sprint\u2019s start and close.',
+        flags: ['--sprint', '--html', '--file', '--json'],
+        json: true,
+      },
+      {
+        name: 'report daily',
+        summary:
+          'Daily Scrum for the active sprint: `daily: {sprint, goal, daysLeft, done, committed, moved, inProgress, blocked, window}`. `moved` is every status change in the window, oldest first; `--since` widens it from one day.',
+        flags: ['--since', '--html', '--file', '--json'],
+        json: true,
+      },
+      {
+        name: 'report timeline',
+        summary:
+          'What should be done when, by epic. `timeline: {asOf, scale, window, groups, markers, undated}`. Each group is `{epic, children}`: the outermost epic and its direct children; deeper work stretches the child above it. The last group has `epic: null` and holds dated work with no epic. A bar is `{label, title, plan, planSource, actual, mismatch}`: `plan` is the task\u2019s own start/due, else the dates of its sprint and of the work under it (`planSource` explicit, derived or mixed); `actual` is first start to last finish, `open` while work is in progress; `mismatch` names work that runs outside the dates set. Nothing is forecast; `undated` counts tasks with no date of any kind. Finished work with no plan and no epic is left out of the last group and counted in `hiddenFinished`; `--all` keeps it. `--scale day|week|month`, picked from the span when absent.',
+        flags: ['--scale', '--all', '--html', '--file', '--json'],
+        json: true,
+      },
+      {
+        name: 'report calendar',
+        summary:
+          'One month by day: `calendar: {month, from, to, bars, lanes, items, markers}`. `bars` are the epics of `report timeline` over the days they span, cut to the month (`continuesBefore`, `continuesAfter`), packed into `lane`s so overlapping ones never share one; `source` is plan, or actual where there is no plan. `items` are tasks due in the month, with the outermost epic above them or null. `markers`: sprint_start, sprint_end, milestone. `--month YYYY-MM`, the current one by default.',
+        flags: ['--month', '--html', '--file', '--json'],
+        json: true,
+      },
+      {
         name: 'report workload',
         summary:
           'Open tasks, open points, work in progress and blocked work per owner, with a row for unassigned work. No hours and no capacity: the journal has neither.',
@@ -830,9 +863,54 @@ export function buildContract(version: string): Record<string, unknown> {
         flags: ['--statuses', '--started', '--dod', '--json'],
         json: true,
       },
-      { name: 'sprint status', summary: 'Current sprint progress.', json: true },
-      { name: 'sprint create', summary: 'Start a sprint.', args: ['name'], json: true },
-      { name: 'sprint close', summary: 'Close it and report velocity.', json: true },
+      { name: 'sprint status', summary: 'Current sprint progress, its Sprint Goal first. `report.goal` is null without one.', json: true },
+      {
+        name: 'sprint create',
+        summary:
+          'Create a sprint; the first one starts at once. `--goal` sets the Sprint Goal. Starting without a goal warns: Scrum plans a sprint around one.',
+        args: ['name'],
+        flags: ['--goal', '--json'],
+        json: true,
+      },
+      {
+        name: 'sprint close',
+        summary:
+          'Close it and report velocity. `--carry-to <name|next>` moves the unfinished work into that sprint; the closed sprint keeps it as carried over, so its record does not change. `carriedTo` is null without the flag.',
+        flags: ['--carry-to', '--json'],
+        json: true,
+      },
+      {
+        name: 'sprint retro',
+        summary:
+          'The Sprint Retrospective. With text, a note tied to the sprint (the active one, else the one closed last; `--sprint` names another). `--action` makes it a task labelled `retro` in the next planned sprint, or the backlog when there is none. Without text, `retro: {sprint, notes, actions}` — what that retrospective recorded.',
+        args: ['text'],
+        flags: ['--sprint', '--action', '--json'],
+        json: true,
+      },
+      {
+        name: 'goal set',
+        summary:
+          'Set the Product Goal. One at a time: fails with conflicting_state while one is in force — `goal done` or `goal abandon` it first.',
+        args: ['text'],
+        json: true,
+      },
+      {
+        name: 'goal show',
+        summary:
+          'The Product Goal in force, `goal: {id, label, text, status, setAt, by}` or null; also plain `kadence goal`. `--all` adds `goals`, every one with its status: open, achieved, abandoned, or replaced (still open when a later one merged from another branch).',
+        flags: ['--all', '--json'],
+        json: true,
+      },
+      { name: 'goal done', summary: 'Close the Product Goal as achieved.', json: true },
+      { name: 'goal abandon', summary: 'Close the Product Goal as abandoned.', json: true },
+      {
+        name: 'task rank',
+        summary:
+          'Order the Product Backlog: exactly one of `--top`, `--bottom`, `--before <ref>`, `--after <ref>`. Ranked tasks come first in `ready` (and so in `task claim` with no ref), ahead of priority; unranked ones keep their priority order behind them. `task list --sort rank` lists the order. One event about the moved task only; the last by ULID holds.',
+        args: ['ref'],
+        flags: ['--top', '--bottom', '--before', '--after', '--json'],
+        json: true,
+      },
       // Added 2026-09-16 (T115). These shipped without an entry, so an agent
       // that trusted this list never learned they exist. test/command-surface
       // now fails when a command or action the CLI accepts has no entry here.
@@ -845,15 +923,16 @@ export function buildContract(version: string): Record<string, unknown> {
       },
       {
         name: 'sprint edit',
-        summary: 'Rename a sprint or change its description and dates. The active sprint when no name is given.',
+        summary:
+          'Rename a sprint or change its description, dates and Sprint Goal. The active sprint when no name is given. A sprint longer than a month, or a goal changed mid-sprint, is allowed and warned about.',
         args: ['name'],
-        flags: ['--name', '--description', '--start', '--end', '--json'],
+        flags: ['--name', '--description', '--start', '--end', '--goal', '--json'],
         json: true,
       },
       {
         name: 'sprint start',
         summary:
-          'Start a planned sprint; with no name, the oldest planned one. Fails with conflicting_state while another is active.',
+          'Start a planned sprint; with no name, the oldest planned one. Fails with conflicting_state while another is active. `planning: {goal, committed, tasks, velocity}` sets the points taken in against the velocity range of closed sprints (`velocity` null when none has closed); taking in more than any finished sprint warns.',
         args: ['name'],
         json: true,
       },

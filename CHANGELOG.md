@@ -2,6 +2,91 @@
 
 ## [Unreleased]
 
+**Scrum, as the Scrum Guide 2020 has it** (KAD-115). The artifacts get the
+commitments the guide attaches to them, the Product Backlog gets an order,
+and the five events each have a place in the journal. kadence says where a
+team strays from the guide — a sprint without a goal, longer than a month,
+taking in more than any finished sprint — and never refuses: it also serves
+teams that do not run Scrum. Three new event types (`goal.set`,
+`goal.closed`, `task.ranked`); an older kadence skips them as events from
+the future. `--json` gains only additively. The cache version moves to 14,
+so an existing `.kadence/state.json` is rebuilt once.
+
+### Added
+
+- **Sprint Goal.** `sprint create "…" --goal "…"` and `sprint edit --goal`.
+  It leads `sprint status`, sits under the sprint in `prime`, and is `goal`
+  in `sprint list --json`, `sprint status --json` and `prime --json`.
+  Changing it while the sprint is active is allowed and warned about.
+- **Product Goal.** `kadence goal set "…"`, `kadence goal`, `goal done`,
+  `goal abandon`, `goal show --all`. One at a time: a second `set` fails with
+  `conflicting_state` until the first is done or abandoned. Two branches that
+  each set one agree after the merge — the later holds, the earlier reads
+  `replaced`. First line of `prime`; `productGoal` in `prime --json`.
+- **An ordered Product Backlog.** `task rank KAD-1 --top | --bottom |
+  --before KAD-2 | --after KAD-2`. Ranked tasks come first in `ready`, and so
+  in `task claim` with no argument; unranked ones keep their priority order
+  behind them, so a board nobody ranks sorts exactly as before.
+  `task list --sort rank`; `rank` in every task's `--json`. One event about
+  the moved task only, a fractional key, the last write by ULID holding.
+- **Sprint Planning.** `sprint start` sets the points taken in against the
+  velocity range of closed sprints (`planning` in `--json`), and warns when
+  the sprint has no goal or takes in more than any finished sprint did.
+- **`sprint close --carry-to <name|next>`** moves unfinished work into that
+  sprint. The closed sprint keeps it as carried over, in `report velocity`
+  and everywhere else, so its record does not change after the fact.
+- **`sprint retro "…"`** records the retrospective against the active sprint,
+  else the one closed last; `--action` makes it a task labelled `retro` in
+  the next planned sprint. `sprint retro` with no text reads it back.
+- **`report review`** — the Sprint Review: the sprint against its goal, done
+  and not done, scope change, the Product Goal, decisions recorded during the
+  sprint, and the retrospective. `--sprint`, `--html`, `--json`.
+- **`report daily`** — the Daily Scrum: progress toward the Sprint Goal, what
+  moved in the last day (`--since` widens it), what is in progress and by
+  whom, what is blocked. `--html`, `--json`.
+- `sprint edit` warns when the dates make a sprint longer than a month.
+
+**A timeline and a calendar, by epic, as Jira draws them** (KAD-121). Both are
+reports in the catalogue — text, `--json` for an agent, `--html` for a page
+that opens from disk — and both read one fold, so they cannot put an epic on
+two different dates. Nothing on them is forecast.
+
+- **`task add` / `task edit --start YYYY-MM-DD`**, beside `--due`; an empty
+  string clears it, a start after the due date is refused. `start` in every
+  task's `--json`. The field is new in `task.created` and `task.updated`; an
+  older kadence ignores it.
+- **`report timeline`** — one row per outermost epic and one per direct
+  child; deeper work stretches the child above it. The plan is the task's own
+  `start`/`due`, else the dates of its sprint and of the work under it; the
+  actual bar runs from the first start to the last finish, or to today while
+  work is open. Work that runs outside the dates set on it is named, not
+  resolved. Dated work with no epic shares one last group (`epic: null`);
+  finished work there that never had a plan is left out and counted
+  (`hiddenFinished`), and `--all` brings it back. Undated work is a count
+  with the command that gives it a date. Sprints and milestones are markers.
+  `--scale day|week|month`, picked from the span.
+- **`report calendar`** — one month, Monday first: epics as bars across the
+  days they span, packed into lanes and cut at the month's edge with a mark
+  that they continue; every task due that month on its day; sprint starts and
+  ends and milestone dates. `--month YYYY-MM`, the current one by default. The
+  grid is the `--html` page; the terminal gets a list by day.
+
+### Fixed
+
+- The prompt hook names a rejected idea phrased in everyday words (KAD-78).
+  "Let's add embeddings so search understands synonyms" and "Can we switch
+  the core to async file reads?" now bring back the decisions that rejected
+  exactly that: "Let's" no longer counts as a word, "async" matches
+  "asynchronous", and a rejected name before a comma ("Embeddings, in the
+  core") is a name of its own. The hook pads its reference column to the
+  records it prints, not to ones cut for size.
+
+### Changed
+
+- The section `kadence init` writes into AGENTS.md and CLAUDE.md names
+  `decision add --supersedes DEC-1` beside `--rejected`: a decision that was
+  wrong is corrected, the old one kept and marked replaced (KAD-114).
+
 ## [0.11.0] — 2026-10-23
 
 The board, redrawn. `kadence ui` went through a design review and came out

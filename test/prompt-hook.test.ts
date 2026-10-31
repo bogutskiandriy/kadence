@@ -96,6 +96,27 @@ describe('runPromptHook', () => {
     expect(out).toContain('conflicts on every parallel change');
   });
 
+  it('pads the reference column to the records it prints, not to the ones cut for size', () => {
+    // KAD-78 note: one decision printed, yet every line pushed right to the
+    // width of a note ULID that was ranked and then did not fit.
+    runDecisionAdd(dir, env, 'One file per event under .kadence/events', {
+      why: 'Two branches writing at once produce two files and git merges them',
+      rejected:
+        'A single tasks.json that every command rewrites: conflicts on every parallel change, ' +
+        'and a rewrite of the whole file for every one-field edit, which turns every merge into a diff of everything',
+    });
+    for (let i = 0; i < 6; i++) {
+      runNoteAdd(dir, env, `Keep all the tasks in a single tasks.json file, try ${i}: ` + 'every parallel change conflicted. '.repeat(20), {});
+    }
+    const out = runPromptHook(dir, env, payload("let's keep all the tasks in a single tasks.json file"));
+    const gaps = out
+      .split('\n')
+      .map((l) => l.match(/^ {2}\S+( +)\[/)?.[1]?.length)
+      .filter((n): n is number => n !== undefined);
+    expect(gaps.length).toBeGreaterThan(0);
+    expect(Math.min(...gaps)).toBe(2);
+  });
+
   it('does not call it rejected when the prompt asks about what was chosen', () => {
     runDecisionAdd(dir, env, 'One file per event under .kadence/events', {
       why: 'Two branches writing at once produce two files and git merges them',

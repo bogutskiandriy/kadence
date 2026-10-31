@@ -272,39 +272,52 @@ function render(
     const base = h.label ?? `note ${h.id}`;
     return h.lines === null ? base : `${base}:${h.lines.from}-${h.lines.to}`;
   };
-  const width = Math.max(...turnedDown.map((m) => m.label.length), ...hits.map((h) => ref(h).length));
   const head = 'kadence: if this is about why or how something was decided, the journal may already say:';
   const tail = 'More: kadence search "…" --also "other words" --json · open one: task show / decision show / doc show / note show';
 
-  const lines = [head];
-  const shown: string[] = [];
-  const fits = (entry: string[]) => Buffer.byteLength([...lines, ...entry, tail].join('\n'), 'utf8') <= PROMPT_HOOK_BYTES;
+  const lay = (decisions: readonly RejectedMatch[], records: readonly SearchHit[]): { lines: string[]; shown: string[] } => {
+    const width = Math.max(...decisions.map((m) => m.label.length), ...records.map((h) => ref(h).length));
+    const lines = [head];
+    const shown: string[] = [];
+    const fits = (entry: string[]) => Buffer.byteLength([...lines, ...entry, tail].join('\n'), 'utf8') <= PROMPT_HOOK_BYTES;
 
-  // First: a decision that already turned down what the prompt proposes. It
-  // is the one line here that can stop work before it starts (KAD-61).
-  for (const m of turnedDown) {
-    const pad = ' '.repeat(width);
-    const entry = [
-      `  ${m.label.padEnd(width)}  [decision] rejected this before: “${flat(m.rejected, 200)}”`,
-      `  ${pad}  chose instead: ${flat(m.title, TITLE_CHARS)}`,
-    ];
-    if (!fits(entry)) break;
-    lines.push(...entry);
-    shown.push(m.id);
-  }
-
-  for (const hit of hits) {
-    const entry = [`  ${ref(hit).padEnd(width)}  [${hit.kind}] ${flat(hit.title, TITLE_CHARS)}`];
-    const whole = hit.kind === 'note' ? noteText(hit.id) : null;
-    if (whole !== null) {
-      entry.push(`  ${' '.repeat(width)}  “${flat(whole, NOTE_CHARS)}”`);
-    } else if (hit.coverage >= PARTIAL_COVERAGE) {
-      entry.push(`  ${' '.repeat(width)}  “${flat(hit.span.text, 200)}”`);
+    // First: a decision that already turned down what the prompt proposes. It
+    // is the one line here that can stop work before it starts (KAD-61).
+    for (const m of decisions) {
+      const pad = ' '.repeat(width);
+      const entry = [
+        `  ${m.label.padEnd(width)}  [decision] rejected this before: “${flat(m.rejected, 200)}”`,
+        `  ${pad}  chose instead: ${flat(m.title, TITLE_CHARS)}`,
+      ];
+      if (!fits(entry)) break;
+      lines.push(...entry);
+      shown.push(m.id);
     }
-    if (!fits(entry)) break;
-    lines.push(...entry);
-    shown.push(keyOf(hit));
-  }
+
+    for (const hit of records) {
+      const entry = [`  ${ref(hit).padEnd(width)}  [${hit.kind}] ${flat(hit.title, TITLE_CHARS)}`];
+      const whole = hit.kind === 'note' ? noteText(hit.id) : null;
+      if (whole !== null) {
+        entry.push(`  ${' '.repeat(width)}  “${flat(whole, NOTE_CHARS)}”`);
+      } else if (hit.coverage >= PARTIAL_COVERAGE) {
+        entry.push(`  ${' '.repeat(width)}  “${flat(hit.span.text, 200)}”`);
+      }
+      if (!fits(entry)) break;
+      lines.push(...entry);
+      shown.push(keyOf(hit));
+    }
+    return { lines, shown };
+  };
+
+  // Laid out twice: what fits is known only after a layout, and a record cut
+  // for size padded every printed line to its width (KAD-78). The second pass
+  // takes only what the first printed; a narrower column makes each line
+  // shorter, so all of it still fits.
+  const first = lay(turnedDown, hits);
+  const { lines, shown } = lay(
+    turnedDown.filter((m) => first.shown.includes(m.id)),
+    hits.filter((h) => first.shown.includes(keyOf(h))),
+  );
   return { text: shown.length === 0 ? '' : [...lines, tail].join('\n'), shown };
 }
 

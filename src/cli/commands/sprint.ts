@@ -1,10 +1,11 @@
 import { append } from '../../core/store.js';
 import { ulid } from '../../core/ulid.js';
-import { sprintReport, type SprintReport } from '../../core/velocity.js';
+import { sprintReport, velocitySeries, type SprintReport } from '../../core/velocity.js';
 import { burndown, renderBurndown, type Burndown } from '../../core/burndown.js';
 import { readAll } from '../../core/store.js';
 import type { ProjectState, Sprint } from '../../core/projection.js';
-import { resolveContext, isContext, loadState, findTask, type CommandResult, type Context,
+import { runNoteAdd } from './note.js';
+import { resolveContext, isContext, loadState, findTask, runTaskAdd, type CommandResult, type Context,
   taskNotFound,
   failure,
 } from './task.js';
@@ -16,18 +17,73 @@ import { resolveContext, isContext, loadState, findTask, type CommandResult, typ
  * positioned as work analytics rather than yet another tracker.
  */
 
-function activeSprint(state: ProjectState) {
+export function activeSprint(state: ProjectState) {
   return state.sprints.find((s) => s.status === 'active');
 }
 
-function plannedSprints(state: ProjectState) {
+export function plannedSprints(state: ProjectState) {
   return state.sprints.filter((s) => s.status === 'planned');
 }
 
 /** Sprint by name — case-insensitive. */
-function findSprintByName(state: ProjectState, name: string) {
+export function findSprintByName(state: ProjectState, name: string) {
   const needle = name.trim().toLowerCase();
   return state.sprints.find((s) => s.name.toLowerCase() === needle);
+}
+
+/**
+ * Scrum starts a sprint with a goal. Said, not enforced: a team that does not
+ * run Scrum should be able to start a sprint without being told off twice.
+ */
+function goalWarning(sprint: { name: string; goal: string | null }): string[] {
+  return sprint.goal === null
+    ? [`Sprint "${sprint.name}" has no Sprint Goal. Scrum plans a sprint around one:\n  kadence sprint edit "${sprint.name}" --goal "…"`]
+    : [];
+}
+
+/**
+ * What Sprint Planning weighs: the work taken in against what finished
+ * sprints actually finished. A range, as `report velocity` gives it — one
+ * average reads as a promise the spread does not make.
+ */
+function planning(state: ProjectState, sprint: Sprint): {
+  data: Record<string, unknown>;
+  lines: string[];
+  warnings: string[];
+} {
+  const tasks = state.tasks.filter((t) => t.sprint === sprint.id && t.status !== 'cancelled');
+  const committed = tasks.reduce((n, t) => n + (t.estimate ?? 0), 0);
+  const series = velocitySeries(state);
+  const velocity =
+    series.median === null
+      ? null
+      : { median: series.median, low: series.low, high: series.high, sprints: series.rows.length };
+
+  const lines = [`  Taken in:  ${committed} points, ${tasks.length} task(s)`];
+  const warnings: string[] = [];
+  if (velocity === null) {
+    lines.push('  Velocity:  none yet — no sprint has closed');
+  } else {
+    lines.push(
+      `  Velocity:  ${velocity.low}–${velocity.high} points, median ${velocity.median} (${velocity.sprints} closed sprint(s))`,
+    );
+    if (committed > velocity.high!) {
+      warnings.push(
+        `"${sprint.name}" takes in ${committed} points, more than any finished sprint (${velocity.high}). ` +
+          'Planning against what was finished, not what was hoped, is what makes the forecast honest.',
+      );
+    }
+  }
+  return {
+    data: { goal: sprint.goal, committed, tasks: tasks.length, velocity },
+    lines,
+    warnings,
+  };
+}
+
+/** Inclusive length in days of a sprint with both dates set. */
+function lengthInDays(start: string, end: string): number {
+  return Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;
 }
 
 function write(ctx: Context, type: 'sprint.created' | 'sprint.started' | 'sprint.updated' | 'sprint.closed' | 'sprint.task_added', entity: string, data: Record<string, unknown>): void {
@@ -42,7 +98,12 @@ function write(ctx: Context, type: 'sprint.created' | 'sprint.started' | 'sprint
   });
 }
 
-export function runSprintCreate(cwd: string, env: NodeJS.ProcessEnv, name: string): CommandResult {
+export function runSprintCreate(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  name: string,
+  options: { goal?: string } = {},
+): CommandResult {
   const ctx = resolveContext(cwd, env);
   if (!isContext(ctx)) return ctx;
 
@@ -67,14 +128,16 @@ export function runSprintCreate(cwd: string, env: NodeJS.ProcessEnv, name: strin
   // impossible.
   const hasActive = activeSprint(state) !== undefined;
 
+  const goal = options.goal?.trim() ?? '';
   const id = ulid();
-  write(ctx, 'sprint.created', id, { name: trimmed });
+  write(ctx, 'sprint.created', id, { name: trimmed, ...(goal === '' ? {} : { goal }) });
   if (!hasActive) write(ctx, 'sprint.started', id, {});
 
   return {
     ok: true,
     exitCode: 0,
-    warnings,
+    // Only when it starts now: a planned sprint gets its goal at planning.
+    warnings: hasActive ? warnings : [...warnings, ...goalWarning({ name: trimmed, goal: goal === '' ? null : goal })],
     message: hasActive
       ? `Sprint "${trimmed}" planned.\n\n` +
         `  kadence sprint add KAD-1 --sprint "${trimmed}"\n  kadence sprint start "${trimmed}"`
@@ -82,7 +145,7 @@ export function runSprintCreate(cwd: string, env: NodeJS.ProcessEnv, name: strin
     data: {
       schema: 'kadence/v1',
       ok: true,
-      sprint: { id, name: trimmed, status: hasActive ? 'planned' : 'active' },
+      sprint: { id, name: trimmed, status: hasActive ? 'planned' : 'active', goal: goal === '' ? null : goal },
     },
   };
 }
@@ -146,7 +209,16 @@ export function runSprintAdd(
   };
 }
 
-export function runSprintClose(cwd: string, env: NodeJS.ProcessEnv): CommandResult {
+export interface SprintCloseOptions {
+  /** A sprint name, or `next` for the oldest planned one. */
+  carryTo?: string;
+}
+
+export function runSprintClose(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  options: SprintCloseOptions = {},
+): CommandResult {
   const ctx = resolveContext(cwd, env);
   if (!isContext(ctx)) return ctx;
 
@@ -160,8 +232,31 @@ export function runSprintClose(cwd: string, env: NodeJS.ProcessEnv): CommandResu
     };
   }
 
+  // Resolved before anything is written: a typo must not leave the sprint
+  // closed and its unfinished work stranded.
+  let target: Sprint | undefined;
+  if (options.carryTo !== undefined) {
+    const wanted = String(options.carryTo);
+    target = wanted.toLowerCase() === 'next' ? plannedSprints(state)[0] : findSprintByName(state, wanted);
+    if (target === undefined || target.id === sprint.id || target.status === 'closed' || target.status === 'cancelled') {
+      return failure(
+        1,
+        'sprint_not_found',
+        wanted.toLowerCase() === 'next'
+          ? 'No planned sprint to carry the work into.\n  kadence sprint create "Sprint 2"'
+          : `No open sprint named "${wanted}" to carry the work into.\n  kadence sprint list`,
+        { received: wanted, hint: 'kadence sprint list --json' },
+      );
+    }
+  }
+
   const report = sprintReport(state, sprint.id)!;
-  write(ctx, 'sprint.closed', sprint.id, { velocity: report.velocity });
+  const carried = target === undefined ? [] : report.carriedOver;
+  write(ctx, 'sprint.closed', sprint.id, {
+    velocity: report.velocity,
+    ...(carried.length === 0 ? {} : { carried: carried.map((t) => t.id) }),
+  });
+  for (const task of carried) write(ctx, 'sprint.task_added', target!.id, { task: task.id });
 
   const all = [...warnings];
   if (report.unestimated.length > 0) {
@@ -171,12 +266,29 @@ export function runSprintClose(cwd: string, env: NodeJS.ProcessEnv): CommandResu
     );
   }
 
+  // Scrum: what is not done goes back to the Product Backlog, or on into the
+  // next sprint if the team chooses. Either way, somebody should say which.
+  const left = report.carriedOver.length;
+  const tail =
+    target !== undefined
+      ? `\n\n  ${carried.length} unfinished task(s) moved to "${target.name}".`
+      : left > 0
+        ? '\n\nThe unfinished work stays in this sprint\'s record. To take it on into the next one:\n' +
+          '  kadence sprint add KAD-1 --sprint "Sprint 2"\n' +
+          'or, at the next close:  kadence sprint close --carry-to next'
+        : '';
+
   return {
     ok: true,
     exitCode: 0,
     warnings: all,
-    message: renderReport(report),
-    data: { schema: 'kadence/v1', ok: true, report: serializeReport(report) },
+    message: renderReport(report) + tail,
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      report: serializeReport(report),
+      carriedTo: target === undefined ? null : { id: target.id, name: target.name, tasks: carried.map((t) => t.label) },
+    },
   };
 }
 
@@ -199,6 +311,7 @@ export function runSprintStatus(cwd: string, env: NodeJS.ProcessEnv): CommandRes
   const report = sprintReport(state, sprint.id)!;
   const lines = [
     `"${report.name}" — ${report.velocity} of ${report.committed} points`,
+    ...(sprint.goal === null ? [] : [`Goal: ${sprint.goal}`]),
     '',
     ...report.done.map((t) => `  ✓ ${t.label}  ${t.title}`),
     ...report.carriedOver.map((t) => `  · ${t.label}  ${t.title} (${t.status})`),
@@ -253,6 +366,7 @@ function serializeReport(r: SprintReport): Record<string, unknown> {
     id: r.id,
     name: r.name,
     status: r.status,
+    goal: r.goal,
     velocity: r.velocity,
     committed: r.committed,
     actualHours: r.actualHours,
@@ -313,12 +427,24 @@ export function runSprintStart(
 
   write(ctx, 'sprint.started', target.id, {});
 
+  const plan = planning(state, target);
   return {
     ok: true,
     exitCode: 0,
-    warnings,
-    message: `Sprint "${target.name}" started.\n\n  kadence sprint status`,
-    data: { schema: 'kadence/v1', ok: true, sprint: { id: target.id, name: target.name } },
+    warnings: [...warnings, ...goalWarning(target), ...plan.warnings],
+    message: [
+      `Sprint "${target.name}" started.`,
+      ...(target.goal === null ? [] : [`  Goal:      ${target.goal}`]),
+      ...plan.lines,
+      '',
+      '  kadence sprint status',
+    ].join('\n'),
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      sprint: { id: target.id, name: target.name, goal: target.goal },
+      planning: plan.data,
+    },
   };
 }
 
@@ -361,6 +487,7 @@ export function runSprintList(cwd: string, env: NodeJS.ProcessEnv): CommandResul
         id: sprint.id,
         name: sprint.name,
         status: sprint.status,
+        goal: sprint.goal,
         taskIds: sprint.taskIds,
         taskCount: tasks.length,
         points,
@@ -374,6 +501,7 @@ export interface SprintEdits {
   description?: string;
   startDate?: string;
   endDate?: string;
+  goal?: string;
 }
 
 /** Calendar date only — sprint boundaries are days, not moments. */
@@ -476,6 +604,32 @@ export function runSprintEdit(
     changed.push('end');
   }
 
+  const notices = [...warnings];
+  // Scrum Guide 2020: one month or less. Longer is allowed — the dates are a
+  // planning horizon here, never enforcement — and said.
+  if (start !== '' && end !== '' && (edits.startDate !== undefined || edits.endDate !== undefined)) {
+    const days = lengthInDays(start, end);
+    if (days > 31) {
+      notices.push(
+        `"${sprint.name}" runs ${days} days, longer than a month. Scrum keeps sprints to a month or less ` +
+          'so the plan is inspected before it goes stale.',
+      );
+    }
+  }
+  if (edits.goal !== undefined && edits.goal.trim() !== (sprint.goal ?? '')) {
+    data['goal'] = edits.goal.trim();
+    changed.push('goal');
+    // Allowed, because refusing would only move the change somewhere the
+    // journal cannot see it. Said, because Scrum treats a goal that no longer
+    // holds as the reason to cancel a sprint, not to rewrite it.
+    if (sprint.status === 'active' && sprint.goal !== null) {
+      notices.push(
+        'Sprint Goal changed while the sprint is active. Scrum keeps the goal fixed and renegotiates scope; ' +
+          'a goal that no longer holds is a reason to end the sprint.',
+      );
+    }
+  }
+
   if (changed.length === 0) {
     return { ok: true, exitCode: 0, warnings, message: `"${sprint.name}": nothing changed.` };
   }
@@ -485,7 +639,7 @@ export function runSprintEdit(
   return {
     ok: true,
     exitCode: 0,
-    warnings,
+    warnings: notices,
     message: `"${sprint.name}": updated ${changed.join(', ')}.`,
     data: { schema: 'kadence/v1', ok: true, sprint: { id: sprint.id, changed } },
   };
@@ -555,5 +709,138 @@ export function runSprintBurndown(
     warnings,
     message: renderBurndown(chart),
     data: { schema: 'kadence/v1', ok: true, burndown: chart },
+  };
+}
+
+/**
+ * `sprint retro` — the Sprint Retrospective, in the journal.
+ *
+ * Scrum Guide 2020: the team inspects how the sprint went and identifies the
+ * most helpful changes; the most impactful may go straight into the next
+ * Sprint Backlog. Both halves already exist here — a note is something
+ * learned, a task is work — so this command composes them and adds only the
+ * link to the sprint. Every write goes through the command that owns it, so a
+ * retro action is the same task `task add` would make.
+ */
+
+export interface RetroOptions {
+  /** The sprint by name; the active one, else the one that closed last. */
+  sprint?: string;
+  /** Make the observation a task, labelled `retro`, in the next planned sprint. */
+  action?: boolean;
+}
+
+/**
+ * The retrospective concludes the sprint, so it runs while the sprint is
+ * still active. After the close it belongs to the sprint that just ended.
+ */
+function retroSprint(state: ProjectState, name: string | undefined): Sprint | undefined {
+  if (name !== undefined) return findSprintByName(state, name);
+  return (
+    activeSprint(state) ??
+    state.sprints
+      .filter((s) => s.status === 'closed')
+      .sort((a, b) => ((a.closedBy ?? '') < (b.closedBy ?? '') ? -1 : 1))
+      .pop()
+  );
+}
+
+export function runSprintRetro(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  text: string | undefined,
+  options: RetroOptions,
+): CommandResult {
+  const ctx = resolveContext(cwd, env);
+  if (!isContext(ctx)) return ctx;
+
+  const { state, warnings } = loadState(ctx.root, ctx.actor);
+  const sprint = retroSprint(state, options.sprint);
+  if (sprint === undefined) {
+    return failure(
+      1,
+      'sprint_not_found',
+      options.sprint === undefined
+        ? 'No sprint to hold a retrospective for.\n  kadence sprint create "Sprint 1"'
+        : `No sprint named "${options.sprint}".\n  kadence sprint list`,
+      { ...(options.sprint === undefined ? {} : { received: options.sprint }), hint: 'kadence sprint list --json' },
+    );
+  }
+
+  if (text === undefined || String(text).trim() === '') return listRetro(state, sprint, warnings);
+
+  const said = String(text).trim();
+  if (options.action !== true) {
+    const note = runNoteAdd(cwd, env, said, { sprintId: sprint.id });
+    if (!note.ok) return note;
+    return {
+      ...note,
+      message: `Retro of "${sprint.name}": noted.\n  kadence sprint retro "…" --action   to make a change of it`,
+    };
+  }
+
+  // The next sprint is where Scrum puts an improvement: the oldest planned one
+  // that is not the sprint under review.
+  const next = plannedSprints(state).find((s) => s.id !== sprint.id);
+  const added = runTaskAdd(cwd, env, said, {
+    labels: ['retro'],
+    description: `From the retrospective of "${sprint.name}".`,
+  });
+  if (!added.ok) return added;
+  const task = added.data!['task'] as { id: string };
+  const label = `KAD-${state.tasks.length + 1}`;
+  if (next !== undefined) {
+    const moved = runSprintAdd(cwd, env, task.id, { sprint: next.name });
+    if (!moved.ok) return moved;
+  }
+  runNoteAdd(cwd, env, said, { task: task.id, sprintId: sprint.id });
+
+  return {
+    ok: true,
+    exitCode: 0,
+    warnings,
+    message:
+      next === undefined
+        ? `Retro of "${sprint.name}": ${label} ${said}\nNo planned sprint to put it in; it waits in the backlog.\n  kadence sprint create "…"   then   kadence sprint add ${label} --sprint "…"`
+        : `Retro of "${sprint.name}": ${label} ${said} → "${next.name}"`,
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      retro: { sprint: sprint.name, action: { id: task.id, label, sprint: next?.name ?? null } },
+    },
+  };
+}
+
+function listRetro(state: ProjectState, sprint: Sprint, warnings: string[]): CommandResult {
+  const notes = state.notes.filter((n) => n.sprint === sprint.id);
+  const actions = notes
+    .map((n) => (n.task === null ? undefined : state.tasks.find((t) => t.id === n.task)))
+    .filter((t) => t !== undefined)
+    .map((t) => ({ label: t.label, title: t.title, status: t.status }));
+  const observations = notes.filter((n) => n.task === null);
+
+  const lines =
+    notes.length === 0
+      ? [`Nothing recorded for the retrospective of "${sprint.name}".`, '  kadence sprint retro "what to change"']
+      : [
+          `Retrospective of "${sprint.name}"`,
+          ...observations.map((n) => `  · ${n.text}`),
+          ...(actions.length === 0 ? [] : ['', '  Actions:', ...actions.map((a) => `    ${a.label} [${a.status}]  ${a.title}`)]),
+        ];
+
+  return {
+    ok: true,
+    exitCode: 0,
+    warnings,
+    message: lines.join('\n'),
+    data: {
+      schema: 'kadence/v1',
+      ok: true,
+      retro: {
+        sprint: sprint.name,
+        notes: notes.map((n) => ({ id: n.id, text: n.text, by: n.by, at: n.at })),
+        actions,
+      },
+    },
   };
 }

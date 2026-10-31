@@ -7,6 +7,7 @@ import {
   DEFAULT_STARTED,
 } from './projection.js';
 import { beforeStarted } from './flow.js';
+import { compareRank } from './rank.js';
 
 /**
  * Filtering, search and sorting over a folded state.
@@ -36,7 +37,7 @@ export interface TaskFilters {
   dueBefore?: string;
 }
 
-export type SortKey = 'created' | 'priority' | 'due' | 'estimate';
+export type SortKey = 'created' | 'priority' | 'due' | 'estimate' | 'rank';
 
 const PRIORITY_RANK: Record<Priority, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
 
@@ -126,6 +127,9 @@ export function sortTasks(tasks: readonly Task[], key: SortKey): Task[] {
       return out.sort((a, b) => nullsLast(a.due, b.due, (x, y) => (x < y ? -1 : x > y ? 1 : 0)));
     case 'estimate':
       return out.sort((a, b) => nullsLast(a.estimate, b.estimate, (x, y) => y - x));
+    case 'rank':
+      // The backlog's own order; the unranked follow in creation order.
+      return out.sort((a, b) => compareRank(a, b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     case 'created':
     default:
       // Ids are ULIDs, so lexicographic order is creation order.
@@ -260,10 +264,16 @@ export function readyTasks(tasks: readonly Task[], options: ReadyOptions = {}): 
     return true;
   });
 
-  // Priority first, then age. Age breaks the tie because the oldest untouched
-  // task is the one most likely to be forgotten.
+  // The backlog's order first, where someone gave one: ordering the Product
+  // Backlog is how a Product Owner says what comes next, and `claim` takes the
+  // top of this list. Then priority, then age — age breaks the tie because the
+  // oldest untouched task is the one most likely to be forgotten. A board
+  // nobody ranked sorts exactly as it did before ranks existed.
   return open.sort(
-    (a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || (a.id < b.id ? -1 : 1),
+    (a, b) =>
+      compareRank(a, b) ||
+      PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] ||
+      (a.id < b.id ? -1 : 1),
   );
 }
 
@@ -308,7 +318,7 @@ export function describeNothingReady(
 }
 
 /** Valid values, exported so the CLI can list them in error messages. */
-export const SORT_KEYS: readonly SortKey[] = ['created', 'priority', 'due', 'estimate'];
+export const SORT_KEYS: readonly SortKey[] = ['created', 'priority', 'due', 'estimate', 'rank'];
 
 export function isSortKey(value: string): value is SortKey {
   return (SORT_KEYS as readonly string[]).includes(value);

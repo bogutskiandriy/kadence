@@ -66,6 +66,17 @@ describe('T106 — the instruction-file section teaches writes', () => {
     expect(section).toMatch(/--rejected[^\n]*warn/);
   });
 
+  // KAD-114: in an interview (2026-10-17) the ask was "the architecture is
+  // wrong at the root, can we fix that context?" — a model of correcting,
+  // not appending. --supersedes is the correction, and the section only
+  // taught --rejected.
+  it('names --supersedes as the way to correct a decision that was wrong', () => {
+    const lines = section.split('\n').filter((l) => l.includes('--supersedes'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/kadence decision add "[^"]*" --why "[^"]*" --supersedes DEC-\d+/);
+    expect(lines[0]).toMatch(/wrong/);
+  });
+
   it('says in one line what to do when kadence is not on PATH, without assuming network', () => {
     const lines = section.split('\n').filter((l) => l.includes('npm install -g kadence'));
     expect(lines).toHaveLength(1);

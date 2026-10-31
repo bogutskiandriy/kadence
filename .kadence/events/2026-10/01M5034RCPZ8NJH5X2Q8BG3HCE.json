@@ -1,0 +1,1 @@
+{"id":"01M5034RCPZ8NJH5X2Q8BG3HCE","type":"task.criterion_added","entity":"01M4XMCYERS62NQ3H3HTA42569","actor":"bogutski2005@gmail.com","ts":"2026-10-15T15:33:26.039Z","source":"agent","data":{"text":"Action reads other repos with a fine-grained token or App token (whole-repo read); App clones with --filter=blob:none --sparse, updates from push webhooks"}}

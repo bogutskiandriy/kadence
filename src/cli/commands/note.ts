@@ -27,6 +27,8 @@ import {
 export interface NoteFields {
   /** A task reference — KAD-N or a ULID. */
   task?: string;
+  /** The sprint's ULID, already resolved — `sprint retro` is the only writer. */
+  sprintId?: string;
 }
 
 export interface NoteListOptions {
@@ -43,11 +45,17 @@ const WHEN_A_DECISION =
   'turned down, record it as a decision instead:\n' +
   '  kadence decision add "title" --why "reason"';
 
-function serializeNote(note: Note, labelOf: (id: string | null) => string | null): Record<string, unknown> {
+function serializeNote(
+  note: Note,
+  labelOf: (id: string | null) => string | null,
+  state: ProjectState,
+): Record<string, unknown> {
   return {
     id: note.id,
     text: note.text,
     task: labelOf(note.task),
+    // The name, as a person knows it; null for a note no retrospective wrote.
+    sprint: note.sprint === null ? null : (state.sprints.find((s) => s.id === note.sprint)?.name ?? null),
     at: note.at,
     by: note.by,
     source: note.source,
@@ -91,7 +99,11 @@ export function runNoteAdd(
     actor: ctx.actor,
     ts: new Date().toISOString(),
     source: ctx.source,
-    data: taskId === null ? { text: trimmed } : { text: trimmed, task: taskId },
+    data: {
+      text: trimmed,
+      ...(taskId === null ? {} : { task: taskId }),
+      ...(fields.sprintId === undefined ? {} : { sprint: fields.sprintId }),
+    },
   });
 
   const where = taskLabel === null ? '' : ` on ${taskLabel}`;
@@ -154,7 +166,7 @@ export function runNoteList(
     data: {
       schema: 'kadence/v1',
       ok: true,
-      notes: shown.map((n) => serializeNote(n, label)),
+      notes: shown.map((n) => serializeNote(n, label, state)),
       notesTotal: paged.total,
       notesOffset: paged.offset,
     },
@@ -195,7 +207,7 @@ export function runNoteShow(cwd: string, env: NodeJS.ProcessEnv, ref: string): C
     exitCode: 0,
     warnings,
     message: lines.join('\n'),
-    data: { schema: 'kadence/v1', ok: true, note: serializeNote(note, label) },
+    data: { schema: 'kadence/v1', ok: true, note: serializeNote(note, label, state) },
   };
 }
 

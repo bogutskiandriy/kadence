@@ -103,7 +103,20 @@ const STOPWORDS = new Set([
   'our', 'so', 'than', 'that', 'the', 'their', 'them', 'then', 'there', 'these', 'they', 'this',
   'to', 'was', 'we', 'were', 'what', 'when', 'where', 'which', 'who', 'why', 'will', 'with',
   'would', 'you', 'your',
+  // "Let's" splits at the apostrophe into `let` and `s`, and `let` is rare
+  // enough in a journal to outweigh the word that matters (KAD-78).
+  'let', 'lets', 's',
 ]);
+
+/**
+ * Clipped forms, folded onto the word a decision is written in (KAD-78).
+ *
+ * People say "async"; the decision says "an asynchronous core". No suffix rule
+ * joins the two. Only clippings seen missing a decision are listed — a guessed
+ * one ("sync" is also git's word) would fold apart words that mean different
+ * things.
+ */
+const CLIPPED = new Map([['async', 'asynchronous']]);
 
 /**
  * A hit scoring below this share of the best one is dropped.
@@ -189,6 +202,8 @@ function tokenize(text: string): string[] {
  * vocabulary, not English, and is left exactly as written.
  */
 function stem(token: string): string {
+  const full = CLIPPED.get(token);
+  if (full !== undefined) return full;
   if (token.length <= 3 || !/^\p{Ll}+$/u.test(token)) return token;
   let w = token;
   if (w.endsWith('ies') && w.length > 4) w = `${w.slice(0, -3)}y`;
@@ -621,11 +636,16 @@ const NEGATED = /\b(?:not|never|instead of|rather than)\s+([^,.;:()]+)/gi;
  * "; ". The reason is written in the words of the problem — "conflicts on
  * every merge", "a failing test" — which ordinary work uses too; matching on
  * it raised the alarm on "fix the failing test" (measured 2026-10-12).
+ *
+ * A comma inside the name qualifies it — "Embeddings, in the core" — so the
+ * part before it is a name of its own. Asking for embeddings in search without
+ * saying "core" still asks for what lost (KAD-78).
  */
 function alternativeHeads(rejected: string): string {
   return rejected
     .split('; ')
     .map((one) => one.split(/:\s|\s[—–-]\s/)[0]!)
+    .flatMap((head) => (head.includes(', ') ? [head, head.split(', ')[0]!] : [head]))
     .join('\n');
 }
 
@@ -655,10 +675,20 @@ export function rejectedMatches(state: ProjectState, query: string): RejectedMat
 
   const corpus = units(state).filter((u) => !u.superseded);
   const index = build(corpus, terms);
+  // Only words some decision uses can say which side of a decision a question
+  // is on. The rest is why the person wants it — "so it understands synonyms"
+  // — and, rare in the journal, it outweighed the alternative it named (KAD-78).
+  // Read from the index already built: a decision's unit holds its title, why
+  // and rejected, and tokenizing them again cost 5 ms of the hook's budget.
+  const ids = new Set(candidates.map((d) => d.id));
+  const decided = new Set<string>();
+  corpus.forEach((u, i) => {
+    if (u.kind === 'decision' && ids.has(u.id)) for (const term of index.frequency[i]!.keys()) decided.add(term);
+  });
   const idf = new Map<string, number>();
   for (const term of terms) {
     const df = index.df.get(term) ?? 0;
-    if (df > 0) idf.set(term, Math.log(1 + (index.count - df + 0.5) / (df + 0.5)));
+    if (df > 0 && decided.has(term)) idf.set(term, Math.log(1 + (index.count - df + 0.5) / (df + 0.5)));
   }
   let asked = 0;
   for (const w of idf.values()) asked += w;

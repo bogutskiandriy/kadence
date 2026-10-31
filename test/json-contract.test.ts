@@ -104,8 +104,8 @@ describe('the --json contract', () => {
       [
         'assignee', 'blockedBy', 'claimedBy', 'comments', 'contestedBy', 'criteria',
         'description', 'docs', 'due', 'estimate', 'id', 'label', 'labels',
-        'loggedHours', 'milestone', 'openCriteria', 'parent', 'priority', 'reporter',
-        'sprint', 'status', 'title', 'type',
+        'loggedHours', 'milestone', 'openCriteria', 'parent', 'priority', 'rank', 'reporter',
+        'sprint', 'start', 'status', 'title', 'type',
       ].sort(),
     );
   });
