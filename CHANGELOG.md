@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-10-31
+
 **Scrum, as the Scrum Guide 2020 has it** (KAD-115). The artifacts get the
 commitments the guide attaches to them, the Product Backlog gets an order,
 and the five events each have a place in the journal. kadence says where a
