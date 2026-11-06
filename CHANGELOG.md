@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`kadence ui` follows the journal live** (KAD-125). Work other processes
+  write — an agent in another terminal, a `git pull` — appears on an open
+  board within about a second, without `r`. The status line names what moved
+  (`KAD-12 → done, KAD-30 new, +2 more`); several agents writing at once are
+  one repaint. The cursor stays on the selected task when it changes column,
+  and an open dialog or prompt is never redrawn under you: the change waits
+  until it closes. A watch on `.kadence/events` with a one-second poll behind
+  it, inside the board's own chunk — no command but `ui` starts either.
+
 ## [0.12.0] — 2026-10-31
 
 **Scrum, as the Scrum Guide 2020 has it** (KAD-115). The artifacts get the
