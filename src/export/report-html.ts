@@ -845,15 +845,15 @@ export function timelineHtml(t: Timeline, generatedAt: Date = new Date()): strin
   svg.push(`<svg class="viz" viewBox="0 0 ${width} ${height}" role="img" aria-label="Timeline by epic">`);
   for (const s of t.markers.sprints) {
     svg.push(
-      `<rect x="${x(s.from).toFixed(1)}" y="${TOP - 4}" width="${(x(s.to, true) - x(s.from)).toFixed(1)}" height="${height - TOP}" fill="var(--grid)" opacity=".55"/>`,
-      `<text class="tick" x="${(x(s.from) + 3).toFixed(1)}" y="${TOP - 8}">${esc(s.name)}</text>`,
+      `<rect x="${x(s.from).toFixed(0)}" y="${TOP - 4}" width="${(x(s.to, true) - x(s.from)).toFixed(0)}" height="${height - TOP}" fill="var(--grid)" opacity=".55"/>`,
+      `<text class="tick" x="${(x(s.from) + 3).toFixed(0)}" y="${TOP - 8}">${esc(s.name)}</text>`,
     );
   }
   for (const tk of ticks(from, to, t.scale)) {
     const at = x(isoOf(tk.at));
     svg.push(
-      `<line class="grid" x1="${at.toFixed(1)}" x2="${at.toFixed(1)}" y1="${TOP - 4}" y2="${height}"/>`,
-      `<text class="tick" x="${(at + 2).toFixed(1)}" y="12">${esc(tk.text)}</text>`,
+      `<line class="grid" x1="${at.toFixed(0)}" x2="${at.toFixed(0)}" y1="${TOP - 4}" y2="${height}"/>`,
+      `<text class="tick" x="${(at + 2).toFixed(0)}" y="12">${esc(tk.text)}</text>`,
     );
   }
   rows.forEach((r, i) => {
@@ -868,24 +868,24 @@ export function timelineHtml(t: Timeline, generatedAt: Date = new Date()): strin
     if (r.bar.plan !== null) {
       const outline = r.bar.mismatch === null ? '' : ' stroke="var(--critical)" stroke-width="2"';
       svg.push(
-        `<rect x="${x(r.bar.plan.from).toFixed(1)}" y="${y + 4}" width="${Math.max(3, x(r.bar.plan.to, true) - x(r.bar.plan.from)).toFixed(1)}" height="12" rx="3" fill="${color}"${outline}><title>${esc(`${r.bar.label} plan ${r.bar.plan.from} → ${r.bar.plan.to}`)}</title></rect>`,
+        `<rect x="${x(r.bar.plan.from).toFixed(0)}" y="${y + 4}" width="${Math.max(3, x(r.bar.plan.to, true) - x(r.bar.plan.from)).toFixed(0)}" height="12" rx="3" fill="${color}"${outline}><title>${esc(`${r.bar.label} plan ${r.bar.plan.from} → ${r.bar.plan.to}`)}</title></rect>`,
       );
     }
     if (r.bar.actual !== null) {
       svg.push(
-        `<rect x="${x(r.bar.actual.from).toFixed(1)}" y="${y + 18}" width="${Math.max(3, x(r.bar.actual.to, true) - x(r.bar.actual.from)).toFixed(1)}" height="5" rx="2" fill="var(--s3)"${r.bar.actual.open ? ' opacity=".65"' : ''}><title>${esc(`${r.bar.label} actual ${r.bar.actual.from} → ${r.bar.actual.open ? 'now' : r.bar.actual.to}`)}</title></rect>`,
+        `<rect x="${x(r.bar.actual.from).toFixed(0)}" y="${y + 18}" width="${Math.max(3, x(r.bar.actual.to, true) - x(r.bar.actual.from)).toFixed(0)}" height="5" rx="2" fill="var(--s3)"${r.bar.actual.open ? ' opacity=".65"' : ''}><title>${esc(`${r.bar.label} actual ${r.bar.actual.from} → ${r.bar.actual.open ? 'now' : r.bar.actual.to}`)}</title></rect>`,
       );
     }
   });
   for (const m of t.markers.milestones) {
     const at = x(m.date, true);
     svg.push(
-      `<line x1="${at.toFixed(1)}" x2="${at.toFixed(1)}" y1="${TOP - 4}" y2="${height}" stroke="var(--s4)" stroke-width="2" stroke-dasharray="4 3"><title>${esc(`${m.label} ${m.name} ${m.date}`)}</title></line>`,
+      `<line x1="${at.toFixed(0)}" x2="${at.toFixed(0)}" y1="${TOP - 4}" y2="${height}" stroke="var(--s4)" stroke-width="2" stroke-dasharray="4 3"><title>${esc(`${m.label} ${m.name} ${m.date}`)}</title></line>`,
     );
   }
   if (dayIndex(t.asOf) >= from && dayIndex(t.asOf) <= to) {
     const at = x(t.asOf);
-    svg.push(`<line class="reference" x1="${at.toFixed(1)}" x2="${at.toFixed(1)}" y1="${TOP - 4}" y2="${height}" stroke-dasharray="2 2"/>`);
+    svg.push(`<line class="reference" x1="${at.toFixed(0)}" x2="${at.toFixed(0)}" y1="${TOP - 4}" y2="${height}" stroke-dasharray="2 2"/>`);
   }
   svg.push('</svg>');
 
