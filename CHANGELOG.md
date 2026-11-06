@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.12.1] — 2026-11-06
+
+**The first published release with Scrum, the timeline and the calendar.**
+0.12.0 was tagged but never reached npm: `prepublishOnly` runs the suite,
+and the timeline's performance case held each page to a budget the fold
+could not meet on a release runner. That case is fixed here (PR #23), so
+everything listed under 0.12.0 below ships for the first time in 0.12.1,
+together with the live board.
+
 ### Added
 
 - **`kadence ui` follows the journal live** (KAD-125). Work other processes
