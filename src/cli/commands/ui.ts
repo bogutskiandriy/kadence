@@ -20,6 +20,7 @@ import {
 import { editText, canUseEditor } from '../editor.js';
 import { currentBranch, defaultBaseBranch, eventIdsOnBranch } from '../../core/git.js';
 import { runTaskEdit } from './task.js';
+import { eventsDir } from '../../core/store.js';
 
 /**
  * The interactive board.
@@ -58,6 +59,7 @@ export async function runUi(cwd: string, env: NodeJS.ProcessEnv): Promise<Comman
 
   board.runBoardUi({
     reload: () => loadState(ctx.root, ctx.actor),
+    journalDir: eventsDir(ctx.root),
     actor: ctx.actor,
     branchEventIds: () => {
       // Two different failures, reported as two: a detached HEAD and a base

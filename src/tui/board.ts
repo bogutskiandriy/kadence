@@ -20,6 +20,7 @@ import {
   isControlChar,
   type KeyEvent,
 } from './keys.js';
+import { watchJournal, describeChanges, locateTask, UPDATED_NOTE, type JournalWatcher } from './live.js';
 
 /**
  * The interactive board.
@@ -32,6 +33,11 @@ import {
 export interface BoardCallbacks {
   /** Re-reads the journal; the board never caches state of its own. */
   reload: () => { state: ProjectState; warnings: string[] };
+  /**
+   * `.kadence/events`, watched while the board is open so work other
+   * processes write — an agent in another terminal — appears without `r`.
+   */
+  journalDir: string;
   /**
    * Event ids the current branch introduced, or null outside a branch.
    *
@@ -137,6 +143,15 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
   let milestoneOnly = '';
   let columns: Column[] = [];
   let focused = 0;
+  /** Set up once the board has drawn; null until then and in no other case. */
+  let watcher: JournalWatcher | null = null;
+  /**
+   * The tasks as they were when a change arrived behind an open dialog.
+   *
+   * A dialog is never redrawn under the person typing in it: the reload waits
+   * until it closes, and the status line then names what changed meanwhile.
+   */
+  let deferredFrom: Task[] | null = null;
 
   /**
    * One router owns the keyboard.
@@ -157,6 +172,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
    * widget, so this always works.
    */
   function quit(code = 0): never {
+    watcher?.close();
     try {
       screen.destroy();
     } catch {
@@ -308,13 +324,24 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
     });
   }
 
-  function refresh(reload = false): void {
+  /**
+   * Recomputes and repaints the board.
+   *
+   * `follow` is the ULID of a task the cursor should stay on wherever it now
+   * sits — a live reload moves cards under the cursor, and losing the
+   * selection to whatever slid into its row would be the invisible-selection
+   * bug again, by another route.
+   */
+  function refresh(reload = false, follow: string | null = null): void {
     if (reload) {
+      // Before the read, not after: see JournalWatcher.acknowledge.
+      watcher?.acknowledge();
       state = callbacks.reload().state;
       branch = callbacks.branchEventIds();
     }
 
     if (columns.length !== visibleStatuses().length) build();
+    focused = Math.min(focused, Math.max(0, columns.length - 1));
 
     let open = 0;
     let points = 0;
@@ -330,6 +357,12 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
       if (col.tasks.some((t) => t.estimate !== null)) estimated = true;
       col.cursor = Math.min(col.cursor, Math.max(0, col.tasks.length - 1));
     });
+
+    const found = follow === null ? null : locateTask(columns, follow);
+    if (found !== null) {
+      focused = found.column;
+      columns[found.column]!.cursor = found.row;
+    }
 
     layout();
     paintColumns();
@@ -366,6 +399,33 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
       say(`${n} dependency ${n === 1 ? 'cycle' : 'cycles'}. kadence task list shows where.`, THEME.danger);
     }
     screen.render();
+
+    // A dialog just closed over a change that arrived while it was open.
+    // Deferred a tick so the close finishes first; `act` clears it when the
+    // dialog was a prompt, since its own reload already read the change.
+    // Checked again when it runs: several refreshes in one tick queue several
+    // callbacks, and only the first has anything to say.
+    if (deferredFrom !== null && !router.isDialogOpen()) {
+      setImmediate(() => {
+        if (deferredFrom !== null) liveReload();
+      });
+    }
+  }
+
+  /**
+   * Another process wrote the journal: read it again and say what moved.
+   *
+   * The same reload `r` runs — the board has no second way to read state.
+   */
+  function liveReload(): void {
+    if (router.isDialogOpen()) {
+      deferredFrom ??= state.tasks;
+      return;
+    }
+    const before = deferredFrom ?? state.tasks;
+    deferredFrom = null;
+    refresh(true, current()?.id ?? null);
+    say(describeChanges(before, state.tasks) || UPDATED_NOTE, THEME.info);
   }
 
   function current(): Task | undefined {
@@ -441,6 +501,9 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
   function act(result: string | null): void {
     if (result !== null) say(result, THEME.warn);
     else say('');
+    // This reload reads whatever arrived behind the prompt too, and the line
+    // keeps the action's own result: an error there matters more than news.
+    deferredFrom = null;
     refresh(true);
   }
 
@@ -614,6 +677,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
 
     /** Re-reads the task so the dialog shows what was actually saved. */
     function reloadTask(): void {
+      watcher?.acknowledge();
       state = callbacks.reload().state;
       const fresh = state.tasks.find((t) => t.id === task.id);
       if (fresh === undefined) {
@@ -701,7 +765,7 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
       row('↑ ↓ k j', 'move between tasks'),
       row('enter', 'task details'),
       row('/', 'filter; esc clears it'),
-      row('r', 'reload from the journal'),
+      row('r', 'reload now; changes also arrive live'),
       row('R', 'only what can be started now'),
       row('b', 'only what this branch introduced'),
       row('M', 'only one milestone; empty clears it'),
@@ -1080,4 +1144,6 @@ export function runBoardUi(callbacks: BoardCallbacks): void {
 
   build();
   refresh();
+
+  watcher = watchJournal({ dir: callbacks.journalDir, onChange: liveReload });
 }
